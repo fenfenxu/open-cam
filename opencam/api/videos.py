@@ -20,11 +20,14 @@ ALLOWED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".ts"}
 
 
 def _safe_dest(filename: str | None) -> Path:
-    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if filename and "." in filename else ""
+    # 只用 basename，避免 ../../evil.mp4 一类穿越残留在文件名里
+    base = Path(filename or "video").name
+    ext = ("." + base.rsplit(".", 1)[-1].lower()) if base and "." in base else ""
     if ext not in ALLOWED_VIDEO_EXTS:
         raise HTTPException(400, f"不支持的视频格式 {ext or '(无扩展名)'}，"
                                  f"支持: {', '.join(sorted(ALLOWED_VIDEO_EXTS))}")
-    safe_name = re.sub(r"[^\w.()-]+", "_", filename or "video" + ext)
+    safe_name = re.sub(r"[^\w.()-]+", "_", base or "video" + ext)
+    safe_name = safe_name.replace("..", "_")
     upload_dir = settings.data_dir / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     dest = upload_dir / safe_name

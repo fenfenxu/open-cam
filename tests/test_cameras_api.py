@@ -24,7 +24,9 @@ def _make_camera(client, **kw) -> dict:
             "source_uri": "/tmp/nonexistent.mp4", **kw}
     resp = client.post("/cameras", json=body)
     assert resp.status_code == 201, resp.text
-    return resp.json()
+    body_out = resp.json()
+    assert body_out["health"] is None
+    return body_out
 
 
 def test_stopped_camera_health_is_null(client):
@@ -162,3 +164,63 @@ def test_batch_stop_idempotent(client):
 def test_batch_empty_ids_unprocessable(client):
     resp = client.post("/cameras/batch/start", json={"ids": []})
     assert resp.status_code == 422
+
+
+def test_put_source_type_while_running_conflict(client):
+    cam = _make_camera(client)
+    session = get_session()
+    try:
+        session.get(Camera, cam["id"]).status = CAMERA_RUNNING
+        session.commit()
+    finally:
+        session.close()
+    resp = client.put(f"/cameras/{cam['id']}", json={"source_type": "rtsp"})
+    assert resp.status_code == 409
+    assert "请先停止摄像头再修改视频源" in resp.json()["detail"]
+
+
+def test_put_invalid_source_type(client):
+    cam = _make_camera(client)
+    resp = client.put(f"/cameras/{cam['id']}", json={"source_type": "ftp"})
+    assert resp.status_code == 422
+
+
+def test_delete_camera_without_children(client):
+    cam = _make_camera(client)
+    assert client.delete(f"/cameras/{cam['id']}").status_code == 204
+    assert client.get(f"/cameras/{cam['id']}").status_code == 404
+
+
+def test_delete_does_not_remove_snapshot_outside_dir(client, tmp_path):
+    cam = _make_camera(client)
+    outsider = tmp_path / "outside.jpg"
+    outsider.write_bytes(b"keep-me")
+    session = get_session()
+    try:
+        event = Event(camera_id=cam["id"], type="zone_intrusion",
+                      confidence=0.9, snapshot_path=str(outsider), detail={})
+        session.add(event)
+        session.commit()
+    finally:
+        session.close()
+    assert client.delete(f"/cameras/{cam['id']}").status_code == 204
+    assert outsider.exists()
+
+
+def test_batch_missing_ids_unprocessable(client):
+    assert client.post("/cameras/batch/start", json={}).status_code == 422
+    assert client.post("/cameras/batch/stop", json={}).status_code == 422
+
+
+def test_reconnect_not_found(client):
+    resp = client.post("/cameras/999/reconnect")
+    assert resp.status_code == 404
+    assert "摄像头不存在" in resp.json()["detail"]
+
+
+def test_batch_results_preserve_id_order(client):
+    cam = _make_camera(client)
+    resp = client.post("/cameras/batch/stop", json={"ids": [999, cam["id"]]})
+    assert resp.status_code == 200
+    ids = [item["id"] for item in resp.json()["results"]]
+    assert ids == [999, cam["id"]]

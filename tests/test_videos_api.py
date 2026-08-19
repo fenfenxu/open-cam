@@ -81,3 +81,60 @@ def test_delete_referenced_video_conflict(client, tmp_settings):
 def test_video_not_found(client):
     assert client.get("/videos/999").status_code == 404
     assert "视频不存在" in client.get("/videos/999").json()["detail"]
+    assert client.delete("/videos/999").status_code == 404
+
+
+def test_videos_list_empty(client):
+    assert client.get("/videos").json() == []
+
+
+def test_upload_duplicate_name_not_overwritten(client, tmp_settings):
+    r1 = client.post("/videos", files={"file": ("a.avi", b"first", "video/avi")})
+    r2 = client.post("/videos", files={"file": ("a.avi", b"second", "video/avi")})
+    assert r1.status_code == 201 and r2.status_code == 201
+    assert r1.json()["path"] != r2.json()["path"]
+    uploads = tmp_settings.data_dir / "uploads"
+    assert (uploads / "a.avi").read_bytes() == b"first"
+
+
+def test_upload_sanitizes_path_traversal_filename(client, tmp_settings):
+    from pathlib import Path
+
+    resp = client.post("/videos",
+                       files={"file": ("../../evil.mp4", b"x", "video/mp4")})
+    assert resp.status_code == 201, resp.text
+    saved = Path(resp.json()["path"]).resolve()
+    root = (tmp_settings.data_dir / "uploads").resolve()
+    assert saved == root or root in saved.parents
+    assert ".." not in saved.name
+
+
+def test_delete_video_after_camera_removed(client):
+    created = client.post("/videos",
+                          files={"file": ("later.mp4", b"x", "video/mp4")}).json()
+    cam = client.post("/cameras", json={
+        "name": "c", "source_type": "file", "source_uri": created["path"],
+    })
+    assert cam.status_code == 201
+    assert client.delete(f"/cameras/{cam.json()['id']}").status_code == 204
+    assert client.delete(f"/videos/{created['id']}").status_code == 204
+
+
+def test_upload_probes_tiny_mp4_metadata(client, tmp_path):
+    import cv2
+    import numpy as np
+
+    video = tmp_path / "tiny.mp4"
+    writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"),
+                             10, (320, 240))
+    for _ in range(20):
+        writer.write(np.zeros((240, 320, 3), dtype=np.uint8))
+    writer.release()
+    resp = client.post("/videos",
+                       files={"file": ("tiny.mp4", video.read_bytes(), "video/mp4")})
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["width"] == 320
+    assert body["height"] == 240
+    assert body["duration_sec"] is not None
+    assert body["duration_sec"] > 0

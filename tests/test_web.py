@@ -35,3 +35,4 @@ def test_cameras_page_has_video_library(client):
     js = client.get("/static/pages/cameras.js").text
     assert "/videos" in js
     assert "data-act=\"save\"" in js or "data-act='save'" in js
+    assert "method: 'PUT'" in js or 'method: "PUT"' in js or "method: `PUT`" in js
