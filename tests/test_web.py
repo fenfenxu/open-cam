@@ -50,6 +50,12 @@ def test_training_wizard_page_wired(client):
     assert "/feedback" in events
 
 
+def test_events_page_defaults_to_todos(client):
+    js = client.get("/static/pages/events.js").text
+    assert "needs_action" in js
+    assert "待办" in js
+
+
 def test_events_page_shows_camera_and_clip(client):
     js = client.get("/static/pages/events.js").text
     assert "/clip" in js

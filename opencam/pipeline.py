@@ -18,11 +18,46 @@ from .db import get_session
 from .detection.detector import build_detector
 from .detection.rules import RuleEngine
 from .detection.vlm import vlm_reviewer
-from .models import CAMERA_RUNNING, Camera, Event, Rule
+from .models import (
+    CAMERA_RUNNING,
+    EVENT_LOGGED,
+    EVENT_OPEN,
+    INTENT_ALERT,
+    Camera,
+    Event,
+    Rule,
+    default_intent,
+)
 from .notify import notifier
 from .streams.manager import camera_manager
 
 logger = logging.getLogger(__name__)
+
+
+def persist_hit(session, camera_id: int, rule, hit, snapshot_path: str | None,
+                source_offset: float | None = None) -> Event | None:
+    """按规则 intent 写事件：观察记 logged，告警立即开待办。"""
+    intent = rule.intent or default_intent(rule.type)
+    needs_action = intent == INTENT_ALERT
+    event = Event(
+        camera_id=camera_id,
+        rule_id=hit.rule_id,
+        type=hit.rule_type,
+        confidence=hit.confidence,
+        snapshot_path=snapshot_path,
+        source_offset=source_offset,
+        detail=hit.detail,
+        intent=intent,
+        needs_action=needs_action,
+        status=EVENT_OPEN if needs_action else EVENT_LOGGED,
+        repeat_count=1,
+    )
+    session.add(event)
+    session.commit()
+    logger.info("事件落库: id=%d camera=%d type=%s intent=%s offset=%s",
+                event.id, event.camera_id, event.type, event.intent,
+                event.source_offset)
+    return event
 
 
 class PipelineWorker:
@@ -74,24 +109,19 @@ class PipelineWorker:
             rules = session.query(Rule).filter_by(
                 camera_id=self.camera_id, enabled=True).all()
             hits = self._engine.evaluate(rules, detections)
+            by_id = {r.id: r for r in rules}
             for hit in hits:
+                rule = by_id.get(hit.rule_id)
+                if rule is None:
+                    continue
                 snapshot = self._save_snapshot(frame, sample.offset)
-                event = Event(
-                    camera_id=self.camera_id,
-                    rule_id=hit.rule_id,
-                    type=hit.rule_type,
-                    confidence=hit.confidence,
-                    snapshot_path=str(snapshot) if snapshot else None,
-                    source_offset=sample.offset,
-                    detail=hit.detail,
-                )
-                session.add(event)
-                session.commit()
-                logger.info("事件落库: id=%d camera=%d type=%s offset=%s",
-                            event.id, event.camera_id, event.type,
-                            event.source_offset)
-                vlm_reviewer.submit(event.id)
-                notifier.submit(event.id)
+                event = persist_hit(
+                    session, self.camera_id, rule, hit,
+                    str(snapshot) if snapshot else None,
+                    source_offset=sample.offset)
+                if event is not None and event.needs_action:
+                    vlm_reviewer.submit(event.id)
+                    notifier.submit(event.id)
         finally:
             session.close()
 

@@ -14,7 +14,7 @@ import pytest
 
 from opencam.config import resolve_snapshot_path
 from opencam.db import get_session, init_db
-from opencam.models import CAMERA_RUNNING, Camera, Event, Rule
+from opencam.models import CAMERA_RUNNING, Camera, Event, Rule, default_intent
 from opencam.pipeline import start_camera, stop_camera
 
 W, H = 320, 240
@@ -87,3 +87,59 @@ def test_pipeline_end_to_end(e2e_env):
     assert event.source_offset >= 0
     # 无 OPENCAM_VLM_API_KEY 时，事件应被标记 skipped 或仍 pending
     assert event.vlm_status in ("skipped", "pending")
+    assert events[0].intent == "alert"
+    assert events[0].needs_action is True
+    assert events[0].status == "open"
+
+
+@pytest.fixture()
+def e2e_line_crossing(tmp_settings, tmp_path):
+    """隔离 DB + 合成视频 + 竖线越线规则（mock 水平移动必穿）。"""
+    init_db(tmp_settings.db_url)
+    video = tmp_path / "synthetic.mp4"
+    _make_video(video)
+
+    session = get_session()
+    try:
+        camera = Camera(name="e2e-door", source_type="file", source_uri=str(video),
+                        status=CAMERA_RUNNING)
+        session.add(camera)
+        session.commit()
+        rule = Rule(
+            camera_id=camera.id, type="line_crossing",
+            intent=default_intent("line_crossing"),
+            params={"line": [[W // 2, 0], [W // 2, H]], "direction": "both"},
+            cooldown=1.0,
+        )
+        session.add(rule)
+        session.commit()
+        return camera.id
+    finally:
+        session.close()
+
+
+def test_pipeline_line_crossing_is_observe(e2e_line_crossing):
+    camera_id = e2e_line_crossing
+    start_camera(camera_id)
+    try:
+        deadline = time.time() + 15
+        events = []
+        while time.time() < deadline:
+            session = get_session()
+            try:
+                events = session.query(Event).filter_by(
+                    camera_id=camera_id).all()
+            finally:
+                session.close()
+            if events:
+                break
+            time.sleep(0.5)
+    finally:
+        stop_camera(camera_id)
+
+    assert events, "流水线未产生越线事件"
+    event = events[0]
+    assert event.type == "line_crossing"
+    assert event.intent == "observe"
+    assert event.needs_action is False
+    assert event.status == "logged"
