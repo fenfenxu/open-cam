@@ -1449,6 +1449,147 @@
         }
       }
     },
+    "/training/tasks": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "创建训练任务（语义目标 → 结构化定义）",
+        "description": "默认只返回草稿；confirm=true 才写入 definition.json。",
+        "operationId": "create_task_training_tasks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/confirm": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "确认任务定义并落库",
+        "operationId": "confirm_task_training_tasks__task_id__confirm_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmTask",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/frames": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "从摄像头录像或上传视频抽帧",
+        "description": "按感知哈希去重后写入 data/training/<task_id>/frames/。",
+        "operationId": "extract_task_frames_training_tasks__task_id__frames_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractFrames"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/training/tasks/{task_id}/annotate": {
       "post": {
         "tags": [
@@ -1883,6 +2024,71 @@
         "type": "object",
         "title": "CameraUpdate"
       },
+      "ConfirmTask": {
+        "properties": {
+          "definition": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition",
+            "description": "确认时的结构化定义；缺省则用上次草稿"
+          }
+        },
+        "type": "object",
+        "title": "ConfirmTask"
+      },
+      "CreateTask": {
+        "properties": {
+          "goal": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Goal",
+            "description": "自然语言语义目标"
+          },
+          "confirm": {
+            "type": "boolean",
+            "title": "Confirm",
+            "description": "true 时立刻落 definition.json",
+            "default": false
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id",
+            "description": "可选；不传则自动生成"
+          },
+          "definition": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition",
+            "description": "用户改过的结构化定义；与 confirm 一起提交时优先使用"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal"
+        ],
+        "title": "CreateTask"
+      },
       "EventOut": {
         "properties": {
           "id": {
@@ -1979,6 +2185,62 @@
           "acked"
         ],
         "title": "EventOut"
+      },
+      "ExtractFrames": {
+        "properties": {
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id",
+            "description": "从摄像头 source_uri 抽帧"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id",
+            "description": "从上传视频库抽帧"
+          },
+          "source_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Uri",
+            "description": "本机视频文件路径"
+          },
+          "max_frames": {
+            "type": "integer",
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Max Frames",
+            "default": 120
+          },
+          "hamming_threshold": {
+            "type": "integer",
+            "maximum": 64.0,
+            "minimum": 0.0,
+            "title": "Hamming Threshold",
+            "default": 8
+          }
+        },
+        "type": "object",
+        "title": "ExtractFrames"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2354,7 +2616,7 @@
     },
     {
       "name": "training",
-      "description": "自助训练：VLM 自动标注与人工确认队列"
+      "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"
     }
   ]
 }
