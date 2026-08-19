@@ -496,6 +496,88 @@
         }
       }
     },
+    "/cameras/{camera_id}/live.mjpg": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "实时 MJPEG 预览",
+        "description": "从采集缓冲约 8fps 推 JPEG。未运行或无帧时 503，不建立长连接。",
+        "operationId": "live_mjpeg_cameras__camera_id__live_mjpg_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/source": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "文件源原片（供回放）",
+        "description": "仅 source_type=file；直播流 400。支持 HTTP Range。",
+        "operationId": "camera_source_cameras__camera_id__source_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/videos": {
       "get": {
         "tags": [
