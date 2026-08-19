@@ -1032,10 +1032,10 @@
                   "type": "null"
                 }
               ],
-              "description": "按处置状态过滤：open / acked / resolved / ignored",
+              "description": "按处置状态过滤：open / acked / resolved / ignored / logged",
               "title": "Status"
             },
-            "description": "按处置状态过滤：open / acked / resolved / ignored"
+            "description": "按处置状态过滤：open / acked / resolved / ignored / logged"
           },
           {
             "name": "starred",
@@ -1054,6 +1054,24 @@
               "title": "Starred"
             },
             "description": "仅看关注（星标）事件"
+          },
+          {
+            "name": "needs_action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按是否待办过滤；不传则返回全部",
+              "title": "Needs Action"
+            },
+            "description": "按是否待办过滤；不传则返回全部"
           },
           {
             "name": "limit",
@@ -3504,6 +3522,21 @@
             "type": "boolean",
             "title": "Acked"
           },
+          "intent": {
+            "type": "string",
+            "title": "Intent",
+            "default": ""
+          },
+          "needs_action": {
+            "type": "boolean",
+            "title": "Needs Action",
+            "default": false
+          },
+          "repeat_count": {
+            "type": "integer",
+            "title": "Repeat Count",
+            "default": 1
+          },
           "status": {
             "type": "string",
             "title": "Status"
@@ -4154,6 +4187,23 @@
             "type": "number",
             "title": "Cooldown",
             "default": 30.0
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(observe|alert)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent"
+          },
+          "escalate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Escalate"
           }
         },
         "type": "object",
@@ -4194,6 +4244,23 @@
             "type": "number",
             "title": "Cooldown",
             "default": 30.0
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(observe|alert)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intent"
+          },
+          "escalate": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Escalate"
           },
           "id": {
             "type": "integer",
