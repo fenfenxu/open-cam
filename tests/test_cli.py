@@ -236,3 +236,29 @@ def test_pretty_output(cli_env, capsys):
     cli.main(["--pretty", "cameras", "list"])
     pretty = capsys.readouterr().out
     assert "\n" in pretty.strip()  # 美化多行
+
+
+# ---------- api escape hatch ----------
+
+def test_api_get_cameras_matches_list(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "x",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    listed = run_cli(capsys, "cameras", "list")
+    via_api = run_cli(capsys, "api", "GET", "/cameras")
+    assert via_api == listed
+
+
+def test_api_write_binary_to_file(cli_env, capsys, tmp_path, monkeypatch):
+    jpeg = b"\xff\xd8fake"
+    real_request = cli._request
+
+    def fake_request(client, method, path, **kwargs):
+        if str(path).endswith("snapshot.jpg"):
+            return jpeg
+        return real_request(client, method, path, **kwargs)
+
+    monkeypatch.setattr(cli, "_request", fake_request)
+    dest = tmp_path / "x.jpg"
+    out = run_cli(capsys, "api", "GET", "/cameras/1/snapshot.jpg", "-o", str(dest))
+    assert out["ok"] is True
+    assert dest.read_bytes() == jpeg
