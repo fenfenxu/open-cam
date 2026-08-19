@@ -6,7 +6,7 @@ PORT ?= 8600
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-dev run run-mock test openapi config clean revision help
+.PHONY: help install install-dev run run-mock test openapi config clean revision web-dev web-build help
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -35,6 +35,12 @@ revision: ## 生成数据库迁移脚本（用法：make revision m="加 xx 列"
 
 config: ## 生成 config.yaml（已存在则不覆盖）
 	@test -f config.yaml && echo "config.yaml 已存在，跳过" || cp config.example.yaml config.yaml
+
+web-dev: ## 启动 Vite 控制台（需另开 make run）
+	cd web && npm run dev
+
+web-build: ## 构建 web/dist
+	cd web && npm ci && npm run build
 
 clean: ## 清理缓存与临时文件（不动 data/ 运行时数据）
 	rm -rf .pytest_cache
