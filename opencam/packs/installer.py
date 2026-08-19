@@ -39,8 +39,44 @@ class Pack:
         self.manifest: PackManifest = load_manifest(base_dir)
         self.rules: list[RuleTemplate] = load_rule_templates(base_dir)
         self.prompts: dict[str, str] = load_prompts(base_dir)
+        self._validate_cameras()
+
+    def _validate_cameras(self) -> None:
+        pack_root = self.base_dir.resolve()
+        if self.manifest.cameras is not None:
+            cam_ids = {c.id for c in self.manifest.cameras}
+            for cam in self.manifest.cameras:
+                src = (self.base_dir / cam.source).resolve()
+                try:
+                    src.relative_to(pack_root)
+                except ValueError as exc:
+                    raise PackError(
+                        f"摄像头源路径越出包目录: {cam.source}") from exc
+                if not src.is_file():
+                    raise PackError(f"摄像头源文件不存在: {cam.source}")
+            for tpl in self.rules:
+                if not tpl.camera or tpl.camera not in cam_ids:
+                    raise PackError(
+                        f"规则 {tpl.name} 的 camera 必须指向包内摄像头 id")
+        else:
+            for tpl in self.rules:
+                if tpl.camera is not None:
+                    raise PackError(
+                        f"旧格式方案包的规则不能带 camera 字段: {tpl.name}")
 
     def brief(self) -> dict:
+        cameras = None
+        rules: list[dict] = []
+        if self.manifest.cameras is not None:
+            cameras = [{"id": c.id, "name": c.name, "source": c.source}
+                       for c in self.manifest.cameras]
+            for r in self.rules:
+                rules.append({"name": r.name, "type": r.type,
+                              "cooldown": r.cooldown, "camera": r.camera})
+        else:
+            for r in self.rules:
+                rules.append({"name": r.name, "type": r.type,
+                              "cooldown": r.cooldown})
         return {
             "id": self.manifest.id,
             "name": self.manifest.name,
@@ -49,8 +85,8 @@ class Pack:
             "description": self.manifest.description,
             "author": self.manifest.author,
             "origin": self.origin,
-            "rules": [{"name": r.name, "type": r.type, "cooldown": r.cooldown}
-                      for r in self.rules],
+            "cameras": cameras,
+            "rules": rules,
         }
 
 

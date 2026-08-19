@@ -22,6 +22,14 @@ RULE_TYPES = ("zone_intrusion", "loitering", "object_count",
               "zone_count", "line_crossing")
 
 
+class PackCamera(BaseModel):
+    """pack.yaml cameras[] 中一路摄像头。"""
+
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    name: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+
+
 class PackManifest(BaseModel):
     """pack.yaml 的 schema。"""
 
@@ -32,6 +40,7 @@ class PackManifest(BaseModel):
     description: str = ""
     author: str = ""
     min_opencam_version: str = "0.1.0"
+    cameras: list[PackCamera] | None = None
 
     @field_validator("min_opencam_version")
     @classmethod
@@ -39,6 +48,18 @@ class PackManifest(BaseModel):
         if _version_tuple(v) > _version_tuple(__version__):
             raise ValueError(
                 f"需要 open-cam >= {v}，当前版本 {__version__}")
+        return v
+
+    @field_validator("cameras")
+    @classmethod
+    def _cameras_ok(cls, v: list[PackCamera] | None) -> list[PackCamera] | None:
+        if v is None:
+            return v
+        if len(v) < 1:
+            raise ValueError("cameras 不能为空")
+        ids = [c.id for c in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("cameras id 必须唯一")
         return v
 
 
@@ -50,6 +71,7 @@ class RuleTemplate(BaseModel):
                   "zone_count", "line_crossing"]
     cooldown: float = 30.0
     params: dict[str, Any] = Field(default_factory=dict)
+    camera: str | None = None
 
 
 def _version_tuple(v: str) -> tuple[int, ...]:

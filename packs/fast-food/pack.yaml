@@ -5,3 +5,16 @@ vertical: 餐饮-快餐
 description: 面向快餐门店：门口进出客流统计、点餐区排队超员、闭店后入侵、后厨闯入告警。
 author: open-cam
 min_opencam_version: 0.2.0
+cameras:
+  - id: door
+    name: 门口
+    source: cameras/door.mp4
+  - id: counter
+    name: 点餐
+    source: cameras/counter.mp4
+  - id: kitchen
+    name: 后厨
+    source: cameras/kitchen.mp4
+  - id: hall
+    name: 店内
+    source: cameras/hall.mp4
