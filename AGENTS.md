@@ -50,6 +50,7 @@ opencam/
 │   ├── detector.py    YoloDetector / MockDetector / build_detector / Detection
 │   ├── rules.py       RuleEngine：五种规则纯逻辑，可注入时钟便于单测
 │   └── vlm.py         VlmReviewer 异步复核线程 + OpenAI 兼容调用
+├── training/          自助训练：固定区域裁剪、标注 VLM、置信度分流、数据集目录
 ├── streams/           CaptureWorker 基类、FileSource（循环限速播放）、RTSPSource（指数退避重连）、manager
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
 └── web/               无构建原生 SPA：index.html + app.js + pages/*.js + style.css
@@ -135,4 +136,5 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 
 - 新增规则类型：改 `models.py` 的 `RuleCreate` pattern、`RULE_TYPE_NAMES`、`detection/rules.py` 的 evaluate 分支、`api/rule_presets.py` 预设元数据，并补 `tests/test_rules*.py` 单测。
 - 新增 API 端点：在 `opencam/api/` 对应模块加路由，router 在 `main.py` 已挂载；同步补测试与 `docs/openapi.json`。
+- 训练标注（`opencam/training/`）：一期只做固定区域裁剪 + 状态分类；VLM 走 OpenAI 兼容接口，标注侧默认 GLM-4V-Flash，任务 `vlm_config` 可覆盖；测试注入 `label_fn`，不打真实网。
 - 方案包格式（`packs/` 示例）：`pack.yaml`（id/name/version/vertical/...）+ `rules/*.yaml`（多边形/线用 0-1 相对坐标，apply 时按摄像头分辨率换算）+ 可选 `prompts/*.txt`。

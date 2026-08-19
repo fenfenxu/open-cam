@@ -1134,6 +1134,193 @@
         }
       }
     },
+    "/training/tasks/{task_id}/label": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "跑自动标注",
+        "description": "固定区域裁剪抽帧后，用标注侧 VLM 打属性标签；高置信入数据集，低置信进人工确认队列。任务级 vlm_config 可覆盖全局。",
+        "operationId": "label_task_training_tasks__task_id__label_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/review": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "人工确认队列",
+        "description": "返回待点选的裁剪小图；用户只需点封闭类别或跳过。",
+        "operationId": "review_queue_training_tasks__task_id__review_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewQueueOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/review/{sample_id}": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "确认或跳过一张样本",
+        "operationId": "review_sample_training_tasks__task_id__review__sample_id__post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sample Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrainingSampleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/samples/{sample_id}/crop.jpg": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "样本裁剪图",
+        "operationId": "sample_crop_training_samples__sample_id__crop_jpg_get",
+        "parameters": [
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sample Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -1368,6 +1555,32 @@
         ],
         "title": "InstallRequest"
       },
+      "LabelRunOut": {
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status",
+          "stats"
+        ],
+        "title": "LabelRunOut"
+      },
       "LoginRequest": {
         "properties": {
           "token": {
@@ -1384,6 +1597,66 @@
         },
         "type": "object",
         "title": "LoginRequest"
+      },
+      "ReviewDecision": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "skip": {
+            "type": "boolean",
+            "title": "Skip",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ReviewDecision",
+        "description": "人工确认：点一个封闭类别，或 skip=true 跳过。"
+      },
+      "ReviewQueueOut": {
+        "properties": {
+          "task_id": {
+            "type": "integer",
+            "title": "Task Id"
+          },
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Classes"
+          },
+          "pending": {
+            "items": {
+              "$ref": "#/components/schemas/TrainingSampleOut"
+            },
+            "type": "array",
+            "title": "Pending"
+          },
+          "stats": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Stats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "classes",
+          "pending",
+          "stats"
+        ],
+        "title": "ReviewQueueOut"
       },
       "RuleCreate": {
         "properties": {
@@ -1475,6 +1748,75 @@
         ],
         "title": "RuleOut"
       },
+      "TrainingSampleOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "task_id": {
+            "type": "integer",
+            "title": "Task Id"
+          },
+          "predicted_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Label"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "crop_url": {
+            "type": "string",
+            "title": "Crop Url",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "predicted_label",
+          "confidence",
+          "label",
+          "status",
+          "source"
+        ],
+        "title": "TrainingSampleOut"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -1545,6 +1887,10 @@
     {
       "name": "account",
       "description": "市场平台账号（预留 stub，本地功能无需登录）"
+    },
+    {
+      "name": "training",
+      "description": "自助训练：自动标注与人工确认队列"
     }
   ]
 }

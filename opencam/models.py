@@ -31,6 +31,16 @@ VLM_SKIPPED = "skipped"   # 无 api key，直接跳过
 VLM_DONE = "done"
 VLM_FAILED = "failed"
 
+# 训练任务 / 样本（固定区域状态分类 MVP）
+TASK_DRAFT = "draft"
+TASK_LABELING = "labeling"
+TASK_REVIEW = "review"
+TASK_LABELED = "labeled"
+
+SAMPLE_PENDING = "pending_review"
+SAMPLE_ACCEPTED = "accepted"
+SAMPLE_SKIPPED = "skipped"
+
 
 class Camera(Base):
     __tablename__ = "cameras"
@@ -75,6 +85,46 @@ class Event(Base):
     vlm_verdict: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     vlm_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     acked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+
+class TrainingTask(Base):
+    """自助训练任务。数据集在 data/training/<id>/，不进 git。
+
+    任务创建/抽帧由训练骨架（NORG-40）补齐；本表是标注流水线的最小落库形状。
+    """
+
+    __tablename__ = "training_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    goal: Mapped[str] = mapped_column(Text, default="")
+    # 结构化定义：object / property / classes / rule / metrics
+    definition: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # 固定区域：归一化 xywh {x,y,w,h} 或 polygon
+    region: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # 任务级覆盖全局标注 VLM：base_url / model / timeout / confidence
+    vlm_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    confidence_threshold: Mapped[float] = mapped_column(Float, default=0.8)
+    status: Mapped[str] = mapped_column(String(16), default=TASK_DRAFT)
+    camera_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("cameras.id"), nullable=True)
+
+
+class TrainingSample(Base):
+    """一张裁剪样本：自动入集或进入人工确认队列。"""
+
+    __tablename__ = "training_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(
+        ForeignKey("training_tasks.id"), index=True)
+    frame_path: Mapped[str] = mapped_column(Text)
+    crop_path: Mapped[str] = mapped_column(Text)
+    predicted_label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    label: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default=SAMPLE_PENDING, index=True)
+    # auto：VLM 高置信直接入集；human：人工点选
+    source: Mapped[str] = mapped_column(String(16), default="auto")
 
 
 # ---------- Pydantic schema ----------
@@ -129,3 +179,36 @@ class EventOut(BaseModel):
     acked: bool
 
     model_config = {"from_attributes": True}
+
+
+class TrainingSampleOut(BaseModel):
+    id: int
+    task_id: int
+    predicted_label: Optional[str]
+    confidence: Optional[float]
+    label: Optional[str]
+    status: str
+    source: str
+    crop_url: str = ""
+
+    model_config = {"from_attributes": True}
+
+
+class ReviewQueueOut(BaseModel):
+    task_id: int
+    classes: list[str]
+    pending: list[TrainingSampleOut]
+    stats: dict[str, int]
+
+
+class ReviewDecision(BaseModel):
+    """人工确认：点一个封闭类别，或 skip=true 跳过。"""
+
+    label: Optional[str] = None
+    skip: bool = False
+
+
+class LabelRunOut(BaseModel):
+    task_id: int
+    status: str
+    stats: dict[str, int]
