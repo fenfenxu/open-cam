@@ -172,6 +172,15 @@ tr:hover td { background: var(--bg-elev); }
 .dim { color: var(--text-dim); }
 .mt { margin-top: 16px; }
 
+.assist {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.assist.error { border-color: var(--danger); }
+.assist a { color: var(--accent); }
+
 /* 规则画布 */
 #roi-wrap { position: relative; display: inline-block; max-width: 100%; }
 #roi-canvas {

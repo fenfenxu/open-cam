@@ -1,7 +1,7 @@
 """VLM 自动标注：裁剪 → OpenAI 兼容打标 → 按置信度分流。
 
 - 标注用独立默认模型（GLM-4V-Flash），与运行侧复核配置分开。
-- 任务 definition.vlm 可覆盖 base_url / model / timeout；api_key 只走环境变量。
+- 任务 definition.vlm 可覆盖 base_url / model / timeout；api_key 走环境变量或本机设置页，不写进任务文件。
 - 无 key 时全部进入人工确认队列，不把帧发到外网。
 """
 
@@ -19,6 +19,7 @@ import cv2
 import httpx
 
 from ..config import settings
+from ..vlm_config import resolve_label
 from .crop import crop_polygon
 from .storage import (
     list_frames,
@@ -52,15 +53,12 @@ def resolve_vlm_config(definition: dict[str, Any]) -> VlmLabelConfig:
     override = definition.get("vlm") or {}
     if not isinstance(override, dict):
         override = {}
-    api_key = (
-        settings.vlm_label_api_key
-        or settings.vlm_api_key
-    )
+    ep = resolve_label()
     return VlmLabelConfig(
-        base_url=str(override.get("base_url") or settings.vlm_label_base_url),
-        model=str(override.get("model") or settings.vlm_label_model),
-        timeout=float(override.get("timeout") or settings.vlm_label_timeout),
-        api_key=api_key,
+        base_url=str(override.get("base_url") or ep.base_url),
+        model=str(override.get("model") or ep.model),
+        timeout=float(override.get("timeout") or ep.timeout),
+        api_key=ep.api_key,
     )
 
 

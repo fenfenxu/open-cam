@@ -92,7 +92,7 @@ uv run python scripts/export_openapi.py
 
 上述命令在根目录 `Makefile` 中有对应 target（`make install / run / run-mock / test / openapi / config / clean`，`make help` 查看全部）。
 
-配置：可选 `config.yaml`（参考 `config.example.yaml`，已在 .gitignore）；任意字段可用 `OPENCAM_` + 大写字段名环境变量覆盖。VLM 的 api_key **只能**走环境变量 `OPENCAM_VLM_API_KEY`，不写进任何文件。
+配置：可选 `config.yaml`（参考 `config.example.yaml`，已在 .gitignore）；任意字段可用 `OPENCAM_` + 大写字段名环境变量覆盖。VLM 的 api_key 可在控制台「设置 → 大模型」填写（写入本机 `data_dir/vlm.json`），也可用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。不要把 key 提交进仓库。
 
 ## 测试
 
@@ -137,7 +137,7 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 
 - 不要把帧/快照传到外部服务；出站调用仅限用户配置的 VLM 复核、方案包 URL 安装，以及通知 webhook（只发事件元数据，不含帧/快照）。
 - 服务默认绑定由 uvicorn 命令行决定；README 示例用 127.0.0.1。
-- 不要把 api key、token 写进仓库或配置文件；`data/`（SQLite、快照、`account.json`）已 gitignore。
+- 不要把 api key、token 写进仓库；控制台保存的 Key 落在本机数据目录的 `vlm.json` / `account.json`（已 gitignore）。环境变量仍可覆盖。
 - 快照路径存 DB（`Event.snapshot_path`，相对 data_dir 的相对路径）；`GET /events/{id}/snapshot` 经 `resolve_snapshot_path` 解析并拒绝 `..` 穿越，改这里时保持这个约束。
 
 ## Agent 工作流不变量

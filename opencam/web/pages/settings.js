@@ -1,8 +1,22 @@
-// 设置：系统算力信息 + VLM 配置状态 + 平台账号状态 + 通知渠道管理
+// 设置：系统算力 + 大模型配置 + 平台账号 + 通知渠道
 import { api, toast } from '../app.js';
 
+const VLM_PRESETS = [
+  { id: 'zhipu', name: '智谱 GLM（推荐，有免费档）',
+    base_url: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-4v-flash' },
+  { id: 'qwen', name: '通义千问',
+    base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-vl-plus' },
+  { id: 'kimi', name: 'Kimi',
+    base_url: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k-vision-preview' },
+  { id: 'custom', name: '自定义 OpenAI 兼容接口', base_url: '', model: '' },
+];
+
+function matchPreset(baseUrl) {
+  return VLM_PRESETS.find((p) => p.base_url && p.base_url === baseUrl)?.id || 'custom';
+}
+
 export async function render(el) {
-  el.innerHTML = '<h1>设置</h1><div id="sys" class="card"></div><div id="acct" class="card mt"></div><div id="notify" class="card mt"></div>';
+  el.innerHTML = '<h1>设置</h1><div id="sys" class="card"></div><div id="vlm" class="card mt"></div><div id="acct" class="card mt"></div><div id="notify" class="card mt"></div>';
 
   try {
     const info = await api('/api/system/info');
@@ -16,13 +30,99 @@ export async function render(el) {
         <dt>检测器</dt><dd>${info.detector}（${info.yolo_model}）</dd>
         <dt>采样帧率</dt><dd>${info.detect_fps} fps</dd>
         <dt>方案包</dt><dd>可用 ${info.packs_available} 个，其中已安装 ${info.packs_installed} 个</dd>
-        <dt>VLM 复核</dt><dd>${info.vlm_configured
-          ? `已配置（${info.vlm_model}）`
-          : '未配置 OPENCAM_VLM_API_KEY，事件将标记为 skipped'}</dd>
+        <dt>数据目录</dt><dd class="mono">${info.data_dir || ''}</dd>
       </dl>`;
   } catch (err) {
     el.querySelector('#sys').innerHTML = `<p class="dim">系统信息获取失败：${err.message}</p>`;
   }
+
+  const vlmEl = el.querySelector('#vlm');
+  async function renderVlm() {
+    let vlm;
+    try {
+      vlm = await api('/api/system/vlm');
+    } catch (err) {
+      vlmEl.innerHTML = `<p class="dim">大模型配置读取失败：${err.message}</p>`;
+      return;
+    }
+    const preset = matchPreset(vlm.base_url);
+    const status = vlm.configured
+      ? `已配置${vlm.api_key_hint ? `（${vlm.api_key_hint}）` : ''}，来源：${vlm.api_key_source === 'env' ? '环境变量' : '本页保存'}`
+      : '未配置，训练解析和事件复核都需要它';
+    vlmEl.innerHTML = `
+      <h3>大模型</h3>
+      <p class="dim">训练时理解你的需求、自动标注、告警复核都走这里。Key 只存在这台电脑的数据目录，不会进代码仓库。</p>
+      ${vlm.env_locked ? '<p class="assist mt">当前生效的是环境变量 OPENCAM_VLM_API_KEY，本页保存的 Key 不会覆盖它。</p>' : ''}
+      <p class="mt">${status}</p>
+      <div class="form-row mt">
+        <label>服务商</label>
+        <select id="vlm-preset">${VLM_PRESETS.map((p) =>
+          `<option value="${p.id}" ${p.id === preset ? 'selected' : ''}>${p.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>接口地址</label>
+        <input id="vlm-url" style="flex:1;min-width:260px" value="${vlm.base_url || ''}">
+      </div>
+      <div class="form-row">
+        <label>模型名</label>
+        <input id="vlm-model" style="flex:1;min-width:220px" value="${vlm.model || ''}">
+      </div>
+      <div class="form-row">
+        <label>API Key</label>
+        <input id="vlm-key" type="password" autocomplete="off" style="flex:1;min-width:220px"
+          placeholder="${vlm.api_key_hint ? '不改请留空，已保存 ' + vlm.api_key_hint : '粘贴 API Key'}"
+          ${vlm.env_locked ? 'disabled' : ''}>
+      </div>
+      <div class="form-row mt">
+        <button id="vlm-save">保存</button>
+        <button id="vlm-test">测试连接</button>
+        <button id="vlm-clear" class="danger" ${vlm.env_locked ? 'disabled' : ''}>清除本机 Key</button>
+      </div>`;
+    vlmEl.querySelector('#vlm-preset').onchange = (ev) => {
+      const p = VLM_PRESETS.find((x) => x.id === ev.target.value);
+      if (!p || p.id === 'custom') return;
+      vlmEl.querySelector('#vlm-url').value = p.base_url;
+      vlmEl.querySelector('#vlm-model').value = p.model;
+    };
+    vlmEl.querySelector('#vlm-save').onclick = async () => {
+      const payload = {
+        base_url: vlmEl.querySelector('#vlm-url').value.trim(),
+        model: vlmEl.querySelector('#vlm-model').value.trim(),
+      };
+      const key = vlmEl.querySelector('#vlm-key').value.trim();
+      if (key) payload.api_key = key;
+      if (!payload.base_url || !payload.model) { toast('请填写接口地址和模型名', true); return; }
+      if (!key && !vlm.configured) { toast('请填写 API Key', true); return; }
+      try {
+        await api('/api/system/vlm', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        toast('已保存');
+        await renderVlm();
+      } catch (err) { toast(err.message, true); }
+    };
+    vlmEl.querySelector('#vlm-test').onclick = async () => {
+      try {
+        const r = await api('/api/system/vlm/test', { method: 'POST' });
+        toast(r.ok ? `连接成功（${r.model}）` : '测试失败');
+      } catch (err) { toast(err.message, true); }
+    };
+    vlmEl.querySelector('#vlm-clear').onclick = async () => {
+      try {
+        await api('/api/system/vlm', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: '' }),
+        });
+        toast('已清除本机 Key');
+        await renderVlm();
+      } catch (err) { toast(err.message, true); }
+    };
+  }
+  await renderVlm();
 
   try {
     const acct = await api('/api/account/status');

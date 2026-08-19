@@ -1,7 +1,7 @@
-"""配置加载：yaml 文件 + 环境变量覆盖。
+"""配置加载：yaml 文件 + OPENCAM_* 环境变量 + 控制台写入的本机 vlm.json。
 
-优先级：环境变量 (OPENCAM_*) > yaml 配置文件 > 默认值。
-VLM 的 api_key 只走环境变量 OPENCAM_VLM_API_KEY，不写进任何文件。
+优先级：环境变量 > data_dir/vlm.json > yaml > 默认值。
+api_key 不进仓库；控制台保存在本机数据目录。
 """
 
 from __future__ import annotations
@@ -56,12 +56,14 @@ class Settings(BaseModel):
 
     @property
     def vlm_api_key(self) -> Optional[str]:
-        return os.environ.get("OPENCAM_VLM_API_KEY") or None
+        from .vlm_config import resolve_review
+        return resolve_review().api_key
 
     @property
     def vlm_label_api_key(self) -> Optional[str]:
-        """标注专用 key，未设时回退到复核用的 OPENCAM_VLM_API_KEY。"""
-        return os.environ.get("OPENCAM_VLM_LABEL_API_KEY") or None
+        """标注专用 key，未设时回退到复核用的 key。"""
+        from .vlm_config import resolve_label
+        return resolve_label().api_key
 
     @property
     def db_url(self) -> str:

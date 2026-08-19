@@ -1,6 +1,7 @@
 # open-cam 服务配置示例。复制为 config.yaml 后修改。
 # 所有字段均可被环境变量覆盖，规则：OPENCAM_ + 大写字段名，如 OPENCAM_DETECT_FPS=5。
-# VLM 的 api_key 不写在这里，只走环境变量 OPENCAM_VLM_API_KEY。
+# VLM 的 api_key 不要写在这里。打开控制台「设置 → 大模型」填写，
+# 或设置环境变量 OPENCAM_VLM_API_KEY（环境变量优先）。
 
 # 数据目录：SQLite 库与事件快照都存这里。
 # 默认在用户数据目录（macOS ~/Library/Application Support/open-cam），

@@ -43,6 +43,9 @@ def test_training_wizard_page_wired(client):
     assert "/training/tasks" in js
     assert "说需求" in js
     assert "/models" in js
+    settings_js = client.get("/static/pages/settings.js").text
+    assert "/api/system/vlm" in settings_js
+    assert "API Key" in settings_js
     events = client.get("/static/pages/events.js").text
     assert "/events/" in events
     assert "false_alarm" in events

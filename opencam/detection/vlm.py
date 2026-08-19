@@ -1,6 +1,6 @@
 """VLM 复核：异步队列，把事件快照发给 OpenAI 兼容的 chat/completions 接口二次判定。
 
-- api_key 只走环境变量 OPENCAM_VLM_API_KEY；无 key 时事件标记 vlm_status=skipped。
+- api_key：环境变量优先，否则读本机 data_dir/vlm.json；无 key 时事件标记 skipped。
 - 超时/失败标 failed，绝不阻塞主链路。
 - 成功回填 vlm_verdict(confirmed/false_alarm/uncertain) + vlm_reason。
 """
@@ -16,7 +16,8 @@ from typing import Optional
 
 import httpx
 
-from ..config import resolve_snapshot_path, settings
+from ..config import resolve_snapshot_path
+from ..vlm_config import resolve_review
 from ..db import get_session
 from ..models import VLM_DONE, VLM_FAILED, VLM_SKIPPED, Event
 
@@ -34,10 +35,11 @@ def review_event(client: httpx.Client, image_path: str, event_type: str,
         b64 = base64.b64encode(f.read()).decode()
     prompt = _PROMPT.format(event_type=event_type,
                             detail=json.dumps(detail, ensure_ascii=False)[:500])
+    ep = resolve_review()
     resp = client.post(
-        f"{settings.vlm_base_url.rstrip('/')}/chat/completions",
+        f"{ep.base_url.rstrip('/')}/chat/completions",
         json={
-            "model": settings.vlm_model,
+            "model": ep.model,
             "messages": [{
                 "role": "user",
                 "content": [
@@ -48,7 +50,7 @@ def review_event(client: httpx.Client, image_path: str, event_type: str,
             }],
             "temperature": 0,
         },
-        timeout=settings.vlm_timeout,
+        timeout=ep.timeout,
     )
     resp.raise_for_status()
     content = resp.json()["choices"][0]["message"]["content"]
@@ -93,7 +95,7 @@ class VlmReviewer:
 
     def submit(self, event_id: int) -> None:
         """把事件放入复核队列；无 api key 直接标 skipped。"""
-        if not settings.vlm_api_key:
+        if not resolve_review().api_key:
             self._mark_skipped(event_id)
             return
         self._queue.put(event_id)
@@ -101,19 +103,32 @@ class VlmReviewer:
     # ---- 内部 ----
 
     def _run(self) -> None:
-        headers = {"Authorization": f"Bearer {settings.vlm_api_key}"}
-        with httpx.Client(headers=headers) as client:
-            while not self._stop.is_set():
-                try:
-                    event_id = self._queue.get(timeout=0.5)
-                except queue.Empty:
+        """按当前配置拉起客户端；设置页改 key 后下一轮生效。"""
+        client: Optional[httpx.Client] = None
+        used_key: Optional[str] = None
+        while not self._stop.is_set():
+            try:
+                event_id = self._queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            try:
+                ep = resolve_review()
+                if not ep.api_key:
+                    self._mark_skipped(event_id)
                     continue
-                try:
-                    self._review_one(client, event_id)
-                except Exception:  # noqa: BLE001 兜底，保证线程不死
-                    logger.exception("VLM 复核事件 %d 出现未处理异常", event_id)
-                finally:
-                    self._queue.task_done()
+                if client is None or used_key != ep.api_key:
+                    if client is not None:
+                        client.close()
+                    used_key = ep.api_key
+                    client = httpx.Client(
+                        headers={"Authorization": f"Bearer {ep.api_key}"})
+                self._review_one(client, event_id)
+            except Exception:  # noqa: BLE001 兜底，保证线程不死
+                logger.exception("VLM 复核事件 %d 出现未处理异常", event_id)
+            finally:
+                self._queue.task_done()
+        if client is not None:
+            client.close()
 
     def _review_one(self, client: httpx.Client, event_id: int) -> None:
         session = get_session()

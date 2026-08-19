@@ -20,7 +20,7 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲)
 - **算力自适应**：`device: auto` 启动时探测 cuda → mps（Apple Silicon）→ cpu，也可显式指定。
 - **采样检测而非逐帧**：默认 3 fps，CPU 可承受。
 - **SQLite 单文件**：零运维，模型层用 SQLAlchemy，后续可换 Postgres。
-- **VLM 走 OpenAI 兼容协议**：一家客户端代码覆盖多数供应商；api_key 只走环境变量 `OPENCAM_VLM_API_KEY`。
+- **VLM 走 OpenAI 兼容协议**：一家客户端代码覆盖多数供应商；API Key 在控制台「设置 → 大模型」填写，或用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。
 - **Web 控制台**：无构建步骤的原生 HTML/JS，FastAPI 直接挂载，浏览器打开 `http://127.0.0.1:8600` 即用。
 
 ## 快速开始
@@ -32,8 +32,8 @@ uv pip install -e .   # 或：uv pip install fastapi "uvicorn[standard]" opencv-
 
 # 配置（可选，不建 config.yaml 也能跑默认值）
 cp config.example.yaml config.yaml
-# VLM 复核 key（可选，不配则事件 vlm_status=skipped）
-export OPENCAM_VLM_API_KEY=sk-...
+# 大模型 Key：打开控制台「设置 → 大模型」填写；也可以：
+# export OPENCAM_VLM_API_KEY=sk-...
 
 # 无模型环境/CI：切内置 mock detector，不下载 yolov8n.pt
 export OPENCAM_DETECTOR=mock
@@ -129,7 +129,7 @@ uv run python scripts/export_openapi.py
 - **规则**：场景引导式三步配置——选场景卡片 → 填参数（默认值+中文提示）→ 画布画多边形 ROI；已有规则显示中文名与参数摘要，叠加显示可删除。
 - **事件处置**：时间线 + 摄像头/类型/处置状态/VLM 判定过滤与「仅看关注」，行内星标关注；详情区可流转状态（确认/处置完成/误报忽略）、编辑负责人与备注、重发通知，并展示完整处置时间线。
 - **方案市场**：浏览内置方案包、一键应用到摄像头、从本地目录/zip/URL 安装、卸载。
-- **设置**：`/api/system/info` 算力与 VLM 配置状态、平台账号状态、通知渠道管理（webhook + 适用范围 + 测试推送）。
+- **设置**：算力信息、大模型（接口/模型/API Key，可测连接）、平台账号状态、通知渠道管理（webhook + 适用范围 + 测试推送）。
 
 ## 规则：五种场景
 
@@ -227,6 +227,6 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 | `OPENCAM_CONFIG` | 配置文件路径，默认 `config.yaml` |
 | `OPENCAM_DETECTOR` | `yolo` / `mock`，优先级高于配置文件 |
 | `OPENCAM_DEVICE` | 推理设备：`auto`（默认）/ `cpu` / `mps` / `cuda` / `cuda:0` |
-| `OPENCAM_VLM_API_KEY` | VLM 复核 api key（唯一来源，不写文件） |
+| `OPENCAM_VLM_API_KEY` | 大模型 api key（优先于设置页保存的本机 key） |
 | `OPENCAM_DETECT_FPS` 等 | 任意配置字段的 `OPENCAM_` 大写形式可覆盖 yaml |
 | `OPENCAM_AGENT_API_KEY` | 示例 Agent 的 LLM key |

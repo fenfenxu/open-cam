@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-from ..config import settings
+from ..vlm_config import resolve_review
 from .storage import ensure_task_id, save_definition, task_dir
 
 logger = logging.getLogger(__name__)
@@ -186,21 +186,21 @@ def fallback_decompose(goal: str) -> dict[str, Any]:
 
 def call_llm_decompose(goal: str) -> dict[str, Any]:
     """调用 OpenAI 兼容 chat/completions；无 key 时抛错，由上层改走兜底。"""
-    api_key = settings.vlm_api_key
-    if not api_key:
+    ep = resolve_review()
+    if not ep.api_key:
         raise RuntimeError("未配置 LLM api key")
-    headers = {"Authorization": f"Bearer {api_key}"}
+    headers = {"Authorization": f"Bearer {ep.api_key}"}
     with httpx.Client(headers=headers) as client:
         resp = client.post(
-            f"{settings.vlm_base_url.rstrip('/')}/chat/completions",
+            f"{ep.base_url.rstrip('/')}/chat/completions",
             json={
-                "model": settings.vlm_model,
+                "model": ep.model,
                 "temperature": 0,
                 "messages": [
                     {"role": "user", "content": _PROMPT.format(goal=goal)},
                 ],
             },
-            timeout=settings.vlm_timeout,
+            timeout=ep.timeout,
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]

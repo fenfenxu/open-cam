@@ -87,9 +87,17 @@ export async function render(el, ctx = {}) {
     setBar();
     const body = el.querySelector('#wiz-body');
     if (step === 1) {
+      let vlmHint = '';
+      try {
+        const vlm = await api('/api/system/vlm');
+        if (!vlm.configured) {
+          vlmHint = '<p class="assist error mt">还没配置大模型。<a href="#/settings">去设置页填写接口和 API Key</a>，否则系统无法真正理解你写的需求。</p>';
+        }
+      } catch { /* 设置接口失败不挡向导 */ }
       body.innerHTML = `
         <h3>① 说需求</h3>
         <p class="dim">例如：「垃圾桶快满了就提醒我」</p>
+        ${vlmHint}
         <textarea id="goal" rows="3" style="width:100%">${task?.goal || ''}</textarea>
         <div class="form-row mt"><button id="go-define">生成任务定义</button></div>`;
       body.querySelector('#go-define').onclick = async () => {
