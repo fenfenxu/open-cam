@@ -27,3 +27,10 @@ conf_threshold: 0.25
 vlm_base_url: https://api.moonshot.cn/v1
 vlm_model: moonshot-v1-8k-vision-preview
 vlm_timeout: 30
+
+# 训练侧自动标注（与复核分开；默认 GLM-4V-Flash 免费档）
+# 任务 definition.json 里的 vlm 字段可覆盖下列三项
+vlm_label_base_url: https://open.bigmodel.cn/api/paas/v4
+vlm_label_model: glm-4v-flash
+vlm_label_timeout: 30
+vlm_label_confidence_threshold: 0.8
