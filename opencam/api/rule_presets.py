@@ -163,7 +163,7 @@ PRESETS = [
 ]
 
 
-@router.get("/presets")
+@router.get("/presets", summary="规则场景化预设元数据", description="供前端渲染引导卡片：五种类型的通俗解释、典型场景、参数字段与需画的区域形状。")
 def rule_presets():
     """五种规则类型的场景化预设元数据。"""
     return {

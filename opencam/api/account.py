@@ -41,7 +41,7 @@ def save_account(data: dict) -> None:
                     encoding="utf-8")
 
 
-@router.get("/status")
+@router.get("/status", summary="平台账号状态")
 def status():
     account = load_account()
     base_url = account.get("platform_base_url") or settings.platform_base_url
@@ -58,7 +58,7 @@ class LoginRequest(BaseModel):
     token: Optional[str] = None  # 预留：平台签发的访问令牌
 
 
-@router.post("/login")
+@router.post("/login", summary="平台登录（stub）", description="未配置 platform_base_url 时返回 400 及说明；本地功能不强制登录。")
 def login(body: LoginRequest):
     """平台登录（stub）。未配置平台时返回明确错误与说明。"""
     account = load_account()
@@ -78,7 +78,7 @@ def login(body: LoginRequest):
     return {"logged_in": True, "platform_base_url": base_url}
 
 
-@router.post("/logout")
+@router.post("/logout", summary="平台登出（stub）")
 def logout():
     account = load_account()
     account["token"] = None

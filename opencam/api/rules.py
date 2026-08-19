@@ -11,12 +11,12 @@ from ..models import RULE_TYPE_NAMES, Camera, Rule, RuleCreate, RuleOut
 router = APIRouter(prefix="/cameras/{camera_id}/rules", tags=["rules"])
 
 
-@router.get("", response_model=list[RuleOut])
+@router.get("", response_model=list[RuleOut], summary="摄像头的规则列表")
 def list_rules(camera_id: int, session: Session = Depends(session_scope)):
     return session.query(Rule).filter_by(camera_id=camera_id).order_by(Rule.id).all()
 
 
-@router.post("", response_model=RuleOut, status_code=201)
+@router.post("", response_model=RuleOut, status_code=201, summary="创建规则", description="name 不传时用规则类型中文名兜底；params 结构随类型而定（见 /api/rules/presets）。")
 def create_rule(camera_id: int, body: RuleCreate,
                 session: Session = Depends(session_scope)):
     if session.get(Camera, camera_id) is None:
@@ -30,7 +30,7 @@ def create_rule(camera_id: int, body: RuleCreate,
     return rule
 
 
-@router.put("/{rule_id}", response_model=RuleOut)
+@router.put("/{rule_id}", response_model=RuleOut, summary="更新规则")
 def update_rule(camera_id: int, rule_id: int, body: RuleCreate,
                 session: Session = Depends(session_scope)):
     rule = session.get(Rule, rule_id)
@@ -46,7 +46,7 @@ def update_rule(camera_id: int, rule_id: int, body: RuleCreate,
     return rule
 
 
-@router.delete("/{rule_id}", status_code=204)
+@router.delete("/{rule_id}", status_code=204, summary="删除规则")
 def delete_rule(camera_id: int, rule_id: int,
                 session: Session = Depends(session_scope)):
     rule = session.get(Rule, rule_id)

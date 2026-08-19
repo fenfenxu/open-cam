@@ -34,9 +34,9 @@ def _day_range(date: Optional[str]) -> tuple[str, float, float]:
     return f"{y:04d}-{m:02d}-{d:02d}", start, start + 86400
 
 
-@router.get("/footfall")
+@router.get("/footfall", summary="分时段进出店客流", description="按服务器本地时区把当天 line_crossing 事件分 24 小时桶，分别统计 in/out。")
 def footfall(
-    camera_id: int = Query(...),
+    camera_id: int = Query(..., description="摄像头 ID"),
     date: Optional[str] = Query(None, description="YYYY-MM-DD，默认今天（本地时区）"),
     session: Session = Depends(session_scope),
 ):

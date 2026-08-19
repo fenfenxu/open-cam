@@ -43,7 +43,7 @@ export OPENCAM_DETECTOR=mock
 uv run uvicorn opencam.main:app --port 8600
 ```
 
-启动后打开 `http://127.0.0.1:8600/docs` 查看交互式 API 文档。
+启动后打开 `http://127.0.0.1:8600/docs`（Swagger UI）或 `http://127.0.0.1:8600/redoc`（ReDoc）查看 API 文档；机器可读的 schema 在 `/openapi.json`。
 
 ### 接入一路视频文件
 
@@ -76,6 +76,12 @@ curl -X POST http://127.0.0.1:8600/cameras \
 ```
 
 ## API 摘要
+
+交互式文档：Swagger UI `/docs`、ReDoc `/redoc`。仓库内 `docs/openapi.json` 是导出的 schema 快照，改动 API 后重新生成：
+
+```bash
+uv run python scripts/export_openapi.py
+```
 
 | 方法与路径 | 说明 |
 |---|---|
@@ -154,6 +160,23 @@ params:
 
 本地功能不强制登录。`platform_base_url` 与 token 存 `data/account.json`，供以后市场平台使用；未配置平台时 `POST /api/account/login` 返回明确说明，市场"在线浏览"降级为只显示内置包。
 
+## CLI
+
+安装后（`uv pip install -e .` 或 `uv tool install .`）即可使用 `opencam` 命令；仓库内开发用 `uv run opencam ...`。资源式子命令覆盖全部 API，默认紧凑 JSON 输出（`--pretty` 美化），服务地址用 `--base-url` 或 `OPENCAM_BASE_URL` 指定：
+
+```bash
+opencam cameras list                                # 摄像头列表
+opencam cameras create --name 门口 --source-type file --source-uri /v.mp4 --autostart
+opencam cameras start 1 | stop 1 | snapshot 1 -o cam1.jpg
+opencam rules list 1 | presets                      # 规则与场景预设
+opencam rules create 1 --type zone_count --params '{"threshold": 5}'
+opencam events list --acked false                   # 未确认事件
+opencam events ack 42
+opencam packs list | apply fast-food 1              # 方案包
+opencam stats footfall --camera-id 1                # 分时段客流
+opencam system info                                 # 算力与配置
+```
+
 ## Skill 安装
 
 把 `skills/opencam/` 拷到 agent 的 skill 目录即可：
@@ -162,14 +185,7 @@ params:
 cp -r skills/opencam ~/.agents/skills/
 ```
 
-之后 agent 可通过脚本查询：
-
-```bash
-python3 ~/.agents/skills/opencam/scripts/opencam_client.py status
-python3 ~/.agents/skills/opencam/scripts/opencam_client.py events --acked false
-python3 ~/.agents/skills/opencam/scripts/opencam_client.py snapshot 1 -o /tmp/cam1.jpg
-python3 ~/.agents/skills/opencam/scripts/opencam_client.py ack 42
-```
+之后 agent 按 SKILL.md 指引使用 `opencam` CLI 完成查事件、确认告警、看客流、应用方案包等任务；旧脚本 `opencam_client.py`（events/status/snapshot/ack）保留为兼容 wrapper。
 
 ## 示例监控 Agent
 

@@ -1,0 +1,1550 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "open-cam API",
+    "description": "open-cam 是装在本地电脑上的视频流分析与监控管理平台：**视频数据不出本机**。\n\n- **摄像头**：接入局域网 RTSP 流或本地视频文件，本地 YOLO（cuda/mps/cpu 自适应）检测与跟踪。\n- **规则引擎**：区域入侵 / 徘徊逗留 / 人数统计 / 区域人数 / 越线计数，支持生效时段与冷却去抖。\n- **事件**：命中规则即落库并存快照，可经 VLM（OpenAI 兼容接口）异步复核，支持确认（ack）流转。\n- **方案包**：行业规则模板包（连锁零售 / 美容美发 / 餐饮 / 快餐），一键安装与应用。\n- **统计**：分时段进出店客流等聚合视图。\n\n交互式调试见 [Swagger UI](/docs)，结构化阅读见 [ReDoc](/redoc)。\n",
+    "contact": {
+      "name": "open-cam",
+      "url": "https://github.com/local/open-cam"
+    },
+    "license": {
+      "name": "MIT"
+    },
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/cameras/upload": {
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "上传本地视频文件",
+        "description": "上传本地视频文件，保存到数据目录，返回可用作 source_uri 的路径。",
+        "operationId": "upload_video_cameras_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_video_cameras_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "摄像头列表",
+        "operationId": "list_cameras_cameras_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CameraOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Cameras Cameras Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "创建摄像头",
+        "description": "source_type 为 file（视频文件）或 rtsp；autostart=true 时创建即启动采集与分析。",
+        "operationId": "create_camera_cameras_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "摄像头详情",
+        "operationId": "get_camera_cameras__camera_id__get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "删除摄像头",
+        "description": "运行中的摄像头会先停止再删除。",
+        "operationId": "delete_camera_cameras__camera_id__delete",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/start": {
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "启动摄像头",
+        "description": "启动采集与分析流水线；幂等。",
+        "operationId": "start_cameras__camera_id__start_post",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/stop": {
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "停止摄像头",
+        "operationId": "stop_cameras__camera_id__stop_post",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/snapshot.jpg": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "当前实时帧（JPEG）",
+        "description": "摄像头未运行或无可用帧时返回 503。",
+        "operationId": "snapshot_cameras__camera_id__snapshot_jpg_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/rules": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "摄像头的规则列表",
+        "operationId": "list_rules_cameras__camera_id__rules_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleOut"
+                  },
+                  "title": "Response List Rules Cameras  Camera Id  Rules Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "创建规则",
+        "description": "name 不传时用规则类型中文名兜底；params 结构随类型而定（见 /api/rules/presets）。",
+        "operationId": "create_rule_cameras__camera_id__rules_post",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/rules/{rule_id}": {
+      "put": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "更新规则",
+        "operationId": "update_rule_cameras__camera_id__rules__rule_id__put",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "删除规则",
+        "operationId": "delete_rule_cameras__camera_id__rules__rule_id__delete",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rules/presets": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "规则场景化预设元数据",
+        "description": "供前端渲染引导卡片：五种类型的通俗解释、典型场景、参数字段与需画的区域形状。",
+        "operationId": "rule_presets_api_rules_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "事件列表",
+        "description": "支持 camera_id / rule_type / vlm_verdict / acked 过滤与 limit/offset 分页，按时间倒序。",
+        "operationId": "list_events_events_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按摄像头过滤",
+              "title": "Camera Id"
+            },
+            "description": "按摄像头过滤"
+          },
+          {
+            "name": "rule_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按规则类型过滤，如 zone_intrusion / line_crossing",
+              "title": "Rule Type"
+            },
+            "description": "按规则类型过滤，如 zone_intrusion / line_crossing"
+          },
+          {
+            "name": "vlm_verdict",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按 VLM 判定过滤：confirmed / false_alarm / uncertain",
+              "title": "Vlm Verdict"
+            },
+            "description": "按 VLM 判定过滤：confirmed / false_alarm / uncertain"
+          },
+          {
+            "name": "acked",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按确认状态过滤",
+              "title": "Acked"
+            },
+            "description": "按确认状态过滤"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "每页条数",
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "每页条数"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "分页偏移",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "分页偏移"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventOut"
+                  },
+                  "title": "Response List Events Events Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "事件详情",
+        "description": "含命中目标、快照路径与 VLM 复核结论。",
+        "operationId": "get_event_events__event_id__get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/ack": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "确认事件（ack）",
+        "operationId": "ack_event_events__event_id__ack_post",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/snapshot": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "事件快照图（JPEG）",
+        "operationId": "event_snapshot_events__event_id__snapshot_get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/info": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "系统信息",
+        "description": "推理设备、内存、检测器配置、方案包统计与 VLM 配置状态。",
+        "operationId": "system_info_api_system_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/footfall": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "分时段进出店客流",
+        "description": "按服务器本地时区把当天 line_crossing 事件分 24 小时桶，分别统计 in/out。",
+        "operationId": "footfall_api_stats_footfall_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "description": "摄像头 ID",
+              "title": "Camera Id"
+            },
+            "description": "摄像头 ID"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM-DD，默认今天（本地时区）",
+              "title": "Date"
+            },
+            "description": "YYYY-MM-DD，默认今天（本地时区）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "方案包列表",
+        "description": "内置 + 已安装；同 id 时已安装覆盖内置。",
+        "operationId": "list_packs_api_packs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/online": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "在线市场（stub）",
+        "description": "平台未配置时优雅降级为只显示内置包。",
+        "operationId": "browse_online_api_packs_online_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/install": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "安装方案包",
+        "description": "source 支持本地目录、.zip 文件路径或 http(s) URL。",
+        "operationId": "install_api_packs_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/{pack_id}/apply": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "应用方案包到摄像头",
+        "description": "规则模板的相对坐标按摄像头画面分辨率换算为绝对像素后写入规则表。",
+        "operationId": "apply_api_packs__pack_id__apply_post",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleOut"
+                  },
+                  "title": "Response Apply Api Packs  Pack Id  Apply Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/{pack_id}": {
+      "delete": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "卸载方案包",
+        "description": "仅已安装的包可卸载；内置包返回 400。",
+        "operationId": "uninstall_api_packs__pack_id__delete",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/status": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "平台账号状态",
+        "operationId": "status_api_account_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/login": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "平台登录（stub）",
+        "description": "未配置 platform_base_url 时返回 400 及说明；本地功能不强制登录。",
+        "operationId": "login_api_account_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/logout": {
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "平台登出（stub）",
+        "operationId": "logout_api_account_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "健康检查",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApplyRequest": {
+        "properties": {
+          "camera_id": {
+            "type": "integer",
+            "title": "Camera Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "camera_id"
+        ],
+        "title": "ApplyRequest"
+      },
+      "Body_upload_video_cameras_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_video_cameras_upload_post"
+      },
+      "CameraCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_type": {
+            "type": "string",
+            "pattern": "^(file|rtsp)$",
+            "title": "Source Type"
+          },
+          "source_uri": {
+            "type": "string",
+            "title": "Source Uri"
+          },
+          "autostart": {
+            "type": "boolean",
+            "title": "Autostart",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "source_type",
+          "source_uri"
+        ],
+        "title": "CameraCreate"
+      },
+      "CameraOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_uri": {
+            "type": "string",
+            "title": "Source Uri"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "source_type",
+          "source_uri",
+          "status"
+        ],
+        "title": "CameraOut"
+      },
+      "EventOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "camera_id": {
+            "type": "integer",
+            "title": "Camera Id"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "ts": {
+            "type": "number",
+            "title": "Ts"
+          },
+          "snapshot_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Path"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          },
+          "vlm_status": {
+            "type": "string",
+            "title": "Vlm Status"
+          },
+          "vlm_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vlm Verdict"
+          },
+          "vlm_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vlm Reason"
+          },
+          "acked": {
+            "type": "boolean",
+            "title": "Acked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "camera_id",
+          "rule_id",
+          "type",
+          "confidence",
+          "ts",
+          "snapshot_path",
+          "detail",
+          "vlm_status",
+          "vlm_verdict",
+          "vlm_reason",
+          "acked"
+        ],
+        "title": "EventOut"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InstallRequest": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "InstallRequest"
+      },
+      "LoginRequest": {
+        "properties": {
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "title": "LoginRequest"
+      },
+      "RuleCreate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "pattern": "^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$",
+            "title": "Type"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "cooldown": {
+            "type": "number",
+            "title": "Cooldown",
+            "default": 30.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "RuleCreate"
+      },
+      "RuleOut": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "pattern": "^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$",
+            "title": "Type"
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Params"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "cooldown": {
+            "type": "number",
+            "title": "Cooldown",
+            "default": 30.0
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "camera_id": {
+            "type": "integer",
+            "title": "Camera Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "camera_id"
+        ],
+        "title": "RuleOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "cameras",
+      "description": "摄像头接入与生命周期管理（RTSP / 视频文件）"
+    },
+    {
+      "name": "rules",
+      "description": "检测规则配置与场景化预设"
+    },
+    {
+      "name": "events",
+      "description": "告警事件查询、快照与确认流转"
+    },
+    {
+      "name": "packs",
+      "description": "行业方案包：浏览、安装、应用与卸载"
+    },
+    {
+      "name": "stats",
+      "description": "事件聚合统计（分时段客流等）"
+    },
+    {
+      "name": "system",
+      "description": "本机算力与运行配置信息"
+    },
+    {
+      "name": "account",
+      "description": "市场平台账号（预留 stub，本地功能无需登录）"
+    }
+  ]
+}

@@ -57,9 +57,59 @@ async def lifespan(app: FastAPI):
     vlm_reviewer.stop()
 
 
-app = FastAPI(title="open-cam", version=__version__,
-              description="摄像头视频流分析与监控管理工具（本地运行，视频数据不出本机）",
-              lifespan=lifespan)
+_DESCRIPTION = """open-cam 是装在本地电脑上的视频流分析与监控管理平台：**视频数据不出本机**。
+
+- **摄像头**：接入局域网 RTSP 流或本地视频文件，本地 YOLO（cuda/mps/cpu 自适应）检测与跟踪。
+- **规则引擎**：区域入侵 / 徘徊逗留 / 人数统计 / 区域人数 / 越线计数，支持生效时段与冷却去抖。
+- **事件**：命中规则即落库并存快照，可经 VLM（OpenAI 兼容接口）异步复核，支持确认（ack）流转。
+- **方案包**：行业规则模板包（连锁零售 / 美容美发 / 餐饮 / 快餐），一键安装与应用。
+- **统计**：分时段进出店客流等聚合视图。
+
+交互式调试见 [Swagger UI](/docs)，结构化阅读见 [ReDoc](/redoc)。
+"""
+
+_TAGS = [
+    {"name": "cameras", "description": "摄像头接入与生命周期管理（RTSP / 视频文件）"},
+    {"name": "rules", "description": "检测规则配置与场景化预设"},
+    {"name": "events", "description": "告警事件查询、快照与确认流转"},
+    {"name": "packs", "description": "行业方案包：浏览、安装、应用与卸载"},
+    {"name": "stats", "description": "事件聚合统计（分时段客流等）"},
+    {"name": "system", "description": "本机算力与运行配置信息"},
+    {"name": "account", "description": "市场平台账号（预留 stub，本地功能无需登录）"},
+]
+
+app = FastAPI(
+    title="open-cam API",
+    version=__version__,
+    description=_DESCRIPTION,
+    contact={"name": "open-cam", "url": "https://github.com/local/open-cam"},
+    license_info={"name": "MIT"},
+    openapi_tags=_TAGS,
+    docs_url=None,   # 下面自定义页面 title
+    redoc_url=None,
+    lifespan=lifespan,
+)
+
+
+@app.get("/docs", include_in_schema=False)
+def swagger_ui():
+    from fastapi.openapi.docs import get_swagger_ui_html
+
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title="open-cam API · Swagger UI",
+        swagger_ui_parameters={"docExpansion": "none"},
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+def redoc():
+    from fastapi.openapi.docs import get_redoc_html
+
+    return get_redoc_html(
+        openapi_url="/openapi.json",
+        title="open-cam API · ReDoc",
+    )
 
 app.include_router(cameras.router)
 app.include_router(rules.router)
@@ -71,7 +121,7 @@ app.include_router(packs.router)
 app.include_router(account.router)
 
 
-@app.get("/health")
+@app.get("/health", tags=["system"], summary="健康检查")
 def health():
     return {"status": "ok"}
 

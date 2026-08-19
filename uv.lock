@@ -1074,7 +1074,7 @@ wheels = [
 [[package]]
 name = "open-cam"
 version = "0.2.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },

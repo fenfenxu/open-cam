@@ -11,7 +11,7 @@ from ..hardware import memory_info, resolve_device
 router = APIRouter(prefix="/api/system", tags=["system"])
 
 
-@router.get("/info")
+@router.get("/info", summary="系统信息", description="推理设备、内存、检测器配置、方案包统计与 VLM 配置状态。")
 def system_info():
     device = resolve_device(settings.device)
     from ..packs.installer import list_packs  # 避免循环 import，用到再引

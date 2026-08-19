@@ -20,7 +20,7 @@ router = APIRouter(prefix="/cameras", tags=["cameras"])
 ALLOWED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".ts"}
 
 
-@router.post("/upload", status_code=201)
+@router.post("/upload", status_code=201, summary="上传本地视频文件")
 def upload_video(file: UploadFile):
     """上传本地视频文件，保存到数据目录，返回可用作 source_uri 的路径。"""
     ext = ("." + file.filename.rsplit(".", 1)[-1].lower()) if "." in (file.filename or "") else ""
@@ -41,12 +41,12 @@ def upload_video(file: UploadFile):
     return {"path": str(dest)}
 
 
-@router.get("", response_model=list[CameraOut])
+@router.get("", response_model=list[CameraOut], summary="摄像头列表")
 def list_cameras(session: Session = Depends(session_scope)):
     return session.query(Camera).order_by(Camera.id).all()
 
 
-@router.post("", response_model=CameraOut, status_code=201)
+@router.post("", response_model=CameraOut, status_code=201, summary="创建摄像头", description="source_type 为 file（视频文件）或 rtsp；autostart=true 时创建即启动采集与分析。")
 def create_camera(body: CameraCreate, session: Session = Depends(session_scope)):
     camera = Camera(name=body.name, source_type=body.source_type,
                     source_uri=body.source_uri)
@@ -62,7 +62,7 @@ def create_camera(body: CameraCreate, session: Session = Depends(session_scope))
     return camera
 
 
-@router.get("/{camera_id}", response_model=CameraOut)
+@router.get("/{camera_id}", response_model=CameraOut, summary="摄像头详情")
 def get_camera(camera_id: int, session: Session = Depends(session_scope)):
     camera = session.get(Camera, camera_id)
     if camera is None:
@@ -70,7 +70,7 @@ def get_camera(camera_id: int, session: Session = Depends(session_scope)):
     return camera
 
 
-@router.delete("/{camera_id}", status_code=204)
+@router.delete("/{camera_id}", status_code=204, summary="删除摄像头", description="运行中的摄像头会先停止再删除。")
 def delete_camera(camera_id: int, session: Session = Depends(session_scope)):
     camera = session.get(Camera, camera_id)
     if camera is None:
@@ -82,7 +82,7 @@ def delete_camera(camera_id: int, session: Session = Depends(session_scope)):
     return Response(status_code=204)
 
 
-@router.post("/{camera_id}/start", response_model=CameraOut)
+@router.post("/{camera_id}/start", response_model=CameraOut, summary="启动摄像头", description="启动采集与分析流水线；幂等。")
 def start(camera_id: int, session: Session = Depends(session_scope)):
     camera = session.get(Camera, camera_id)
     if camera is None:
@@ -97,7 +97,7 @@ def start(camera_id: int, session: Session = Depends(session_scope)):
     return camera
 
 
-@router.post("/{camera_id}/stop", response_model=CameraOut)
+@router.post("/{camera_id}/stop", response_model=CameraOut, summary="停止摄像头")
 def stop(camera_id: int, session: Session = Depends(session_scope)):
     camera = session.get(Camera, camera_id)
     if camera is None:
@@ -108,7 +108,7 @@ def stop(camera_id: int, session: Session = Depends(session_scope)):
     return camera
 
 
-@router.get("/{camera_id}/snapshot.jpg")
+@router.get("/{camera_id}/snapshot.jpg", summary="当前实时帧（JPEG）", description="摄像头未运行或无可用帧时返回 503。")
 def snapshot(camera_id: int, session: Session = Depends(session_scope)):
     """返回当前实时帧 JPEG。"""
     camera = session.get(Camera, camera_id)
