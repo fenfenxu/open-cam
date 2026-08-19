@@ -2,6 +2,7 @@
 const routes = {
   dashboard: () => import('./pages/dashboard.js'),
   cameras: () => import('./pages/cameras.js'),
+  camera: () => import('./pages/camera.js'),
   rules: () => import('./pages/rules.js'),
   events: () => import('./pages/events.js'),
   marketplace: () => import('./pages/marketplace.js'),
@@ -45,20 +46,30 @@ export const RULE_TYPE_NAMES = {
   line_crossing: '越线计数',
 };
 
+// 解析 hash：支持 #/cameras/12 这类带 id 的详情路由
+function parseHash() {
+  const raw = location.hash.replace(/^#\/?/, '') || 'dashboard';
+  const parts = raw.split('/').filter(Boolean);
+  if (parts[0] === 'cameras' && parts[1] && /^\d+$/.test(parts[1])) {
+    return { page: 'camera', id: Number(parts[1]), sidebar: 'cameras' };
+  }
+  const page = routes[parts[0]] ? parts[0] : 'dashboard';
+  return { page, id: null, sidebar: page };
+}
+
 async function render() {
-  const hash = location.hash.replace(/^#\//, '') || 'dashboard';
-  const name = routes[hash] ? hash : 'dashboard';
+  const { page, id, sidebar } = parseHash();
 
   document.querySelectorAll('#sidebar nav a').forEach((a) => {
-    a.classList.toggle('active', a.dataset.route === name);
+    a.classList.toggle('active', a.dataset.route === sidebar);
   });
 
   if (cleanup) { cleanup(); cleanup = null; }
   const app = document.getElementById('app');
   app.innerHTML = '';
   try {
-    const mod = await routes[name]();
-    cleanup = await mod.render(app) || null;
+    const mod = await routes[page]();
+    cleanup = await mod.render(app, { id }) || null;
   } catch (err) {
     app.innerHTML = `<h1>页面加载失败</h1><p class="dim">${err.message}</p>`;
   }

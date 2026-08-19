@@ -108,6 +108,7 @@ export async function render(el) {
             <td><input class="c-uri" data-id="${c.id}" size="36" value="${c.source_uri}"></td>
             <td><span class="badge ${c.status}">${c.status}</span></td>
             <td>
+              <button data-act="view" data-id="${c.id}">查看</button>
               ${c.status === 'running'
                 ? `<button data-act="stop" data-id="${c.id}">停止</button>`
                 : `<button data-act="start" data-id="${c.id}">启动</button>`}
@@ -144,6 +145,10 @@ export async function render(el) {
     const btn = ev.target.closest('button[data-act]');
     if (!btn) return;
     const { act, id } = btn.dataset;
+    if (act === 'view') {
+      location.hash = `#/cameras/${id}`;
+      return;
+    }
     try {
       if (act === 'del') {
         await api(`/cameras/${id}`, { method: 'DELETE' });

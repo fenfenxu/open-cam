@@ -53,6 +53,10 @@ export async function render(el) {
       <canvas class="footfall-chart" width="260" height="64"></canvas>
       <div class="meta foot-empty" hidden>暂无客流数据（先配置「越线计数」规则）</div>
     `;
+    card.classList.add('cam-link');
+    card.addEventListener('click', () => {
+      location.hash = `#/cameras/${cam.id}`;
+    });
     grid.appendChild(card);
 
     const img = card.querySelector('.cam-shot');
