@@ -4,8 +4,10 @@ import { CameraDetailPage } from "@/pages/camera-detail";
 import { CamerasPage } from "@/pages/cameras";
 import { DashboardPage } from "@/pages/dashboard";
 import { EventsPage } from "@/pages/events";
-import { PlaceholderPage } from "@/pages/placeholder";
+import { MarketplacePage } from "@/pages/marketplace";
 import { RulesPage } from "@/pages/rules";
+import { SettingsPage } from "@/pages/settings";
+import { TrainingPage } from "@/pages/training";
 
 export const router = createBrowserRouter([
   {
@@ -17,10 +19,10 @@ export const router = createBrowserRouter([
       { path: "cameras/:id", element: <CameraDetailPage /> },
       { path: "rules", element: <RulesPage /> },
       { path: "events", element: <EventsPage /> },
-      { path: "training", element: <PlaceholderPage title="模型训练" /> },
-      { path: "training/:id", element: <PlaceholderPage title="训练任务" /> },
-      { path: "marketplace", element: <PlaceholderPage title="方案市场" /> },
-      { path: "settings", element: <PlaceholderPage title="设置" /> },
+      { path: "training", element: <TrainingPage /> },
+      { path: "training/:id", element: <TrainingPage /> },
+      { path: "marketplace", element: <MarketplacePage /> },
+      { path: "settings", element: <SettingsPage /> },
     ],
   },
 ]);
