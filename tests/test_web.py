@@ -26,6 +26,7 @@ def test_static_assets(client):
     for path in ("/static/style.css", "/static/app.js",
                  "/static/pages/dashboard.js", "/static/pages/rules.js",
                  "/static/pages/events.js", "/static/pages/cameras.js",
+                 "/static/pages/training.js",
                  "/static/pages/marketplace.js", "/static/pages/settings.js"):
         resp = client.get(path)
         assert resp.status_code == 200, path

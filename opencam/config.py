@@ -31,9 +31,9 @@ class Settings(BaseModel):
     yolo_model: str = "yolov8n.pt"
     # 检测置信度阈值
     conf_threshold: float = 0.25
-    # VLM 复核配置（OpenAI 兼容协议）
-    vlm_base_url: str = "https://api.moonshot.cn/v1"
-    vlm_model: str = "moonshot-v1-8k-vision-preview"
+    # VLM 复核配置（OpenAI 兼容协议），默认智谱 GLM-4V-Flash 免费档
+    vlm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    vlm_model: str = "glm-4v-flash"
     vlm_timeout: float = 30.0
     # HTTP 服务端口（仅文档用途，实际由 uvicorn 命令行决定）
     port: int = 8600

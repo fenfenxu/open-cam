@@ -23,7 +23,7 @@ yolo_model: yolov8n.pt
 # 检测置信度阈值
 conf_threshold: 0.25
 
-# VLM 复核（OpenAI 兼容协议，兼容 Kimi 等）
-vlm_base_url: https://api.moonshot.cn/v1
-vlm_model: moonshot-v1-8k-vision-preview
+# VLM 复核与训练标注（OpenAI 兼容协议，默认智谱 GLM-4V-Flash 免费档）
+vlm_base_url: https://open.bigmodel.cn/api/paas/v4
+vlm_model: glm-4v-flash
 vlm_timeout: 30

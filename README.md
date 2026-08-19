@@ -100,6 +100,9 @@ uv run python scripts/export_openapi.py
 | `GET /api/packs`、`POST /api/packs/install`、`POST /api/packs/{id}/apply`、`DELETE /api/packs/{id}` | 方案包列出 / 安装 / 应用 / 卸载 |
 | `GET /api/packs/online` | 在线市场（stub，未配置平台时降级为内置包） |
 | `GET /api/account/status`、`POST /api/account/login`、`/logout` | 平台账号（stub，本地功能无需登录） |
+| `POST /api/training/tasks`、`POST .../{id}/definition`、`/extract-frames`、`/auto-label`、`/train` | 自助模型训练：创建（语义解构）→ 确认定义 → 抽帧 → 自动标注 → 训练 |
+| `GET /api/training/tasks/{id}/review`、`POST .../samples/{sid}`、`GET .../samples/{sid}/image` | 人工确认队列与样本确认 |
+| `GET /api/training/tasks/{id}/report`、`GET .../models`、`POST /api/training/models/{id}/deploy`、`/rollback` | 评估报告、模型版本、部署 / 回滚 |
 | `GET /health` | 健康检查 |
 | `GET /` | 本地 Web 控制台 |
 
@@ -113,6 +116,7 @@ uv run python scripts/export_openapi.py
 - **摄像头**：CRUD 与启停。
 - **规则**：场景引导式三步配置——选场景卡片 → 填参数（默认值+中文提示）→ 画布画多边形 ROI；已有规则显示中文名与参数摘要，叠加显示可删除。
 - **事件**：时间线 + 摄像头/类型/VLM 判定过滤，查看快照与 VLM 理由，一键 ack。
+- **模型训练**：向导式七步——说需求 → 确认定义 → 画区域选视频源 → 自动标注 → 人工确认 → 训练评估 → 一键部署/回滚。
 - **方案市场**：浏览内置方案包、一键应用到摄像头、从本地目录/zip/URL 安装、卸载。
 - **设置**：`/api/system/info` 算力与 VLM 配置状态、平台账号状态。
 
@@ -127,6 +131,21 @@ uv run python scripts/export_openapi.py
 - **越线计数**：在画面画一条线（两个点），目标穿越即计数，可区分进/出方向（约定：沿线第一点→第二点看，左手侧穿到右手侧为"进"）。同一目标须回到原侧才再次计数。例：门口进出店客流、车辆进出场计数。
 
 所有规则都支持可选的**生效时段** `active_hours`（如 `22:00-07:00`，支持跨午夜；留空=全天生效）。快餐店场景的完整需求全景见 `docs/fastfood-analytics.md`。
+
+## 自助模型训练
+
+用一句自然语言描述需求（如"垃圾桶快满了就提醒我"），平台自动完成
+**解构 → 抽帧 → VLM 打标 → 人工确认 → 微调训练 → 评估 → 部署**，
+产出在本机运行的定制小模型（本期支持"固定区域 + 状态分类"场景，
+详见 `docs/model-training.md`）。
+
+- 数据与模型产物存 `data/training/<task_id>/`，不出本机也不进 git。
+- 打标 VLM 复用全局 OpenAI 兼容配置（默认 GLM-4V-Flash 免费档），
+  创建任务时可用 `vlm_base_url` / `vlm_model` 做任务级覆盖。
+- 部署即在目标摄像头创建 `state_classify` 规则：固定区域裁剪 →
+  定制分类模型 → 触发状态持续 N 秒才告警；旧版本保留，随时回滚。
+- CLI：`opencam training --help` 覆盖全流程（create/extract/label/
+  train/report/deploy/rollback 等）。
 
 ## 解决方案包
 

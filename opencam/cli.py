@@ -174,6 +174,71 @@ def _system(args, client) -> None:
         _emit(_request(client, "GET", "/api/system/info"), args.pretty)
 
 
+# ---------- training（自助模型训练） ----------
+
+def _training(args, client) -> None:
+    base = "/api/training"
+    if args.action == "list":
+        _emit(_request(client, "GET", f"{base}/tasks"), args.pretty)
+    elif args.action == "create":
+        body = {"goal": args.goal}
+        for key, value in (("name", args.name), ("camera_id", args.camera_id),
+                           ("video_path", args.video_path),
+                           ("vlm_base_url", args.vlm_base_url),
+                           ("vlm_model", args.vlm_model)):
+            if value is not None:
+                body[key] = value
+        if args.polygon:
+            body["polygon"] = json.loads(args.polygon)
+        _emit(_request(client, "POST", f"{base}/tasks", body=body),
+              args.pretty)
+    elif args.action == "show":
+        _emit(_request(client, "GET", f"{base}/tasks/{args.id}"), args.pretty)
+    elif args.action == "confirm":
+        _emit(_request(client, "POST",
+                       f"{base}/tasks/{args.id}/definition",
+                       body=json.loads(args.definition)), args.pretty)
+    elif args.action == "extract":
+        body = {"polygon": json.loads(args.polygon),
+                "interval_s": args.interval, "max_frames": args.max_frames}
+        if args.camera_id is not None:
+            body["camera_id"] = args.camera_id
+        if args.video_path:
+            body["video_path"] = args.video_path
+        _emit(_request(client, "POST",
+                       f"{base}/tasks/{args.id}/extract-frames", body=body),
+              args.pretty)
+    elif args.action == "label":
+        _emit(_request(client, "POST", f"{base}/tasks/{args.id}/auto-label"),
+              args.pretty)
+    elif args.action == "review":
+        _emit(_request(client, "GET", f"{base}/tasks/{args.id}/review"),
+              args.pretty)
+    elif args.action == "confirm-sample":
+        _emit(_request(client, "POST",
+                       f"{base}/tasks/{args.id}/samples/{args.sample_id}",
+                       body={"label": args.label}), args.pretty)
+    elif args.action == "train":
+        _emit(_request(client, "POST", f"{base}/tasks/{args.id}/train",
+                       body={"epochs": args.epochs}), args.pretty)
+    elif args.action == "report":
+        _emit(_request(client, "GET", f"{base}/tasks/{args.id}/report"),
+              args.pretty)
+    elif args.action == "models":
+        _emit(_request(client, "GET", f"{base}/tasks/{args.id}/models"),
+              args.pretty)
+    elif args.action == "deploy":
+        _emit(_request(client, "POST",
+                       f"{base}/models/{args.model_id}/deploy",
+                       body={"camera_id": args.camera_id,
+                             "duration_s": args.duration,
+                             "cooldown": args.cooldown}), args.pretty)
+    elif args.action == "rollback":
+        _emit(_request(client, "POST",
+                       f"{base}/models/{args.model_id}/rollback"),
+              args.pretty)
+
+
 # ---------- 参数解析 ----------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -261,6 +326,56 @@ def build_parser() -> argparse.ArgumentParser:
     sp = p.add_subparsers(dest="action", required=True)
     sp.add_parser("info", help="算力与配置信息")
     p.set_defaults(func=_system)
+
+    # training（自助模型训练）
+    p = sub.add_parser("training", help="自助模型训练")
+    sp = p.add_subparsers(dest="action", required=True)
+    sp.add_parser("list", help="训练任务列表")
+    q = sp.add_parser("create", help="创建任务（语义目标自动解构）")
+    q.add_argument("--goal", required=True, help="自然语言目标")
+    q.add_argument("--name")
+    q.add_argument("--camera-id", type=int)
+    q.add_argument("--video-path")
+    q.add_argument("--polygon", help="JSON，0-1 相对坐标多边形")
+    q.add_argument("--vlm-base-url", help="任务级 VLM 覆盖")
+    q.add_argument("--vlm-model", help="任务级 VLM 模型覆盖")
+    q = sp.add_parser("show", help="任务详情（含样本统计）")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("confirm", help="确认任务定义")
+    q.add_argument("id", type=int)
+    q.add_argument("--definition", required=True,
+                   help="JSON：object_name/property_name/classes/rule/metrics")
+    q = sp.add_parser("extract", help="抽帧（摄像头或视频文件）")
+    q.add_argument("id", type=int)
+    q.add_argument("--camera-id", type=int)
+    q.add_argument("--video-path")
+    q.add_argument("--polygon", required=True, help="JSON，0-1 相对坐标多边形")
+    q.add_argument("--interval", type=float, default=2.0, help="抽帧间隔（秒）")
+    q.add_argument("--max-frames", type=int, default=100)
+    q = sp.add_parser("label", help="开始 VLM 自动标注")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("review", help="人工确认队列")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("confirm-sample", help="人工确认样本")
+    q.add_argument("id", type=int)
+    q.add_argument("sample_id", type=int)
+    q.add_argument("--label", required=True, help="类别名或 skip")
+    q = sp.add_parser("train", help="开始训练")
+    q.add_argument("id", type=int)
+    q.add_argument("--epochs", type=int, default=20)
+    q = sp.add_parser("report", help="评估报告")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("models", help="模型版本列表")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("deploy", help="部署模型到摄像头")
+    q.add_argument("model_id", type=int)
+    q.add_argument("--camera-id", type=int, required=True)
+    q.add_argument("--duration", type=float, default=300.0,
+                   help="触发状态持续秒数（默认 300）")
+    q.add_argument("--cooldown", type=float, default=300.0)
+    q = sp.add_parser("rollback", help="回滚模型")
+    q.add_argument("model_id", type=int)
+    p.set_defaults(func=_training)
 
     return parser
 

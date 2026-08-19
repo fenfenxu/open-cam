@@ -29,7 +29,7 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲 deque)
 关键线程模型（`opencam/pipeline.py`、`opencam/streams/`、`opencam/detection/vlm.py`）：
 
 - 每路运行中的摄像头一条 `CaptureWorker` 采集线程 + 一条 `PipelineWorker` 分析线程（daemon 线程）。
-- `PipelineWorker._tick()`：取最新帧 → detect → 规则引擎 evaluate → 命中即存快照、事件落库、提交 VLM 队列。单帧异常不能让线程死（`noqa: BLE001` 兜底）。
+- `PipelineWorker._tick()`：取最新帧 → detect → 规则引擎 evaluate → 命中即存快照、事件落库、提交 VLM 队列。单帧异常不能让线程死（`noqa: BLE001` 兜底）。`state_classify` 类型规则（自助训练部署的定制分类模型）不走 YOLO 检测：裁剪固定区域 → 分类 → 触发状态持续 `duration_s` 秒才告警。
 - 所有 YOLO 推理经全局锁 `_INFERENCE_LOCK` 串行化（`detection/detector.py`）——多路并发调 `model.track` 在 MPS/Metal 上会段错误。
 - VLM 复核是独立后台线程消费队列，绝不阻塞主链路；无 `OPENCAM_VLM_API_KEY` 时事件标 `vlm_status=skipped`。
 - 服务启动（`main.py` lifespan）时初始化 DB、拉起 VLM 线程，并恢复 DB 中 `status=running` 的摄像头。
@@ -50,6 +50,14 @@ opencam/
 │   ├── detector.py    YoloDetector / MockDetector / build_detector / Detection
 │   ├── rules.py       RuleEngine：五种规则纯逻辑，可注入时钟便于单测
 │   └── vlm.py         VlmReviewer 异步复核线程 + OpenAI 兼容调用
+├── training/          自助模型训练（固定区域+状态分类）：
+│   ├── store.py       data/training/<task_id>/ 目录管理（frames/dataset/models）
+│   ├── decompose.py   语义目标 LLM 解构（无 key 启发式兜底）+ 指标人话解释
+│   ├── frames.py      抽帧（文件/摄像头）+ 区域裁剪 + 感知哈希去重
+│   ├── labeling.py    VLM 打标 + 置信度分流 + 人工确认 + LabelingRunner
+│   ├── trainer.py     数据集组织 + YOLO 分类微调（mock 模式占位）+ TrainingRunner
+│   ├── report.py      评估报告（准确率/召回率/误报率 + 人话结论）
+│   └── classifier.py  部署后的运行时状态分类器（真实/Mock）
 ├── streams/           CaptureWorker 基类、FileSource（循环限速播放）、RTSPSource（指数退避重连）、manager
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
 └── web/               无构建原生 SPA：index.html + app.js + pages/*.js + style.css
@@ -99,7 +107,7 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 - `tests/conftest.py` 的 `tmp_settings` 夹具把 `settings.data_dir` 指到 `tmp_path` 并强制 `OPENCAM_DETECTOR=mock`。**测试绝不触碰真实 YOLO 模型、不依赖网络。**
 - 端到端测试（`test_pipeline_e2e.py`）用 OpenCV 生成合成视频（移动矩形）走完整链路。
 - 规则引擎（`detection/rules.py`）是纯逻辑、时钟可注入，优先为规则变更补单测。
-- 当前基线：74 个测试全部通过（本文件撰写时验证）。
+- 当前基线：83 个测试全部通过（本文件撰写时验证）。
 
 ## 代码约定
 
@@ -108,7 +116,7 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 - 状态用模块级常量（`CAMERA_RUNNING`、`VLM_PENDING` 等，见 `models.py`）。
 - 后台线程一律 daemon + `threading.Event` 停止信号 + join 超时；循环内异常兜底记日志、不杀线程。
 - DB 访问模式：`session = get_session()` → try/finally close；事件命中即落库（先 Event 后 VLM 异步回填）。
-- 全局单例挂在模块级：`config.settings`、`streams.manager.camera_manager`、`pipeline.pipeline_manager`、`detection.vlm.vlm_reviewer`。
+- 全局单例挂在模块级：`config.settings`、`streams.manager.camera_manager`、`pipeline.pipeline_manager`、`detection.vlm.vlm_reviewer`、`training.labeling.labeling_runner`、`training.trainer.training_runner`。
 - **CLI 约束**：`opencam/cli.py` 只能 import httpx/argparse 等轻量依赖，绝不能 import 会加载 ultralytics/torch 的包内模块（CLI 必须秒起）。CLI 长期规划见 `docs/cli-go-migration.md`（对外分发时改用 Go 重写，现阶段保持 Python）。
 - **无 linter/formatter 配置**：仓库未配置 ruff/black 等，不要擅自引入；跟随现有代码风格。
 - 改动 API 后必须重跑 `uv run python scripts/export_openapi.py` 更新 `docs/openapi.json`。

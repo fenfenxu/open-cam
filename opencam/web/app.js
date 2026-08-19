@@ -4,6 +4,7 @@ const routes = {
   cameras: () => import('./pages/cameras.js'),
   rules: () => import('./pages/rules.js'),
   events: () => import('./pages/events.js'),
+  training: () => import('./pages/training.js'),
   marketplace: () => import('./pages/marketplace.js'),
   settings: () => import('./pages/settings.js'),
 };
@@ -43,6 +44,7 @@ export const RULE_TYPE_NAMES = {
   object_count: '人数统计',
   zone_count: '区域人数',
   line_crossing: '越线计数',
+  state_classify: '状态分类告警',
 };
 
 async function render() {

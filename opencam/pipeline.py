@@ -15,10 +15,12 @@ import cv2
 from .config import settings
 from .db import get_session
 from .detection.detector import build_detector
-from .detection.rules import RuleEngine
+from .detection.rules import RuleEngine, RuleHit
 from .detection.vlm import vlm_reviewer
 from .models import CAMERA_RUNNING, Camera, Event, Rule
 from .streams.manager import camera_manager
+from .training.classifier import classify_region
+from .training.frames import crop_frame
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,9 @@ class PipelineWorker:
         # 共享传入的检测器（多路摄像头共用一个模型）；未传则自己构建
         self._detector = detector or build_detector()
         self._engine = RuleEngine()
+        # state_classify 规则的持续状态：rule_id -> {"since": float|None,
+        # "last_fired": float}
+        self._state_rules: dict[int, dict] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -62,15 +67,33 @@ class PipelineWorker:
         frame = camera_manager.latest_frame(self.camera_id)
         if frame is None:
             return
-        detections = self._detector.detect(frame)
-        if not detections:
-            return
 
         session = get_session()
         try:
             rules = session.query(Rule).filter_by(
                 camera_id=self.camera_id, enabled=True).all()
-            hits = self._engine.evaluate(rules, detections)
+            # 分流：状态分类规则走定制小模型，其余走 YOLO 检测 + 规则引擎
+            state_rules = [r for r in rules if r.type == "state_classify"]
+            detect_rules = [r for r in rules if r.type != "state_classify"]
+        finally:
+            session.close()
+
+        hits: list[RuleHit] = []
+        for rule in state_rules:
+            try:
+                hit = self._eval_state_rule(rule, frame)
+            except Exception:  # noqa: BLE001 单条规则失败不影响其他
+                logger.exception("状态分类规则 %d 评估异常", rule.id)
+                hit = None
+            if hit is not None:
+                hits.append(hit)
+        if detect_rules:
+            detections = self._detector.detect(frame)
+            if detections:
+                hits.extend(self._engine.evaluate(detect_rules, detections))
+
+        session = get_session()
+        try:
             for hit in hits:
                 snapshot = self._save_snapshot(frame)
                 event = Event(
@@ -88,6 +111,46 @@ class PipelineWorker:
                 vlm_reviewer.submit(event.id)
         finally:
             session.close()
+
+    def _eval_state_rule(self, rule: Rule, frame) -> RuleHit | None:
+        """状态分类规则：裁剪固定区域 → 定制小模型分类 →
+        触发类别持续 duration_s 秒才告警（cooldown 去抖）。"""
+        now = time.time()
+        state = self._state_rules.setdefault(
+            rule.id, {"since": None, "last_fired": -1e18})
+        if now - state["last_fired"] < rule.cooldown:
+            return None
+        params = rule.params
+        model_path = params.get("model_path")
+        if not model_path:
+            return None
+        crop = crop_frame(frame, params.get("polygon") or [])
+        label, conf = classify_region(
+            model_path, params.get("classes") or [], crop)
+        trigger = params.get("trigger_class")
+        threshold = float(params.get("conf_threshold", 0.6))
+        if label != trigger or conf < threshold:
+            state["since"] = None  # 状态消失，重新计时
+            return None
+        if state["since"] is None:
+            state["since"] = now
+            return None
+        duration = float(params.get("duration_s", 300))
+        if now - state["since"] < duration:
+            return None
+        state["last_fired"] = now
+        state["since"] = None
+        return RuleHit(
+            rule_id=rule.id,
+            rule_type=rule.type,
+            confidence=conf,
+            detail={
+                "object_name": params.get("object_name"),
+                "state": label,
+                "duration_s": duration,
+                "model_id": params.get("model_id"),
+            },
+        )
 
     def _save_snapshot(self, frame) -> Path | None:
         try:

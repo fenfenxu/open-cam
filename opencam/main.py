@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import account, cameras, events, packs, rule_presets, rules, stats, system
+from .api import account, cameras, events, packs, rule_presets, rules, stats, \
+    system, training
 from .config import settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
@@ -55,6 +56,10 @@ async def lifespan(app: FastAPI):
     pipeline_manager.stop_all()
     camera_manager.stop_all()
     vlm_reviewer.stop()
+    from .training.labeling import labeling_runner
+    from .training.trainer import training_runner
+    labeling_runner.stop()
+    training_runner.stop()
 
 
 _DESCRIPTION = """open-cam 是装在本地电脑上的视频流分析与监控管理平台：**视频数据不出本机**。
@@ -74,6 +79,7 @@ _TAGS = [
     {"name": "events", "description": "告警事件查询、快照与确认流转"},
     {"name": "packs", "description": "行业方案包：浏览、安装、应用与卸载"},
     {"name": "stats", "description": "事件聚合统计（分时段客流等）"},
+    {"name": "training", "description": "自助模型训练：语义解构、抽帧、自动标注、微调、评估、部署/回滚"},
     {"name": "system", "description": "本机算力与运行配置信息"},
     {"name": "account", "description": "市场平台账号（预留 stub，本地功能无需登录）"},
 ]
@@ -117,6 +123,7 @@ app.include_router(rule_presets.router)
 app.include_router(events.router)
 app.include_router(system.router)
 app.include_router(stats.router)
+app.include_router(training.router)
 app.include_router(packs.router)
 app.include_router(account.router)
 
