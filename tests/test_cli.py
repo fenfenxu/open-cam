@@ -105,7 +105,7 @@ def test_cameras_update_requires_a_field(cli_env, capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main(["cameras", "update", "1"])
     assert exc.value.code == 1
-    assert "请指定 --name" in capsys.readouterr().err
+    assert "请至少指定 --name / --source-type / --source-uri 之一" in capsys.readouterr().err
 
 
 def test_cameras_reconnect_stopped_exits(cli_env, capsys):

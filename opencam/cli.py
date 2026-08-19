@@ -218,6 +218,13 @@ def _stats(args, client) -> None:
 def _system(args, client) -> None:
     if args.action == "info":
         _emit(_request(client, "GET", "/api/system/info"), args.pretty)
+    elif args.action == "doctor":
+        # 升级质检：HTTP 200/503 都要拿到明细，503 不算请求失败
+        resp = client.get("/api/system/health")
+        result = resp.json()
+        _emit(result, args.pretty)
+        if not result.get("ok"):
+            raise CliError("质检未通过，详见上方 checks 明细")
 
 
 def _models(args, client) -> None:
@@ -374,6 +381,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("system", help="系统信息")
     sp = p.add_subparsers(dest="action", required=True)
     sp.add_parser("info", help="算力与配置信息")
+    sp.add_parser("doctor", help="升级质检与健康检查（未通过时退出码为 1）")
     p.set_defaults(func=_system)
 
     # models
