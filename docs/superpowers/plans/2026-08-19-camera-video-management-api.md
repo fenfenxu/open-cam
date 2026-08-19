@@ -18,6 +18,7 @@
 - 视频数据不出本机；不要把 api key 写入文件。
 - 改 API 后必须 `uv run python scripts/export_openapi.py`。
 - 命令：`uv run pytest`；单测示例 `uv run pytest tests/test_videos_api.py -v`。
+- 验证合同：规格「验证方案」里的用例矩阵必须全部落地为 pytest，禁止只测 happy path。
 
 ## 范围边界
 
@@ -34,7 +35,9 @@
 4. `POST /cameras/batch/start` 与 `/stop` 返回逐路 `ok`；空 `ids` 为 422。
 5. `/videos` 可上传/列出/删除；被摄像头 `source_uri` 引用时删除 409（`视频正被摄像头使用，无法删除`）。
 6. `POST /cameras/upload` 仍 201 且 body 含 `path`。
-7. `uv run pytest` 全绿；`docs/openapi.json` 含新路径。
+7. 规格「验证方案」矩阵全部有自动化用例；`uv run pytest` 全绿；`docs/openapi.json` 含新路径。
+8. 上传文件名路径穿越仍落在 `uploads/` 内；级联删除不碰 `snapshot_dir` 外的文件。
+9. OpenCV 写出的小 mp4 上传后 `width`/`height`/`duration_sec` 为正；假字节为 null。
 
 ## 拆解思路（子 Issue / stage）
 
@@ -49,7 +52,7 @@
 
 ## 文件地图
 
-- Create: `opencam/api/videos.py`、`tests/test_videos_api.py`、`tests/test_cameras_api.py`
+- Create: `opencam/api/videos.py`、`tests/test_videos_api.py`、`tests/test_cameras_api.py`、`tests/test_openapi_cameras.py`
 - Modify: `opencam/models.py`、`opencam/api/cameras.py`、`opencam/main.py`、`opencam/cli.py`、`opencam/web/pages/cameras.js`、`tests/test_cli.py`、`tests/test_upload_api.py`（仅确认仍过）、`docs/openapi.json`、`README.md`、`skills/opencam/SKILL.md`、`AGENTS.md`（api/ 枚举加 videos）
 
 ---
@@ -161,6 +164,63 @@ def test_delete_referenced_video_conflict(client, tmp_settings):
 def test_video_not_found(client):
     assert client.get("/videos/999").status_code == 404
     assert "视频不存在" in client.get("/videos/999").json()["detail"]
+    assert client.delete("/videos/999").status_code == 404
+
+
+def test_videos_list_empty(client):
+    assert client.get("/videos").json() == []
+
+
+def test_upload_duplicate_name_not_overwritten(client, tmp_settings):
+    r1 = client.post("/videos", files={"file": ("a.avi", b"first", "video/avi")})
+    r2 = client.post("/videos", files={"file": ("a.avi", b"second", "video/avi")})
+    assert r1.status_code == 201 and r2.status_code == 201
+    assert r1.json()["path"] != r2.json()["path"]
+    uploads = tmp_settings.data_dir / "uploads"
+    assert (uploads / "a.avi").read_bytes() == b"first"
+
+
+def test_upload_sanitizes_path_traversal_filename(client, tmp_settings):
+    from pathlib import Path
+
+    resp = client.post("/videos",
+                       files={"file": ("../../evil.mp4", b"x", "video/mp4")})
+    assert resp.status_code == 201, resp.text
+    saved = Path(resp.json()["path"]).resolve()
+    root = (tmp_settings.data_dir / "uploads").resolve()
+    assert saved == root or root in saved.parents
+    assert ".." not in saved.name
+
+
+def test_delete_video_after_camera_removed(client):
+    created = client.post("/videos",
+                          files={"file": ("later.mp4", b"x", "video/mp4")}).json()
+    cam = client.post("/cameras", json={
+        "name": "c", "source_type": "file", "source_uri": created["path"],
+    })
+    assert cam.status_code == 201
+    assert client.delete(f"/cameras/{cam.json()['id']}").status_code == 204
+    assert client.delete(f"/videos/{created['id']}").status_code == 204
+
+
+def test_upload_probes_tiny_mp4_metadata(client, tmp_path):
+    import cv2
+    import numpy as np
+
+    video = tmp_path / "tiny.mp4"
+    writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"),
+                             10, (320, 240))
+    for _ in range(20):
+        writer.write(np.zeros((240, 320, 3), dtype=np.uint8))
+    writer.release()
+    resp = client.post("/videos",
+                       files={"file": ("tiny.mp4", video.read_bytes(), "video/mp4")})
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["width"] == 320
+    assert body["height"] == 240
+    assert body["duration_sec"] is not None
+    assert body["duration_sec"] > 0
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -337,7 +397,7 @@ def upload_video(file: UploadFile):
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/test_videos_api.py tests/test_upload_api.py -v`  
-Expected: PASS
+Expected: PASS（含重名、路径穿越、真 mp4 探测、删摄像头后再删视频）
 
 - [ ] **Step 5: Commit / PR**
 
@@ -497,6 +557,49 @@ def test_delete_cascades_rules_events_snapshots_keeps_uploads(client, tmp_settin
         session.close()
     assert not snap_file.exists()
     assert Path(video["path"]).exists()
+
+
+def test_put_source_type_while_running_conflict(client):
+    cam = _make_camera(client)
+    session = get_session()
+    try:
+        session.get(Camera, cam["id"]).status = CAMERA_RUNNING
+        session.commit()
+    finally:
+        session.close()
+    resp = client.put(f"/cameras/{cam['id']}", json={"source_type": "rtsp"})
+    assert resp.status_code == 409
+    assert "请先停止摄像头再修改视频源" in resp.json()["detail"]
+
+
+def test_put_invalid_source_type(client):
+    cam = _make_camera(client)
+    resp = client.put(f"/cameras/{cam['id']}", json={"source_type": "ftp"})
+    assert resp.status_code == 422
+
+
+def test_delete_camera_without_children(client):
+    cam = _make_camera(client)
+    assert client.delete(f"/cameras/{cam['id']}").status_code == 204
+    assert client.get(f"/cameras/{cam['id']}").status_code == 404
+
+
+def test_delete_does_not_remove_snapshot_outside_dir(client, tmp_path):
+    from opencam.config import settings
+
+    cam = _make_camera(client)
+    outsider = tmp_path / "outside.jpg"
+    outsider.write_bytes(b"keep-me")
+    session = get_session()
+    try:
+        event = Event(camera_id=cam["id"], type="zone_intrusion",
+                      confidence=0.9, snapshot_path=str(outsider), detail={})
+        session.add(event)
+        session.commit()
+    finally:
+        session.close()
+    assert client.delete(f"/cameras/{cam['id']}").status_code == 204
+    assert outsider.exists()
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -713,6 +816,25 @@ def test_batch_stop_idempotent(client):
 def test_batch_empty_ids_unprocessable(client):
     resp = client.post("/cameras/batch/start", json={"ids": []})
     assert resp.status_code == 422
+
+
+def test_batch_missing_ids_unprocessable(client):
+    assert client.post("/cameras/batch/start", json={}).status_code == 422
+    assert client.post("/cameras/batch/stop", json={}).status_code == 422
+
+
+def test_reconnect_not_found(client):
+    resp = client.post("/cameras/999/reconnect")
+    assert resp.status_code == 404
+    assert "摄像头不存在" in resp.json()["detail"]
+
+
+def test_batch_results_preserve_id_order(client):
+    cam = _make_camera(client)
+    resp = client.post("/cameras/batch/stop", json={"ids": [999, cam["id"]]})
+    assert resp.status_code == 200
+    ids = [item["id"] for item in resp.json()["results"]]
+    assert ids == [999, cam["id"]]
 ```
 
 说明：`test_reconnect_running_ok` 若 `start_camera` 因文件不存在抛错，则断言 500 且 detail 以 `重连失败:` 开头亦可；实现时应与现网 `start_camera` 行为一致——打开失败通常只打日志、DB 仍标 running。以实际 `start_camera` 为准：不抛则 200。
@@ -826,6 +948,38 @@ def test_videos_list_after_upload(cli_env, capsys, tmp_path):
     listed = run_cli(capsys, "videos", "list")
     assert len(listed) == 1
     assert listed[0]["id"] == uploaded["id"]
+    got = run_cli(capsys, "videos", "get", str(uploaded["id"]))
+    assert got["id"] == uploaded["id"]
+    cli.main(["videos", "delete", str(uploaded["id"])])
+    capsys.readouterr()
+    assert run_cli(capsys, "videos", "list") == []
+
+
+def test_cameras_update_requires_a_field(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["cameras", "update", "1"])
+    assert exc.value.code == 1
+    assert "至少指定" in capsys.readouterr().err
+
+
+def test_cameras_reconnect_stopped_exits(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["cameras", "reconnect", "1"])
+    assert exc.value.code == 1
+    assert "仅运行中的摄像头可以重连" in capsys.readouterr().err
+
+
+def test_cameras_batch_start_partial(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    body = run_cli(capsys, "cameras", "batch-start", "1", "999")
+    results = {item["id"]: item for item in body["results"]}
+    assert results[1]["ok"] is True
+    assert results[999]["ok"] is False
 ```
 
 - [ ] **Step 2: 跑 CLI 测试确认失败**
@@ -940,6 +1094,38 @@ def test_cameras_page_has_video_library(client):
     js = client.get("/static/pages/cameras.js").text
     assert "/videos" in js
     assert "data-act=\"save\"" in js or "data-act='save'" in js
+    assert "method: 'PUT'" in js or 'method: "PUT"' in js or "method: `PUT`" in js
+```
+
+创建 `tests/test_openapi_cameras.py`：
+
+```python
+"""OpenAPI 契约：新管理路径必须出现在运行时 schema。"""
+
+from __future__ import annotations
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture()
+def client(tmp_settings):
+    from opencam.main import app
+
+    with TestClient(app) as c:
+        yield c
+
+
+def test_openapi_includes_camera_video_management_paths(client):
+    spec = client.get("/openapi.json").json()
+    paths = spec["paths"]
+    assert "/videos" in paths
+    assert "get" in paths["/videos"] and "post" in paths["/videos"]
+    assert "/videos/{video_id}" in paths
+    assert "put" in paths["/cameras/{camera_id}"]
+    assert "/cameras/batch/start" in paths
+    assert "/cameras/batch/stop" in paths
+    assert "/cameras/{camera_id}/reconnect" in paths
 ```
 
 - [ ] **Step 5: 文档与 OpenAPI**
@@ -966,10 +1152,11 @@ opencam videos upload /v/demo.mp4
 
 ```bash
 uv run python scripts/export_openapi.py
+uv run pytest tests/test_openapi_cameras.py tests/test_cli.py tests/test_web.py tests/test_videos_api.py tests/test_cameras_api.py tests/test_upload_api.py -v
 uv run pytest
 ```
 
-Expected: 全绿；`docs/openapi.json` 的 `paths` 含 `/videos`、`/cameras/{camera_id}` 的 `put`、`/cameras/batch/start`、`/cameras/{camera_id}/reconnect`。
+Expected: 全绿；`docs/openapi.json` 的 `paths` 含 `/videos`、`/cameras/{camera_id}` 的 `put`、`/cameras/batch/start`、`/cameras/{camera_id}/reconnect`。规格「验证方案」矩阵无空行。
 
 - [ ] **Step 6: Commit / PR**
 
@@ -989,12 +1176,15 @@ EOF
 |---|---|
 | PUT + 运行中改源 409 + 改名允许 | Task 2 |
 | 级联删除事件/规则/快照、保留 uploads | Task 2 |
+| 快照目录外文件不删 | Task 2 |
 | health 字段与 last_frame_at==0 | Task 2 |
-| reconnect | Task 3 |
-| batch start/stop、空 ids 422、静态路由优先 | Task 3 |
-| /videos CRUD + 引用 409 | Task 1 |
+| reconnect + 404 | Task 3 |
+| batch start/stop、空/缺 ids 422、顺序保持 | Task 3 |
+| /videos CRUD + 引用 409 + 重名 + 路径穿越 | Task 1 |
+| 真 mp4 元数据探测 | Task 1 |
 | /cameras/upload 别名含 path | Task 1 |
-| CLI | Task 4 |
+| CLI 更新/上传/重连失败/批量部分失败 | Task 4 |
 | Web 改名/改源 + 视频列表 | Task 4 |
-| 测试 + openapi + README + skill | Task 1–4 |
+| OpenAPI 运行时路径断言 + 快照 | Task 4 |
+| 验证方案矩阵 | 规格「验证方案」；各 Task 测试块 |
 | 不引入 Alembic / video_id / CAMERA_ERROR / Web 批量按钮 | 全局约束 |

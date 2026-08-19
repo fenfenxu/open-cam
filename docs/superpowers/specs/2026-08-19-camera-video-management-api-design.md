@@ -219,33 +219,86 @@ Pydantic：
 
 仪表盘可直接用列表里的 `health`，本轮不强制改 `dashboard.js`。不做批量按钮。
 
-## 测试
+## 验证方案
 
-`tests/test_cameras_api.py`（TestClient + `tmp_settings`，不碰真实模型）：
+测试分层，全部走 `tmp_settings` + `OPENCAM_DETECTOR=mock`，不下载 YOLO、不打外网。命令一律 `uv run pytest …`。
 
-- 创建后 GET 含 `health: null`；start 失败的文件源仍可能 running 但 health 可观测（不断言具体 fps）。
-- PUT 只改名，运行中也 200。
-- PUT 改 `source_uri` 且 running → 409，库中 uri 不变。
-- 先 stop 再 PUT 改 `source_uri` → 200，库中 uri 已更新。
-- PUT 空 body → 422。
-- PUT/GET/DELETE 未知 id → 404。
-- 有规则和事件（含 snapshot 文件在 `snapshot_dir` 下）时 DELETE 摄像头 → 204，规则/事件行消失，快照文件消失，uploads 中文件仍在。
-- `POST /reconnect` stopped → 409；running → 200。
-- `POST /batch/start` 含存在与不存在的 id → 200，results 对应 ok true/false。
-- `POST /batch/start` 空 ids → 422。
+| 层 | 目的 | 落点 |
+|---|---|---|
+| 契约 | HTTP 状态码 + 规格里的固定 `detail` 文案 | `test_videos_api.py` / `test_cameras_api.py` |
+| 持久化 | DB 行与磁盘文件同时对得上（上传在、删除不在、引用保护） | 同上，断言 `Path.exists()` 与 ORM count |
+| 安全 | 文件名路径穿越进不了 `uploads` 以外；级联删除不删 `snapshot_dir` 外的文件 | `test_videos_api.py` / `test_cameras_api.py` |
+| 探测 | 假字节元数据为 null；用 OpenCV 写的小 mp4 能读出宽高/时长 | `test_videos_api.py` |
+| 兼容 | `POST /cameras/upload` 仍返回 `path`；旧 `test_upload_api.py` 全绿 | 别名用例 + 回归 |
+| 客户端 | CLI 走 ASGI transport；Web 只做静态源码断言（无浏览器） | `test_cli.py` / `test_web.py` |
+| Schema | 运行中的 OpenAPI 含新路径；导出快照 | `test_openapi_cameras.py` + `scripts/export_openapi.py` |
+| 回归 | 每阶段相关文件绿；Task 4 关门 `uv run pytest` 全绿 | CI / PR |
 
-`tests/test_videos_api.py`：
+不测：真实 RTSP、真实 YOLO、浏览器点击、并发压测、WebSocket。
 
-- 上传假 `.mp4` → 201，有 `id`/`path`/`size_bytes`，元数据可为 null；文件在 `data_dir/uploads`。
-- 列表含该条；GET 详情一致。
-- `POST /cameras/upload` 仍 201 且 body 含 `path`。
-- 不支持的扩展名 → 400。
-- 删除未被引用的视频 → 204，文件不在。
-- 摄像头 `source_uri` 指向该 path 时删除 → 409，文件仍在。
+### 用例矩阵（必须全部有自动化用例）
 
-CLI：在 `tests/test_cli.py` 为 `cameras update`、`videos list` 各加一条冒烟（现有 monkeypatch httpx 模式）。
+**视频库 `tests/test_videos_api.py`**
 
-改接口后必须 `uv run python scripts/export_openapi.py`。README 摄像头表格补上 PUT、reconnect、batch、`/videos`。`skills/opencam/SKILL.md` 同步典型命令。不改 AGENTS.md 除非代码组织变化需要（本轮只加 `videos` 路由，若 `main.py` 挂载新 router 则 AGENTS.md 的 `api/` 枚举加一句）。
+| 用例 | 期望 |
+|---|---|
+| 空列表 | GET `/videos` → `[]` |
+| 假字节上传 | 201；`id/path/filename/size_bytes`；`duration_sec/width/height` 为 null；文件在 `data_dir/uploads` |
+| 列表 + 详情 | GET 列表含该条；GET id 字段与上传一致 |
+| upload 别名 | POST `/cameras/upload` 201 且 body 含 `path` |
+| 非法扩展名 | `.txt` → 400，detail 含 `不支持的视频格式` |
+| 重名不覆盖 | 两次 `a.avi` 路径不同，先上传的文件内容不变 |
+| 文件名路径穿越 | 文件名 `../../evil.mp4` → 201，落盘路径 `resolve()` 后仍在 `uploads/` 下，不含 `..` |
+| 未引用可删 | DELETE 204，文件消失，再 GET 404 |
+| 被摄像头引用 | DELETE 409，`视频正被摄像头使用，无法删除`，文件仍在 |
+| 删摄像头后再删视频 | 先 DELETE camera 204，再 DELETE video 204 |
+| 视频不存在 | GET/DELETE 999 → 404，`视频不存在` |
+| 真小 mp4 探测 | OpenCV 写 320×240、约 20 帧的 mp4 上传后 `width==320`、`height==240`、`duration_sec > 0` |
+
+**摄像头 `tests/test_cameras_api.py`**
+
+| 用例 | 期望 |
+|---|---|
+| 创建响应 | 201 且 `health is None` |
+| stopped health | GET 详情与列表均为 `health: null` |
+| 运行中只改名 | DB `status=running` 时 PUT `{name}` → 200 |
+| 运行中改 uri | PUT `{source_uri}` → 409，库中 uri 不变 |
+| 运行中改 type | PUT `{source_type: rtsp}` → 409，文案相同 |
+| 停止后改源 | PUT uri → 200 |
+| 空 body | PUT `{}` → 422 |
+| 非法 source_type | PUT `{source_type: "ftp"}` → 422 |
+| 未知 id | GET/PUT/DELETE 999 → 404 |
+| 级联删除 | 有规则+事件+snapshot_dir 内快照时 DELETE 204；规则/事件行 0；快照文件消失；uploads 仍在 |
+| 无关联删除 | 无规则无事件的摄像头 DELETE 204 |
+| 快照路径安全 | `snapshot_path` 指向 `snapshot_dir` **之外** 的文件时，DELETE 摄像头后该文件仍在 |
+| 重连 stopped | 409，`仅运行中的摄像头可以重连` |
+| 重连 running | 200（或 500 且 detail 以 `重连失败:` 开头，与 `start_camera` 是否抛错一致） |
+| 重连 404 | POST `/cameras/999/reconnect` → 404 |
+| 批量部分失败 | `ids: [存在, 999]` → 200，前者 ok true，后者 ok false 且 error 含 `摄像头不存在`；`results` 顺序与请求 ids 一致 |
+| 批量 stop 幂等 | 已 stopped → ok true |
+| 空 ids | `{ids: []}` → 422 |
+| 缺 ids | `{}` → 422 |
+
+**CLI `tests/test_cli.py`（现有 TestClient monkeypatch）**
+
+| 用例 | 期望 |
+|---|---|
+| `cameras update ID --name` | JSON `name` 已变 |
+| `cameras update ID` 无可选参数 | 非零退出，stderr 含「至少指定」 |
+| `videos upload` + `list` + `get` | id/path 一致 |
+| `videos delete` | 后再 list 为空 |
+| `cameras reconnect` 对 stopped | 退出码 1，stderr 含 `仅运行中的摄像头可以重连` |
+| `cameras batch-start ID 999` | JSON results 一条 ok 一条 false |
+
+**Web / OpenAPI**
+
+| 用例 | 期望 |
+|---|---|
+| `test_web.py` | `cameras.js` 含 `/videos`、`data-act="save"`（或单引号写法） |
+| `tests/test_openapi_cameras.py` | `app.openapi()["paths"]` 含 `/videos`、`/cameras/{camera_id}` 的 put、`/cameras/batch/start`、`/cameras/{camera_id}/reconnect` |
+| 导出 | Task 4 跑 `uv run python scripts/export_openapi.py`，快照与上式路径一致 |
+
+改接口后必须重导 OpenAPI。README 摄像头表格补上 PUT、reconnect、batch、`/videos`。`skills/opencam/SKILL.md` 同步典型命令。`main.py` 挂载 videos 后 AGENTS.md 的 `api/` 枚举加 `videos`。
 
 ## 错误文案（固定，测试可按子串断言）
 
@@ -279,4 +332,6 @@ CLI：在 `tests/test_cli.py` 为 `cameras update`、`videos list` 各加一条�
 4. 批量启停返回逐路 `ok`；非法空 ids 为 422。
 5. 视频可上传/列出/删除；被摄像头引用时 409。
 6. `POST /cameras/upload` 旧客户端只读 `path` 仍可用。
-7. `uv run pytest` 全绿；openapi 快照已更新。
+7. **验证方案矩阵全部有对应自动化用例**；`uv run pytest` 全绿；openapi 快照已更新。
+8. 路径穿越文件名不能写到 `uploads/` 外；级联删除不能删 `snapshot_dir` 外的文件。
+9. 真小 mp4 上传后能读出正的宽高与时长；假字节元数据为 null。
