@@ -110,6 +110,7 @@ class RuleEngine:
     def __init__(self, clock: Callable[[], float] = time.time):
         self._clock = clock
         self._states: dict[int, _RuleState] = {}
+        self.last_matches: list[RuleHit] = []
 
     def reset(self, rule_id: Optional[int] = None) -> None:
         if rule_id is None:
@@ -121,6 +122,7 @@ class RuleEngine:
         """rules 为 Rule ORM 对象或可访问 .id/.type/.params/.cooldown/.enabled 的对象。"""
         now = self._clock()
         hits: list[RuleHit] = []
+        self.last_matches = []
         for rule in rules:
             if not rule.enabled:
                 continue
@@ -128,12 +130,14 @@ class RuleEngine:
             if not in_active_hours(rule.params.get("active_hours"), now):
                 continue
             state = self._states.setdefault(rule.id, _RuleState())
+            hit = self._eval_one(rule, detections, now, state)
+            if hit is None:
+                continue
+            self.last_matches.append(hit)
             if now - state.last_fired_at < rule.cooldown:
                 continue
-            hit = self._eval_one(rule, detections, now, state)
-            if hit is not None:
-                state.last_fired_at = now
-                hits.append(hit)
+            state.last_fired_at = now
+            hits.append(hit)
         return hits
 
     # ---- 各规则实现 ----

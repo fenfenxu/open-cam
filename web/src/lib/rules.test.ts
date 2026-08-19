@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildEscalate,
   buildRuleParams,
+  defaultEscalateValues,
   defaultFieldValues,
   ruleParamSummary,
   type CameraRule,
@@ -103,5 +105,24 @@ describe("ruleParamSummary", () => {
       params: { direction: "in", classes: ["person"], line: [[0, 0], [1, 1]] },
     };
     expect(ruleParamSummary(rule)).toBe("穿越方向：仅进 · 目标：person · 一条线段");
+  });
+});
+
+describe("buildEscalate", () => {
+  it("keeps observe rules as empty escalate", () => {
+    expect(buildEscalate({ ...defaultEscalateValues("line_crossing") })).toEqual({});
+  });
+
+  it("adds sustained and compound for alert rules", () => {
+    const values = {
+      ...defaultEscalateValues("zone_count"),
+      footfall_gte: "200",
+    };
+    expect(buildEscalate(values)).toEqual({
+      mode: "sustained",
+      fold_open: true,
+      sustained: { duration_sec: 120 },
+      compound: { metric: "footfall_in_today", op: "gte", value: 200 },
+    });
   });
 });

@@ -96,7 +96,7 @@ class Rule(Base):
     cooldown: Mapped[float] = mapped_column(Float, default=30.0)
     # observe 记账 / alert 可能升格待办；缺省由 default_intent(type) 写入
     intent: Mapped[str] = mapped_column(String(16), default=INTENT_ALERT)
-    # 升格策略 JSON；空对象表示立即升格。本切片只存不解释
+    # 升格策略 JSON；空对象 = 立即升格 + 折叠
     escalate: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
 
