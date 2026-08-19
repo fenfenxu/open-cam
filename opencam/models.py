@@ -32,19 +32,29 @@ VLM_SKIPPED = "skipped"   # 无 api key，直接跳过
 VLM_DONE = "done"
 VLM_FAILED = "failed"
 
-# 事件处置状态机：open → acked → resolved；ignored 为误报忽略
+# 事件处置状态机：open → acked → resolved；ignored 为误报忽略；logged 为观察记录
 EVENT_OPEN = "open"
 EVENT_ACKED = "acked"
 EVENT_RESOLVED = "resolved"
 EVENT_IGNORED = "ignored"
-EVENT_STATUSES = (EVENT_OPEN, EVENT_ACKED, EVENT_RESOLVED, EVENT_IGNORED)
+EVENT_LOGGED = "logged"
+EVENT_STATUSES = (EVENT_OPEN, EVENT_ACKED, EVENT_RESOLVED, EVENT_IGNORED, EVENT_LOGGED)
 
 EVENT_STATUS_NAMES = {
     EVENT_OPEN: "待处理",
     EVENT_ACKED: "已确认",
     EVENT_RESOLVED: "已处置",
     EVENT_IGNORED: "已忽略",
+    EVENT_LOGGED: "已记录",
 }
+
+INTENT_OBSERVE = "observe"
+INTENT_ALERT = "alert"
+
+
+def default_intent(rule_type: str) -> str:
+    """越线默认记账；其余默认告警。创建规则未传 intent 时用。"""
+    return INTENT_OBSERVE if rule_type == "line_crossing" else INTENT_ALERT
 
 
 class Camera(Base):
@@ -84,6 +94,10 @@ class Rule(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # 同一规则两次触发的最小间隔（秒），去抖
     cooldown: Mapped[float] = mapped_column(Float, default=30.0)
+    # observe 记账 / alert 可能升格待办；缺省由 default_intent(type) 写入
+    intent: Mapped[str] = mapped_column(String(16), default=INTENT_ALERT)
+    # 升格策略 JSON；空对象表示立即升格。本切片只存不解释
+    escalate: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
 
 class Event(Base):
@@ -110,6 +124,10 @@ class Event(Base):
     starred: Mapped[bool] = mapped_column(Boolean, default=False)
     assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 从规则拷贝，事后改规则不影响历史
+    intent: Mapped[str] = mapped_column(String(16), default=INTENT_ALERT)
+    needs_action: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    repeat_count: Mapped[int] = mapped_column(Integer, default=1)
 
 
 class EventAction(Base):
@@ -240,6 +258,8 @@ class RuleCreate(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     cooldown: float = 30.0
+    intent: Optional[str] = Field(default=None, pattern="^(observe|alert)$")
+    escalate: dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleOut(RuleCreate):
@@ -269,6 +289,9 @@ class EventOut(BaseModel):
     starred: bool
     assignee: Optional[str]
     note: Optional[str]
+    intent: str = INTENT_ALERT
+    needs_action: bool = True
+    repeat_count: int = 1
 
     model_config = {"from_attributes": True}
 

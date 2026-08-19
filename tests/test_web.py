@@ -84,3 +84,10 @@ def test_camera_detail_live_and_replay_copy(client):
     assert "cameras/" in app
     dash = client.get("/static/pages/dashboard.js").text
     assert "#/cameras/" in dash
+
+
+def test_events_page_defaults_to_todos(client):
+    js = client.get("/static/pages/events.js").text
+    assert "needs_action" in js
+    assert "待办" in js
+    assert "含观察记录" in js
