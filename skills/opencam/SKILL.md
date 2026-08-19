@@ -51,8 +51,13 @@ opencam rules list 1                                   # 确认规则已生成
 ```bash
 opencam cameras list
 opencam cameras create --name 门口 --source-type file --source-uri /v/demo.mp4 --autostart
+opencam cameras update 1 --name 后门
 opencam cameras start 1 / stop 1 / delete 1
+opencam cameras reconnect 1
+opencam cameras batch-start 1 2
 opencam cameras snapshot 1 -o /tmp/cam1.jpg            # 抓实时帧
+opencam videos list
+opencam videos upload /v/demo.mp4
 
 opencam rules presets                                  # 五种规则的引导元数据
 opencam rules create 1 --type zone_count --name 排队超员 \

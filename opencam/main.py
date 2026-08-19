@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import account, cameras, events, packs, rule_presets, rules, stats, system, training
+from .api import account, cameras, events, packs, rule_presets, rules, stats, system, training, videos
 from .config import settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
@@ -70,6 +70,7 @@ _DESCRIPTION = """open-cam 是装在本地电脑上的视频流分析与监控�
 
 _TAGS = [
     {"name": "cameras", "description": "摄像头接入与生命周期管理（RTSP / 视频文件）"},
+    {"name": "videos", "description": "本机上传视频文件库（列表、元数据、删除）"},
     {"name": "rules", "description": "检测规则配置与场景化预设"},
     {"name": "events", "description": "告警事件查询、快照与确认流转"},
     {"name": "packs", "description": "行业方案包：浏览、安装、应用与卸载"},
@@ -113,6 +114,7 @@ def redoc():
     )
 
 app.include_router(cameras.router)
+app.include_router(videos.router)
 app.include_router(rules.router)
 app.include_router(rule_presets.router)
 app.include_router(events.router)

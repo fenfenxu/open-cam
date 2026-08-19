@@ -55,6 +55,55 @@ def test_cameras_create_and_list(cli_env, capsys):
     assert got["source_type"] == "file"
 
 
+def test_cameras_update(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    updated = run_cli(capsys, "cameras", "update", "1", "--name", "后门")
+    assert updated["name"] == "后门"
+
+
+def test_videos_list_after_upload(cli_env, capsys, tmp_path):
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"fake")
+    uploaded = run_cli(capsys, "videos", "upload", str(video))
+    assert uploaded["path"].endswith("c.mp4")
+    listed = run_cli(capsys, "videos", "list")
+    assert len(listed) == 1
+    assert listed[0]["id"] == uploaded["id"]
+    got = run_cli(capsys, "videos", "get", str(uploaded["id"]))
+    assert got["id"] == uploaded["id"]
+    cli.main(["videos", "delete", str(uploaded["id"])])
+    capsys.readouterr()
+    assert run_cli(capsys, "videos", "list") == []
+
+
+def test_cameras_update_requires_a_field(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["cameras", "update", "1"])
+    assert exc.value.code == 1
+    assert "至少指定" in capsys.readouterr().err
+
+
+def test_cameras_reconnect_stopped_exits(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["cameras", "reconnect", "1"])
+    assert exc.value.code == 1
+    assert "仅运行中的摄像头可以重连" in capsys.readouterr().err
+
+
+def test_cameras_batch_start_partial(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    body = run_cli(capsys, "cameras", "batch-start", "1", "999")
+    results = {item["id"]: item for item in body["results"]}
+    assert results[1]["ok"] is True
+    assert results[999]["ok"] is False
+
+
 def test_cameras_delete(cli_env, capsys):
     run_cli(capsys, "cameras", "create", "--name", "x",
             "--source-type", "file", "--source-uri", "/tmp/x.mp4")

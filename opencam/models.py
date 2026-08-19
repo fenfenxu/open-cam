@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +40,19 @@ class Camera(Base):
     source_type: Mapped[str] = mapped_column(String(16))  # file / rtsp
     source_uri: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default=CAMERA_STOPPED)
+
+
+class Video(Base):
+    __tablename__ = "videos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    filename: Mapped[str] = mapped_column(String(256))
+    path: Mapped[str] = mapped_column(Text, unique=True)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    duration_sec: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    width: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    height: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class Rule(Base):
@@ -87,14 +100,62 @@ class CameraCreate(BaseModel):
     autostart: bool = False
 
 
+class CameraUpdate(BaseModel):
+    name: Optional[str] = None
+    source_type: Optional[str] = Field(default=None, pattern="^(file|rtsp)$")
+    source_uri: Optional[str] = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self):
+        if self.name is None and self.source_type is None and self.source_uri is None:
+            raise ValueError("至少提供一个字段")
+        return self
+
+
+class CameraHealth(BaseModel):
+    alive: bool
+    has_frame: bool
+    last_frame_age_sec: Optional[float]
+    width: Optional[int]
+    height: Optional[int]
+
+
 class CameraOut(BaseModel):
     id: int
     name: str
     source_type: str
     source_uri: str
     status: str
+    health: Optional[CameraHealth] = None
 
     model_config = {"from_attributes": True}
+
+
+class VideoOut(BaseModel):
+    id: int
+    filename: str
+    path: str
+    size_bytes: int
+    duration_sec: Optional[float]
+    width: Optional[int]
+    height: Optional[int]
+    created_at: float
+
+    model_config = {"from_attributes": True}
+
+
+class BatchIds(BaseModel):
+    ids: list[int] = Field(min_length=1)
+
+
+class BatchResultItem(BaseModel):
+    id: int
+    ok: bool
+    error: Optional[str] = None
+
+
+class BatchResult(BaseModel):
+    results: list[BatchResultItem]
 
 
 class RuleCreate(BaseModel):

@@ -1,5 +1,9 @@
-// 摄像头管理：列表 + 新建 + 启停 + 删除
+// 摄像头管理：列表 + 新建 + 启停 + 行内保存 + 已上传视频
 import { api, toast } from '../app.js';
+
+function dash(value) {
+  return value == null || value === '' ? '—' : value;
+}
 
 export async function render(el) {
   el.innerHTML = `
@@ -23,6 +27,8 @@ export async function render(el) {
       </div>
     </div>
     <div class="mt" id="list"></div>
+    <h2 class="mt">已上传视频</h2>
+    <div class="mt" id="videos"></div>
   `;
 
   const typeSel = el.querySelector('#c-type');
@@ -37,6 +43,30 @@ export async function render(el) {
   typeSel.onchange = syncBrowse;
   syncBrowse();
 
+  async function reloadVideos() {
+    const videos = await api('/videos');
+    const box = el.querySelector('#videos');
+    if (videos.length === 0) {
+      box.innerHTML = '<p class="dim">暂无已上传视频。</p>';
+      return;
+    }
+    box.innerHTML = `
+      <table>
+        <tr><th>ID</th><th>文件名</th><th>大小</th><th>时长</th><th>分辨率</th><th>操作</th></tr>
+        ${videos.map((v) => `
+          <tr>
+            <td class="mono">${v.id}</td>
+            <td>${v.filename}</td>
+            <td class="mono">${v.size_bytes}</td>
+            <td>${dash(v.duration_sec)}</td>
+            <td>${v.width && v.height ? `${v.width}×${v.height}` : '—'}</td>
+            <td>
+              <button class="danger" data-act="vdel" data-id="${v.id}">删除</button>
+            </td>
+          </tr>`).join('')}
+      </table>`;
+  }
+
   browseBtn.onclick = () => fileInput.click();
   fileInput.onchange = async () => {
     const file = fileInput.files[0];
@@ -50,11 +80,12 @@ export async function render(el) {
       if (!resp.ok) throw new Error(body.detail || `HTTP ${resp.status}`);
       uriInput.value = body.path;
       toast('文件已上传');
+      await reloadVideos();
     } catch (err) { toast(err.message, true); }
     fileInput.value = '';
   };
 
-  async function reload() {
+  async function reloadCameras() {
     const cameras = await api('/cameras');
     const list = el.querySelector('#list');
     if (cameras.length === 0) {
@@ -63,21 +94,33 @@ export async function render(el) {
     }
     list.innerHTML = `
       <table>
-        <tr><th>ID</th><th>名称</th><th>源</th><th>状态</th><th>操作</th></tr>
+        <tr><th>ID</th><th>名称</th><th>类型</th><th>源地址</th><th>状态</th><th>操作</th></tr>
         ${cameras.map((c) => `
           <tr>
             <td class="mono">${c.id}</td>
-            <td>${c.name}</td>
-            <td class="mono">${c.source_type}:${c.source_uri}</td>
+            <td><input class="c-name" data-id="${c.id}" value="${c.name}"></td>
+            <td>
+              <select class="c-type" data-id="${c.id}">
+                <option value="file"${c.source_type === 'file' ? ' selected' : ''}>视频文件</option>
+                <option value="rtsp"${c.source_type === 'rtsp' ? ' selected' : ''}>RTSP 流</option>
+              </select>
+            </td>
+            <td><input class="c-uri" data-id="${c.id}" size="36" value="${c.source_uri}"></td>
             <td><span class="badge ${c.status}">${c.status}</span></td>
             <td>
               ${c.status === 'running'
                 ? `<button data-act="stop" data-id="${c.id}">停止</button>`
                 : `<button data-act="start" data-id="${c.id}">启动</button>`}
+              <button data-act="save" data-id="${c.id}">保存</button>
               <button class="danger" data-act="del" data-id="${c.id}">删除</button>
             </td>
           </tr>`).join('')}
       </table>`;
+  }
+
+  async function reload() {
+    await reloadCameras();
+    await reloadVideos();
   }
 
   el.querySelector('#c-create').onclick = async () => {
@@ -105,11 +148,34 @@ export async function render(el) {
       if (act === 'del') {
         await api(`/cameras/${id}`, { method: 'DELETE' });
         toast('已删除');
+      } else if (act === 'save') {
+        const row = btn.closest('tr');
+        await api(`/cameras/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: row.querySelector('.c-name').value,
+            source_type: row.querySelector('.c-type').value,
+            source_uri: row.querySelector('.c-uri').value,
+          }),
+        });
+        toast('已保存');
       } else {
         await api(`/cameras/${id}/${act}`, { method: 'POST' });
         toast(act === 'start' ? '已启动' : '已停止');
       }
-      await reload();
+      await reloadCameras();
+    } catch (err) { toast(err.message, true); }
+  };
+
+  el.querySelector('#videos').onclick = async (ev) => {
+    const btn = ev.target.closest('button[data-act]');
+    if (!btn) return;
+    if (btn.dataset.act !== 'vdel') return;
+    try {
+      await api(`/videos/${btn.dataset.id}`, { method: 'DELETE' });
+      toast('视频已删除');
+      await reloadVideos();
     } catch (err) { toast(err.message, true); }
   };
 
