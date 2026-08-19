@@ -32,19 +32,30 @@ VLM_SKIPPED = "skipped"   # 无 api key，直接跳过
 VLM_DONE = "done"
 VLM_FAILED = "failed"
 
-# 事件处置状态机：open → acked → resolved；ignored 为误报忽略
+# 规则 / 事件意图：观察只记事实，告警才进待办
+INTENT_OBSERVE = "observe"
+INTENT_ALERT = "alert"
+
+# 事件处置状态机：logged 为观察记录；open → acked → resolved；ignored 为误报忽略
+EVENT_LOGGED = "logged"
 EVENT_OPEN = "open"
 EVENT_ACKED = "acked"
 EVENT_RESOLVED = "resolved"
 EVENT_IGNORED = "ignored"
-EVENT_STATUSES = (EVENT_OPEN, EVENT_ACKED, EVENT_RESOLVED, EVENT_IGNORED)
+EVENT_STATUSES = (EVENT_LOGGED, EVENT_OPEN, EVENT_ACKED, EVENT_RESOLVED, EVENT_IGNORED)
 
 EVENT_STATUS_NAMES = {
+    EVENT_LOGGED: "已记录",
     EVENT_OPEN: "待处理",
     EVENT_ACKED: "已确认",
     EVENT_RESOLVED: "已处置",
     EVENT_IGNORED: "已忽略",
 }
+
+
+def default_intent(rule_type: str) -> str:
+    """创建规则未传 intent 时的类型默认：越线进客流观察，其余当告警。"""
+    return INTENT_OBSERVE if rule_type == "line_crossing" else INTENT_ALERT
 
 
 class Camera(Base):
@@ -84,6 +95,9 @@ class Rule(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # 同一规则两次触发的最小间隔（秒），去抖
     cooldown: Mapped[float] = mapped_column(Float, default=30.0)
+    # observe 只记事实；alert 升格待办。空串在写入时按 default_intent(type) 补
+    intent: Mapped[str] = mapped_column(String(16), default="")
+    escalate: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Event(Base):
@@ -105,11 +119,14 @@ class Event(Base):
     vlm_verdict: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     vlm_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     acked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    intent: Mapped[str] = mapped_column(String(16), default="")
+    needs_action: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # 处置闭环：状态机 + 关注星标 + 负责人 + 备注；每次变更记入 EventAction
     status: Mapped[str] = mapped_column(String(16), default=EVENT_OPEN, index=True)
     starred: Mapped[bool] = mapped_column(Boolean, default=False)
     assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    repeat_count: Mapped[int] = mapped_column(Integer, default=1)
 
 
 class EventAction(Base):
@@ -240,6 +257,8 @@ class RuleCreate(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = True
     cooldown: float = 30.0
+    intent: Optional[str] = Field(default=None, pattern="^(observe|alert)$")
+    escalate: dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleOut(RuleCreate):
@@ -265,6 +284,9 @@ class EventOut(BaseModel):
     vlm_verdict: Optional[str]
     vlm_reason: Optional[str]
     acked: bool
+    intent: str = ""
+    needs_action: bool = False
+    repeat_count: int = 1
     status: str
     starred: bool
     assignee: Optional[str]

@@ -74,8 +74,10 @@ def list_events(
         None, description="按 VLM 判定过滤：confirmed / false_alarm / uncertain"),
     acked: Optional[bool] = Query(None, description="按确认状态过滤"),
     status: Optional[str] = Query(
-        None, description="按处置状态过滤：open / acked / resolved / ignored"),
+        None, description="按处置状态过滤：open / acked / resolved / ignored / logged"),
     starred: Optional[bool] = Query(None, description="仅看关注（星标）事件"),
+    needs_action: Optional[bool] = Query(
+        None, description="按是否待办过滤；不传则返回全部"),
     limit: int = Query(50, ge=1, le=500, description="每页条数"),
     offset: int = Query(0, ge=0, description="分页偏移"),
     session: Session = Depends(session_scope),
@@ -93,6 +95,8 @@ def list_events(
         q = q.filter(Event.status == status)
     if starred is not None:
         q = q.filter(Event.starred == starred)
+    if needs_action is not None:
+        q = q.filter(Event.needs_action == needs_action)
     events = q.order_by(Event.ts.desc()).offset(offset).limit(limit).all()
     return _event_outs(session, events)
 

@@ -87,3 +87,51 @@ def test_pipeline_end_to_end(e2e_env):
     assert event.source_offset >= 0
     # 无 OPENCAM_VLM_API_KEY 时，事件应被标记 skipped 或仍 pending
     assert event.vlm_status in ("skipped", "pending")
+    assert events[0].intent == "alert"
+    assert events[0].needs_action is True
+    assert events[0].status == "open"
+
+
+def test_pipeline_line_crossing_is_observe(tmp_settings, tmp_path):
+    init_db(tmp_settings.db_url)
+    video = tmp_path / "synthetic.mp4"
+    _make_video(video)
+
+    session = get_session()
+    try:
+        camera = Camera(name="e2e-line", source_type="file", source_uri=str(video),
+                        status=CAMERA_RUNNING)
+        session.add(camera)
+        session.commit()
+        rule = Rule(
+            camera_id=camera.id, type="line_crossing",
+            params={"line": [[W / 2, 0], [W / 2, H]], "direction": "both"},
+            cooldown=1.0)
+        session.add(rule)
+        session.commit()
+        camera_id = camera.id
+    finally:
+        session.close()
+
+    start_camera(camera_id)
+    try:
+        deadline = time.time() + 15
+        events = []
+        while time.time() < deadline:
+            session = get_session()
+            try:
+                events = session.query(Event).filter_by(
+                    camera_id=camera_id).all()
+            finally:
+                session.close()
+            if events:
+                break
+            time.sleep(0.5)
+    finally:
+        stop_camera(camera_id)
+
+    assert events, "越线流水线未产生任何事件"
+    assert events[0].intent == "observe"
+    assert events[0].needs_action is False
+    assert events[0].status == "logged"
+    assert events[0].vlm_status == "pending"

@@ -17,7 +17,7 @@ import cv2
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..models import CAMERA_STOPPED, Camera, Rule, Video
+from ..models import CAMERA_STOPPED, Camera, Rule, Video, default_intent
 from .installer import Pack, get_pack
 from .manifest import PackError
 
@@ -89,6 +89,8 @@ def _apply_legacy(pack: Pack, camera_id: int, session: Session) -> ApplyResult:
             params=scale_params(tpl.params, width, height),
             enabled=True,
             cooldown=tpl.cooldown,
+            intent=default_intent(tpl.type),
+            escalate={},
         )
         session.add(rule)
         created.append(rule)
@@ -139,6 +141,8 @@ def _apply_new_pack(pack: Pack, session: Session) -> ApplyResult:
                 params=scale_params(tpl.params, width, height),
                 enabled=True,
                 cooldown=tpl.cooldown,
+                intent=default_intent(tpl.type),
+                escalate={},
             )
             session.add(rule)
             created_rules.append(rule)

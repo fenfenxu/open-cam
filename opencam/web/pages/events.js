@@ -2,6 +2,7 @@
 import { api, fmtTime, RULE_TYPE_NAMES, toast } from '../app.js';
 
 const STATUS_NAMES = {
+  logged: '已记录',
   open: '待处理',
   acked: '已确认',
   resolved: '已处置',
@@ -57,7 +58,7 @@ function sourceLabel(e) {
 export async function render(el) {
   const cameras = await api('/cameras');
   el.innerHTML = `
-    <h1>事件处置</h1>
+    <h1>待办</h1>
     <div class="form-row">
       <select id="f-camera">
         <option value="">全部摄像头</option>
@@ -78,6 +79,7 @@ export async function render(el) {
         <option value="uncertain">不确定</option>
       </select>
       <label><input type="checkbox" id="f-starred"> 仅看关注</label>
+      <label><input type="checkbox" id="f-include-obs"> 含观察记录</label>
       <button id="f-reload">刷新</button>
     </div>
     <div class="mt" id="list"></div>
@@ -90,11 +92,13 @@ export async function render(el) {
     const type = el.querySelector('#f-type').value;
     const status = el.querySelector('#f-status').value;
     const verdict = el.querySelector('#f-verdict').value;
+    const includeObs = el.querySelector('#f-include-obs').checked;
     if (cam) params.set('camera_id', cam);
     if (type) params.set('rule_type', type);
     if (status) params.set('status', status);
     if (verdict) params.set('vlm_verdict', verdict);
     if (el.querySelector('#f-starred').checked) params.set('starred', 'true');
+    if (!includeObs) params.set('needs_action', 'true');
     params.set('limit', '100');
 
     const events = await api(`/events?${params}`);
@@ -132,7 +136,7 @@ export async function render(el) {
       api(`/events/${id}`),
       api(`/events/${id}/actions`),
     ]);
-    const nextBtns = (NEXT_ACTIONS[e.status] || [])
+    const nextBtns = e.needs_action === false ? '' : (NEXT_ACTIONS[e.status] || [])
       .map(([st, label]) => `<button data-status="${st}">${label}</button>`).join(' ');
     const range = fmtClipRange(e);
     const hasClip = e.source_offset != null;
@@ -313,6 +317,7 @@ export async function render(el) {
 
   el.querySelector('#f-reload').onclick = reload;
   el.querySelector('#f-starred').onchange = reload;
+  el.querySelector('#f-include-obs').onchange = reload;
   await reload();
   return null;
 }

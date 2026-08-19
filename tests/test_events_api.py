@@ -252,3 +252,56 @@ def test_ack_writes_status_and_action(client):
 
     actions = client.get(f"/events/{event_id}/actions").json()
     assert [a["action"] for a in actions] == ["ack"]
+def test_rule_default_intent_line_crossing_observe(client):
+    camera_id = _make_camera(client)
+    resp = client.post(f"/cameras/{camera_id}/rules", json={
+        "type": "line_crossing",
+        "params": {"line": [[0, 120], [320, 120]], "direction": "both"},
+    })
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["intent"] == "observe"
+    assert resp.json()["escalate"] == {}
+
+
+def test_rule_default_intent_intrusion_alert(client):
+    camera_id = _make_camera(client)
+    resp = client.post(f"/cameras/{camera_id}/rules", json={
+        "type": "zone_intrusion",
+        "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
+    })
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["intent"] == "alert"
+
+
+def test_rule_rejects_bad_intent(client):
+    camera_id = _make_camera(client)
+    resp = client.post(f"/cameras/{camera_id}/rules", json={
+        "type": "zone_intrusion",
+        "intent": "banana",
+        "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
+    })
+    assert resp.status_code == 422 or resp.status_code == 400
+
+
+def test_events_needs_action_filter(client):
+    camera_id = _make_camera(client)
+    session = get_session()
+    try:
+        todo = Event(
+            camera_id=camera_id, type="zone_intrusion", confidence=0.9,
+            intent="alert", needs_action=True, status="open", detail={})
+        obs = Event(
+            camera_id=camera_id, type="line_crossing", confidence=0.9,
+            intent="observe", needs_action=False, status="logged", detail={})
+        session.add_all([todo, obs])
+        session.commit()
+        todo_id, obs_id = todo.id, obs.id
+    finally:
+        session.close()
+    all_rows = client.get("/events").json()
+    ids = {e["id"] for e in all_rows}
+    assert todo_id in ids and obs_id in ids
+    only_todo = client.get("/events", params={"needs_action": True}).json()
+    assert {e["id"] for e in only_todo} == {todo_id}
+    only_obs = client.get("/events", params={"needs_action": False}).json()
+    assert {e["id"] for e in only_obs} == {obs_id}

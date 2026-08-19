@@ -61,6 +61,12 @@ def test_events_page_shows_camera_and_clip(client):
     assert "fmtClipRange" not in client.get("/static/app.js").text
 
 
+def test_events_page_defaults_to_todos(client):
+    js = client.get("/static/pages/events.js").text
+    assert "needs_action" in js
+    assert "待办" in js
+
+
 def test_cameras_page_has_video_library(client):
     js = client.get("/static/pages/cameras.js").text
     assert "/videos" in js
