@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "open-cam API",
-    "description": "open-cam 是装在本地电脑上的视频流分析与监控管理平台：**视频数据不出本机**。\n\n- **摄像头**：接入局域网 RTSP 流或本地视频文件，本地 YOLO（cuda/mps/cpu 自适应）检测与跟踪。\n- **规则引擎**：区域入侵 / 徘徊逗留 / 人数统计 / 区域人数 / 越线计数，支持生效时段与冷却去抖。\n- **事件**：命中规则即落库并存快照，可经 VLM（OpenAI 兼容接口）异步复核，支持确认（ack）流转。\n- **方案包**：行业规则模板包（连锁零售 / 美容美发 / 餐饮 / 快餐），一键安装与应用。\n- **统计**：分时段进出店客流等聚合视图。\n\n交互式调试见 [Swagger UI](/docs)，结构化阅读见 [ReDoc](/redoc)。\n",
+    "description": "open-cam 是视频流分析与监控管理平台。\n\n- **摄像头**：接入局域网 RTSP 流或本地视频文件，YOLO（cuda/mps/cpu 自适应）检测与跟踪。\n- **规则引擎**：区域入侵 / 徘徊逗留 / 人数统计 / 区域人数 / 越线计数，支持生效时段与冷却去抖。\n- **事件**：命中规则即落库并存快照，可经 VLM（OpenAI 兼容接口）异步复核；处置闭环支持关注星标、负责人指派、状态流转与 webhook 通知，全程留痕。\n- **方案包**：行业规则模板包（连锁零售 / 美容美发 / 餐饮 / 快餐），一键安装与应用。\n- **统计**：分时段进出店客流等聚合视图。\n\n交互式调试见 [Swagger UI](/docs)，结构化阅读见 [ReDoc](/redoc)。\n",
     "contact": {
       "name": "open-cam",
       "url": "https://github.com/local/open-cam"
@@ -248,6 +248,7 @@
           "cameras"
         ],
         "summary": "更新摄像头",
+        "description": "仅允许改名称。类型与视频源创建后不可改（传入 source_type / source_uri 返回 409），请新建摄像头。",
         "operationId": "update_camera_cameras__camera_id__put",
         "parameters": [
           {
@@ -943,7 +944,7 @@
           "events"
         ],
         "summary": "事件列表",
-        "description": "支持 camera_id / rule_type / vlm_verdict / acked 过滤与 limit/offset 分页，按时间倒序。",
+        "description": "支持 camera_id / rule_type / vlm_verdict / acked / status / starred 过滤与 limit/offset 分页，按时间倒序。",
         "operationId": "list_events_events_get",
         "parameters": [
           {
@@ -1019,6 +1020,42 @@
             "description": "按确认状态过滤"
           },
           {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按处置状态过滤：open / acked / resolved / ignored",
+              "title": "Status"
+            },
+            "description": "按处置状态过滤：open / acked / resolved / ignored"
+          },
+          {
+            "name": "starred",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "仅看关注（星标）事件",
+              "title": "Starred"
+            },
+            "description": "仅看关注（星标）事件"
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -1080,7 +1117,7 @@
           "events"
         ],
         "summary": "事件详情",
-        "description": "含命中目标、快照路径与 VLM 复核结论。",
+        "description": "含命中目标、快照路径、VLM 复核结论与处置状态。",
         "operationId": "get_event_events__event_id__get",
         "parameters": [
           {
@@ -1100,6 +1137,104 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "events"
+        ],
+        "summary": "编辑处置信息",
+        "description": "更新状态/星标/负责人/备注；每项实际变更记入处置时间线。status=acked 时同步 acked=true。",
+        "operationId": "update_event_events__event_id__patch",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/actions": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "处置时间线",
+        "description": "该事件的全部处置记录（关注/指派/状态/备注/通知），按时间升序。",
+        "operationId": "list_actions_events__event_id__actions_get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventActionOut"
+                  },
+                  "title": "Response List Actions Events  Event Id  Actions Get"
                 }
               }
             }
@@ -1159,6 +1294,47 @@
         }
       }
     },
+    "/events/{event_id}/notify": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "重发通知",
+        "description": "把该事件重新推送到所有匹配的通知渠道，返回推送渠道数。",
+        "operationId": "resend_notify_events__event_id__notify_post",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/events/{event_id}/snapshot": {
       "get": {
         "tags": [
@@ -1166,6 +1342,47 @@
         ],
         "summary": "事件快照图（JPEG）",
         "operationId": "event_snapshot_events__event_id__snapshot_get",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/clip": {
+      "get": {
+        "tags": [
+          "events"
+        ],
+        "summary": "事件对应的素材片段",
+        "description": "文件源事件按命中点前后窗口回放；优先返回抽出的短 mp4，否则回源文件。",
+        "operationId": "event_clip_events__event_id__clip_get",
         "parameters": [
           {
             "name": "event_id",
@@ -1249,6 +1466,197 @@
         }
       }
     },
+    "/api/notify-channels": {
+      "get": {
+        "tags": [
+          "notify"
+        ],
+        "summary": "通知渠道列表",
+        "operationId": "list_channels_api_notify_channels_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NotifyChannelOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Channels Api Notify Channels Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "notify"
+        ],
+        "summary": "新建通知渠道",
+        "description": "camera_id / rule_type 为空表示通配（全部摄像头 / 全部规则类型）。",
+        "operationId": "create_channel_api_notify_channels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotifyChannelIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyChannelOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notify-channels/{channel_id}": {
+      "patch": {
+        "tags": [
+          "notify"
+        ],
+        "summary": "更新通知渠道",
+        "operationId": "update_channel_api_notify_channels__channel_id__patch",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Channel Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotifyChannelUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotifyChannelOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "notify"
+        ],
+        "summary": "删除通知渠道",
+        "operationId": "delete_channel_api_notify_channels__channel_id__delete",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Channel Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notify-channels/{channel_id}/test": {
+      "post": {
+        "tags": [
+          "notify"
+        ],
+        "summary": "测试推送",
+        "description": "立即向该渠道发一条测试消息，返回成功/失败与错误信息。",
+        "operationId": "test_channel_api_notify_channels__channel_id__test_post",
+        "parameters": [
+          {
+            "name": "channel_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Channel Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/info": {
       "get": {
         "tags": [
@@ -1257,6 +1665,26 @@
         "summary": "系统信息",
         "description": "推理设备、内存、检测器配置、方案包统计与 VLM 配置状态。",
         "operationId": "system_info_api_system_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "升级质检与健康检查",
+        "description": "schema 版本/完整性、数据与快照目录可写、近期事件快照文件抽查。全部通过返回 200，否则 503 并附问题明细。升级后可用 `opencam system doctor` 调用。",
+        "operationId": "system_health_api_system_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1415,8 +1843,8 @@
         "tags": [
           "packs"
         ],
-        "summary": "应用方案包到摄像头",
-        "description": "规则模板的相对坐标按摄像头画面分辨率换算为绝对像素后写入规则表。",
+        "summary": "应用方案包",
+        "description": "新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。",
         "operationId": "apply_api_packs__pack_id__apply_post",
         "parameters": [
           {
@@ -1445,11 +1873,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RuleOut"
-                  },
-                  "title": "Response Apply Api Packs  Pack Id  Apply Post"
+                  "$ref": "#/components/schemas/PackApplyOut"
                 }
               }
             }
@@ -1528,7 +1952,7 @@
           "account"
         ],
         "summary": "平台登录（stub）",
-        "description": "未配置 platform_base_url 时返回 400 及说明；本地功能不强制登录。",
+        "description": "未配置 platform_base_url 时返回 400 及说明；不强制登录。",
         "operationId": "login_api_account_login_post",
         "requestBody": {
           "content": {
@@ -2469,14 +2893,18 @@
       "ApplyRequest": {
         "properties": {
           "camera_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Camera Id"
           }
         },
         "type": "object",
-        "required": [
-          "camera_id"
-        ],
         "title": "ApplyRequest"
       },
       "BatchIds": {
@@ -2733,7 +3161,8 @@
           }
         },
         "type": "object",
-        "title": "CameraUpdate"
+        "title": "CameraUpdate",
+        "description": "仅允许改名称。传入 source_type / source_uri 会 409，请新建摄像头。"
       },
       "ConfirmTask": {
         "properties": {
@@ -2892,6 +3321,45 @@
         ],
         "title": "DeployResult"
       },
+      "EventActionOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "event_id": {
+            "type": "integer",
+            "title": "Event Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "actor": {
+            "type": "string",
+            "title": "Actor"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "ts": {
+            "type": "number",
+            "title": "Ts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_id",
+          "action",
+          "actor",
+          "payload",
+          "ts"
+        ],
+        "title": "EventActionOut"
+      },
       "EventFeedback": {
         "properties": {
           "task_id": {
@@ -2968,6 +3436,39 @@
             ],
             "title": "Snapshot Path"
           },
+          "source_offset": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Offset"
+          },
+          "camera_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Name"
+          },
+          "source_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Filename"
+          },
           "detail": {
             "additionalProperties": true,
             "type": "object",
@@ -3002,6 +3503,60 @@
           "acked": {
             "type": "boolean",
             "title": "Acked"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "starred": {
+            "type": "boolean",
+            "title": "Starred"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "clip_start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip Start",
+            "readOnly": true
+          },
+          "clip_end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clip End",
+            "readOnly": true
           }
         },
         "type": "object",
@@ -3017,9 +3572,67 @@
           "vlm_status",
           "vlm_verdict",
           "vlm_reason",
-          "acked"
+          "acked",
+          "status",
+          "starred",
+          "assignee",
+          "note",
+          "clip_start",
+          "clip_end"
         ],
         "title": "EventOut"
+      },
+      "EventUpdate": {
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(open|acked|resolved|ignored)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "starred": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starred"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "title": "EventUpdate",
+        "description": "处置编辑：全部可选，只更新传入的字段。"
       },
       "ExtractFrames": {
         "properties": {
@@ -3163,6 +3776,196 @@
           "status"
         ],
         "title": "ModelVersionOut"
+      },
+      "NotifyChannelIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "webhook": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Webhook"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "rule_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Type"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "webhook"
+        ],
+        "title": "NotifyChannelIn"
+      },
+      "NotifyChannelOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "webhook": {
+            "type": "string",
+            "title": "Webhook"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "rule_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Type"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "webhook",
+          "camera_id",
+          "rule_type",
+          "enabled"
+        ],
+        "title": "NotifyChannelOut"
+      },
+      "NotifyChannelUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "webhook": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webhook"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "rule_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Type"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "title": "NotifyChannelUpdate"
+      },
+      "PackApplyOut": {
+        "properties": {
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/CameraOut"
+            },
+            "type": "array",
+            "title": "Cameras"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cameras",
+          "rules"
+        ],
+        "title": "PackApplyOut"
       },
       "RegionBody": {
         "properties": {
@@ -3565,7 +4368,11 @@
     },
     {
       "name": "events",
-      "description": "告警事件查询、快照与确认流转"
+      "description": "告警事件查询、快照与处置闭环（关注/指派/状态流转/通知）"
+    },
+    {
+      "name": "notify",
+      "description": "通知渠道：webhook 推送配置与测试（飞书/企业微信/钉钉机器人）"
     },
     {
       "name": "packs",
@@ -3581,7 +4388,7 @@
     },
     {
       "name": "account",
-      "description": "市场平台账号（预留 stub，本地功能无需登录）"
+      "description": "市场平台账号（预留 stub，不强制登录）"
     },
     {
       "name": "training",

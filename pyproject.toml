@@ -1,7 +1,7 @@
 [project]
 name = "open-cam"
 version = "0.2.0"
-description = "摄像头视频流分析与监控管理工具（本地运行）"
+description = "摄像头视频流分析与监控管理工具"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi",
@@ -9,6 +9,8 @@ dependencies = [
     "opencv-python-headless",
     "ultralytics",
     "sqlalchemy",
+    "alembic",
+    "platformdirs",
     "pydantic-settings",
     "pyyaml",
     "httpx",

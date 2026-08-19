@@ -12,12 +12,11 @@ import json
 import logging
 import queue
 import threading
-from pathlib import Path
 from typing import Optional
 
 import httpx
 
-from ..config import settings
+from ..config import resolve_snapshot_path, settings
 from ..db import get_session
 from ..models import VLM_DONE, VLM_FAILED, VLM_SKIPPED, Event
 
@@ -122,12 +121,13 @@ class VlmReviewer:
             event = session.get(Event, event_id)
             if event is None or not event.snapshot_path:
                 return
-            if not Path(event.snapshot_path).exists():
+            snapshot = resolve_snapshot_path(event.snapshot_path)
+            if not snapshot.exists():
                 self._update(session, event, VLM_FAILED, None, "快照文件不存在")
                 return
             try:
                 verdict, reason = review_event(
-                    client, event.snapshot_path, event.type, event.detail)
+                    client, str(snapshot), event.type, event.detail)
                 self._update(session, event, VLM_DONE, verdict, reason)
             except Exception as exc:  # 超时/网络/解析失败都不阻塞
                 logger.warning("VLM 复核失败 event=%d: %s", event_id, exc)

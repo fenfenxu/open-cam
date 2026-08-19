@@ -107,14 +107,12 @@ def _cameras(args, client) -> None:
         _emit({"ok": True, "id": args.id}, args.pretty)
     elif args.action == "update":
         payload = {}
+        if args.source_type is not None or args.source_uri is not None:
+            raise CliError("类型和视频源创建后不可修改，请新建摄像头")
         if args.name is not None:
             payload["name"] = args.name
-        if args.source_type is not None:
-            payload["source_type"] = args.source_type
-        if args.source_uri is not None:
-            payload["source_uri"] = args.source_uri
         if not payload:
-            raise CliError("请至少指定 --name / --source-type / --source-uri 之一")
+            raise CliError("请指定 --name")
         _emit(_request(client, "PUT", f"/cameras/{args.id}", body=payload),
               args.pretty)
     elif args.action == "reconnect":
@@ -218,6 +216,13 @@ def _stats(args, client) -> None:
 def _system(args, client) -> None:
     if args.action == "info":
         _emit(_request(client, "GET", "/api/system/info"), args.pretty)
+    elif args.action == "doctor":
+        # 升级质检：HTTP 200/503 都要拿到明细，503 不算请求失败
+        resp = client.get("/api/system/health")
+        result = resp.json()
+        _emit(result, args.pretty)
+        if not result.get("ok"):
+            raise CliError("质检未通过，详见上方 checks 明细")
 
 
 def _models(args, client) -> None:
@@ -289,11 +294,13 @@ def build_parser() -> argparse.ArgumentParser:
     q = sp.add_parser("delete", help="删除摄像头"); q.add_argument("id", type=int)
     q = sp.add_parser("snapshot", help="抓当前帧")
     q.add_argument("id", type=int); q.add_argument("-o", "--output")
-    q = sp.add_parser("update", help="更新摄像头")
+    q = sp.add_parser("update", help="更新摄像头名称（类型与视频源不可改）")
     q.add_argument("id", type=int)
     q.add_argument("--name")
-    q.add_argument("--source-type", choices=["file", "rtsp"])
-    q.add_argument("--source-uri")
+    q.add_argument("--source-type", choices=["file", "rtsp"],
+                   help="已废弃：类型创建后不可改，传入会报错")
+    q.add_argument("--source-uri",
+                   help="已废弃：视频源创建后不可改，传入会报错")
     q = sp.add_parser("reconnect", help="重连运行中的摄像头")
     q.add_argument("id", type=int)
     q = sp.add_parser("batch-start", help="批量启动")
@@ -373,6 +380,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("system", help="系统信息")
     sp = p.add_subparsers(dest="action", required=True)
     sp.add_parser("info", help="算力与配置信息")
+    sp.add_parser("doctor", help="升级质检与健康检查（未通过时退出码为 1）")
     p.set_defaults(func=_system)
 
     # models

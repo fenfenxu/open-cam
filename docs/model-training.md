@@ -75,7 +75,7 @@ VLM 配置走 OpenAI 兼容协议（`vlm_base_url` / `vlm_model` / `vlm_timeout`
 |---|---|---|---|
 | 云端·默认 | 智谱 GLM-4V-Flash（OpenAI 兼容端点） | **免费**（限 1 并发） | 事件复核、小规模标注，零成本起步 |
 | 云端·加强 | 阿里百炼 qwen-vl-max / Qwen3-VL-Flash | max 约 ¥3/百万输入 token；Flash 更低 | 大批量标注、疑难样本打标 |
-| 本地·隐私 | Qwen2.5-VL-3B（Ollama/vLLM，4bit） | 一次性硬件，4–8GB 显存即可；Apple Silicon 8GB 统一内存可跑 | 门店画面不出内网的合规场景 |
+| 本地部署 | Qwen2.5-VL-3B（Ollama/vLLM，4bit） | 一次性硬件，4–8GB 显存即可；Apple Silicon 8GB 统一内存可跑 | 本机或内网部署 VLM |
 
 选型要点：
 

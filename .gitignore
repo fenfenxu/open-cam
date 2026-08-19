@@ -1,4 +1,6 @@
 .venv/
+node_modules/
+opencam/web/lib-compare/dist/
 data/
 *.pt
 __pycache__/

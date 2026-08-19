@@ -52,7 +52,23 @@ def test_put_rename_while_running(client):
     assert resp.json()["name"] == "新名称"
 
 
-def test_put_source_while_running_conflict(client):
+def test_put_source_is_immutable(client):
+    cam = _make_camera(client)
+    resp = client.put(f"/cameras/{cam['id']}", json={"source_uri": "/tmp/other.mp4"})
+    assert resp.status_code == 409
+    assert "请新建摄像头" in resp.json()["detail"]
+    assert client.get(f"/cameras/{cam['id']}").json()["source_uri"] == cam["source_uri"]
+
+
+def test_put_source_type_is_immutable(client):
+    cam = _make_camera(client)
+    resp = client.put(f"/cameras/{cam['id']}", json={"source_type": "rtsp"})
+    assert resp.status_code == 409
+    assert "请新建摄像头" in resp.json()["detail"]
+    assert client.get(f"/cameras/{cam['id']}").json()["source_type"] == "file"
+
+
+def test_put_source_while_running_still_immutable(client):
     cam = _make_camera(client)
     session = get_session()
     try:
@@ -63,15 +79,8 @@ def test_put_source_while_running_conflict(client):
         session.close()
     resp = client.put(f"/cameras/{cam['id']}", json={"source_uri": "/tmp/other.mp4"})
     assert resp.status_code == 409
-    assert "请先停止摄像头再修改视频源" in resp.json()["detail"]
+    assert "请新建摄像头" in resp.json()["detail"]
     assert client.get(f"/cameras/{cam['id']}").json()["source_uri"] == cam["source_uri"]
-
-
-def test_put_source_after_stop(client):
-    cam = _make_camera(client)
-    resp = client.put(f"/cameras/{cam['id']}", json={"source_uri": "/tmp/other.mp4"})
-    assert resp.status_code == 200
-    assert resp.json()["source_uri"] == "/tmp/other.mp4"
 
 
 def test_put_empty_body_unprocessable(client):
@@ -177,7 +186,7 @@ def test_put_source_type_while_running_conflict(client):
         session.close()
     resp = client.put(f"/cameras/{cam['id']}", json={"source_type": "rtsp"})
     assert resp.status_code == 409
-    assert "请先停止摄像头再修改视频源" in resp.json()["detail"]
+    assert "请新建摄像头" in resp.json()["detail"]
 
 
 def test_put_invalid_source_type(client):

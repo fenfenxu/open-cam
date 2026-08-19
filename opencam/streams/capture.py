@@ -10,6 +10,7 @@ import logging
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import Optional
 
 import cv2
@@ -18,16 +19,26 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class FrameSample:
+    """采集到的一帧及其在素材中的位置。offset 为秒；RTSP 为 None。"""
+
+    frame: np.ndarray
+    offset: Optional[float] = None
+
+
 class CaptureWorker:
     """在后台线程中持续读帧，最新若干帧保存在 deque 里。"""
 
     def __init__(self, uri: str, buffer_size: int = 64):
         self.uri = uri
-        self._frames: deque[np.ndarray] = deque(maxlen=buffer_size)
+        self._frames: deque[tuple[np.ndarray, Optional[float]]] = deque(
+            maxlen=buffer_size)
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._cap: Optional[cv2.VideoCapture] = None
+        self._frame_index = 0
         # 最近一次读帧成功的单调时间，用于判断流是否活着
         self.last_frame_at: float = 0.0
 
@@ -50,12 +61,18 @@ class CaptureWorker:
 
     # ---- 对外接口 ----
 
-    def latest_frame(self) -> Optional[np.ndarray]:
-        """返回最新一帧（copy），没有帧时返回 None。"""
+    def latest_sample(self) -> Optional[FrameSample]:
+        """返回最新一帧及素材位置（帧为 copy）。"""
         with self._lock:
             if not self._frames:
                 return None
-            return self._frames[-1].copy()
+            frame, offset = self._frames[-1]
+            return FrameSample(frame=frame.copy(), offset=offset)
+
+    def latest_frame(self) -> Optional[np.ndarray]:
+        """返回最新一帧（copy），没有帧时返回 None。"""
+        sample = self.latest_sample()
+        return None if sample is None else sample.frame
 
     def is_alive(self) -> bool:
         return bool(self._thread and self._thread.is_alive()) and not self._stop.is_set()
@@ -69,6 +86,7 @@ class CaptureWorker:
             cap.release()
             return False
         self._cap = cap
+        self._frame_index = 0
         return True
 
     def _release(self) -> None:
@@ -76,10 +94,21 @@ class CaptureWorker:
             self._cap.release()
             self._cap = None
 
-    def _push(self, frame: np.ndarray) -> None:
+    def _push(self, frame: np.ndarray, offset: Optional[float] = None) -> None:
         with self._lock:
-            self._frames.append(frame)
+            self._frames.append((frame, offset))
         self.last_frame_at = time.monotonic()
+
+    def _position_sec(self) -> Optional[float]:
+        """当前帧在素材中的秒数；读不到时间戳时按帧号 / fps 估算。"""
+        if self._cap is None:
+            return None
+        self._frame_index += 1
+        msec = float(self._cap.get(cv2.CAP_PROP_POS_MSEC) or 0.0)
+        if msec > 0:
+            return msec / 1000.0
+        fps = max(float(self._cap.get(cv2.CAP_PROP_FPS) or 0.0), 1.0)
+        return (self._frame_index - 1) / fps
 
     def _read(self) -> Optional[np.ndarray]:
         """读一帧，失败返回 None。子类可重写。"""
@@ -108,7 +137,7 @@ class FileSource(CaptureWorker):
                 frame = self._read()
                 if frame is None:
                     break  # 播完，外层循环重新打开实现循环播放
-                self._push(frame)
+                self._push(frame, self._position_sec())
                 # 限速：读帧耗时之外的剩余时间睡掉
                 elapsed = time.monotonic() - t0
                 wait = interval - elapsed

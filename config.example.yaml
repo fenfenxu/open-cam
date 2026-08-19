@@ -2,8 +2,10 @@
 # 所有字段均可被环境变量覆盖，规则：OPENCAM_ + 大写字段名，如 OPENCAM_DETECT_FPS=5。
 # VLM 的 api_key 不写在这里，只走环境变量 OPENCAM_VLM_API_KEY。
 
-# 数据目录：SQLite 库与事件快照都存这里
-data_dir: data
+# 数据目录：SQLite 库与事件快照都存这里。
+# 默认在用户数据目录（macOS ~/Library/Application Support/open-cam），
+# 数据与代码分离，升级程序不丢数据。想改位置再取消注释（也可用 OPENCAM_DATA_DIR 覆盖）：
+# data_dir: data
 
 # 检测采样帧率：每秒从帧缓冲取多少帧送检测器（CPU 可承受范围内 2-5 即可）
 detect_fps: 3
@@ -14,7 +16,7 @@ detector: yolo
 # 推理设备：auto（自动探测 cuda→mps→cpu）或显式 cpu/mps/cuda/cuda:0
 device: auto
 
-# 市场平台地址（预留；本地功能不依赖，不配置也能用全部功能）
+# 市场平台地址（预留；不配置也能用全部功能）
 platform_base_url:
 
 # YOLO 权重：首次使用 ultralytics 会自动下载到工作目录

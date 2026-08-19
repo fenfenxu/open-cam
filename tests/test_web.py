@@ -50,11 +50,29 @@ def test_training_wizard_page_wired(client):
     assert "/feedback" in events
 
 
+def test_events_page_shows_camera_and_clip(client):
+    js = client.get("/static/pages/events.js").text
+    assert "/clip" in js
+    assert "source_offset" in js
+    assert "camera_name" in js
+    assert "source_filename" in js
+    assert "素材" in js
+    assert "fmtClipRange" in js
+    assert "fmtClipRange" not in client.get("/static/app.js").text
+
+
 def test_cameras_page_has_video_library(client):
     js = client.get("/static/pages/cameras.js").text
     assert "/videos" in js
     assert "data-act=\"save\"" in js or "data-act='save'" in js
     assert "method: 'PUT'" in js or 'method: "PUT"' in js or "method: `PUT`" in js
+    # 已创建摄像头：名称可改，类型/源地址只读
+    assert "class=\"c-name\"" in js
+    assert "class=\"c-type\"" not in js
+    assert "class=\"c-uri\"" not in js
+    assert "source_type: row.querySelector" not in js
+    assert "source_uri: row.querySelector" not in js
+    assert "请新建" in js
 
 
 def test_camera_detail_live_and_replay_copy(client):

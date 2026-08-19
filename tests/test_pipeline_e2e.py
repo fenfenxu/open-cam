@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import pytest
 
+from opencam.config import resolve_snapshot_path
 from opencam.db import get_session, init_db
 from opencam.models import CAMERA_RUNNING, Camera, Event, Rule
 from opencam.pipeline import start_camera, stop_camera
@@ -80,6 +81,9 @@ def test_pipeline_end_to_end(e2e_env):
     event = events[0]
     assert event.type == "zone_intrusion"
     assert event.snapshot_path is not None
-    assert Path(event.snapshot_path).exists(), "快照文件未落盘"
+    # snapshot_path 存相对 data_dir 的路径，用 resolve_snapshot_path 解析
+    assert resolve_snapshot_path(event.snapshot_path).exists(), "快照文件未落盘"
+    assert event.source_offset is not None, "文件源事件应记录素材播放位置"
+    assert event.source_offset >= 0
     # 无 OPENCAM_VLM_API_KEY 时，事件应被标记 skipped 或仍 pending
     assert event.vlm_status in ("skipped", "pending")

@@ -5,10 +5,11 @@ from __future__ import annotations
 import time
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from .clip import clip_window
 from .db import Base
 
 # 摄像头状态
@@ -30,6 +31,20 @@ VLM_PENDING = "pending"
 VLM_SKIPPED = "skipped"   # 无 api key，直接跳过
 VLM_DONE = "done"
 VLM_FAILED = "failed"
+
+# 事件处置状态机：open → acked → resolved；ignored 为误报忽略
+EVENT_OPEN = "open"
+EVENT_ACKED = "acked"
+EVENT_RESOLVED = "resolved"
+EVENT_IGNORED = "ignored"
+EVENT_STATUSES = (EVENT_OPEN, EVENT_ACKED, EVENT_RESOLVED, EVENT_IGNORED)
+
+EVENT_STATUS_NAMES = {
+    EVENT_OPEN: "待处理",
+    EVENT_ACKED: "已确认",
+    EVENT_RESOLVED: "已处置",
+    EVENT_IGNORED: "已忽略",
+}
 
 
 class Camera(Base):
@@ -81,6 +96,8 @@ class Event(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     ts: Mapped[float] = mapped_column(Float, default=time.time, index=True)
     snapshot_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 文件源在素材中的播放位置（秒）；RTSP / 旧事件为 NULL
+    source_offset: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # 附带上下文：命中目标框、track id、数量等
     detail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     vlm_status: Mapped[str] = mapped_column(String(16), default=VLM_PENDING)
@@ -88,6 +105,40 @@ class Event(Base):
     vlm_verdict: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     vlm_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     acked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # 处置闭环：状态机 + 关注星标 + 负责人 + 备注；每次变更记入 EventAction
+    status: Mapped[str] = mapped_column(String(16), default=EVENT_OPEN, index=True)
+    starred: Mapped[bool] = mapped_column(Boolean, default=False)
+    assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class EventAction(Base):
+    """事件处置记录：关注/指派/状态流转/备注/通知的审计轨迹。"""
+
+    __tablename__ = "event_actions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("events.id"), index=True)
+    # star / unstar / assign / status / note / ack / notify
+    action: Mapped[str] = mapped_column(String(16))
+    # 操作者：local（本机人工）/ agent / 通知渠道名等
+    actor: Mapped[str] = mapped_column(String(64), default="local")
+    # 变更细节：{"from": ..., "to": ...} 或通知结果 {"ok": ..., "error": ...}
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    ts: Mapped[float] = mapped_column(Float, default=time.time, index=True)
+
+
+class NotifyChannel(Base):
+    """通知渠道：webhook + 联系人名；camera_id/rule_type 为空表示通配。"""
+
+    __tablename__ = "notify_channels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64))
+    webhook: Mapped[str] = mapped_column(Text)
+    camera_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rule_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 # 训练产物版本状态
@@ -123,6 +174,7 @@ class CameraCreate(BaseModel):
 
 
 class CameraUpdate(BaseModel):
+    """仅允许改名称。传入 source_type / source_uri 会 409，请新建摄像头。"""
     name: Optional[str] = None
     source_type: Optional[str] = Field(default=None, pattern="^(file|rtsp)$")
     source_uri: Optional[str] = None
@@ -205,11 +257,82 @@ class EventOut(BaseModel):
     confidence: float
     ts: float
     snapshot_path: Optional[str]
+    source_offset: Optional[float] = None
+    camera_name: Optional[str] = None
+    source_filename: Optional[str] = None
     detail: dict[str, Any]
     vlm_status: str
     vlm_verdict: Optional[str]
     vlm_reason: Optional[str]
     acked: bool
+    status: str
+    starred: bool
+    assignee: Optional[str]
+    note: Optional[str]
+
+    model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def clip_start(self) -> Optional[float]:
+        if self.source_offset is None:
+            return None
+        return clip_window(self.source_offset)[0]
+
+    @computed_field
+    @property
+    def clip_end(self) -> Optional[float]:
+        if self.source_offset is None:
+            return None
+        return clip_window(self.source_offset)[1]
+
+
+class EventUpdate(BaseModel):
+    """处置编辑：全部可选，只更新传入的字段。"""
+    status: Optional[str] = Field(default=None, pattern="^(open|acked|resolved|ignored)$")
+    starred: Optional[bool] = None
+    assignee: Optional[str] = None
+    note: Optional[str] = None
+
+
+class EventActionOut(BaseModel):
+    id: int
+    event_id: int
+    action: str
+    actor: str
+    payload: dict[str, Any]
+    ts: float
+
+    model_config = {"from_attributes": True}
+
+
+class NotifyChannelIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    webhook: str = Field(min_length=1)
+    camera_id: Optional[int] = None
+    rule_type: Optional[str] = Field(
+        default=None,
+        pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
+    enabled: bool = True
+
+
+class NotifyChannelUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    webhook: Optional[str] = Field(default=None, min_length=1)
+    camera_id: Optional[int] = None
+    rule_type: Optional[str] = Field(
+        default=None,
+        pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
+    enabled: Optional[bool] = None
+
+
+class NotifyChannelOut(BaseModel):
+    id: int
+    name: str
+    webhook: str
+    camera_id: Optional[int]
+    rule_type: Optional[str]
+    enabled: bool
 
     model_config = {"from_attributes": True}
 

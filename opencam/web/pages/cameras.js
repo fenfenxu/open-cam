@@ -1,4 +1,4 @@
-// 摄像头管理：列表 + 新建 + 启停 + 行内保存 + 已上传视频
+// 摄像头管理：列表 + 新建 + 启停 + 行内改名 + 已上传视频
 import { api, toast } from '../app.js';
 
 function dash(value) {
@@ -26,6 +26,7 @@ export async function render(el) {
         <button id="c-create">添加</button>
       </div>
     </div>
+    <p class="dim mt">已创建的摄像头只能改名称；更换类型或视频源请新建。</p>
     <div class="mt" id="list"></div>
     <h2 class="mt">已上传视频</h2>
     <div class="mt" id="videos"></div>
@@ -99,13 +100,8 @@ export async function render(el) {
           <tr>
             <td class="mono">${c.id}</td>
             <td><input class="c-name" data-id="${c.id}" value="${c.name}"></td>
-            <td>
-              <select class="c-type" data-id="${c.id}">
-                <option value="file"${c.source_type === 'file' ? ' selected' : ''}>视频文件</option>
-                <option value="rtsp"${c.source_type === 'rtsp' ? ' selected' : ''}>RTSP 流</option>
-              </select>
-            </td>
-            <td><input class="c-uri" data-id="${c.id}" size="36" value="${c.source_uri}"></td>
+            <td>${c.source_type === 'rtsp' ? 'RTSP 流' : '视频文件'}</td>
+            <td class="mono">${c.source_uri}</td>
             <td><span class="badge ${c.status}">${c.status}</span></td>
             <td>
               <button data-act="view" data-id="${c.id}">查看</button>
@@ -160,8 +156,6 @@ export async function render(el) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: row.querySelector('.c-name').value,
-            source_type: row.querySelector('.c-type').value,
-            source_uri: row.querySelector('.c-uri').value,
           }),
         });
         toast('已保存');

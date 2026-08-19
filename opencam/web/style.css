@@ -55,12 +55,6 @@ body {
   border-left-color: var(--accent);
   background: var(--bg-elev);
 }
-#sidebar-footer {
-  padding: 12px 20px;
-  font-size: 12px;
-  color: var(--text-dim);
-  border-top: 1px solid var(--border);
-}
 
 #app { flex: 1; padding: 24px 28px; overflow-x: hidden; }
 
@@ -125,6 +119,23 @@ h2 { font-size: 15px; margin: 20px 0 10px; color: var(--text-dim); }
 .badge.stopped { color: var(--text-dim); }
 .badge.error, .badge.false_alarm { color: var(--danger); }
 .badge.uncertain, .badge.pending { color: var(--warn); }
+
+/* 事件处置状态 */
+.badge.st-open { color: var(--warn); }
+.badge.st-acked { color: var(--accent); }
+.badge.st-resolved { color: var(--ok); }
+.badge.st-ignored { color: var(--text-dim); }
+
+/* 关注星标 */
+button.star {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  padding: 0 4px;
+}
+button.star.on { color: var(--warn); }
+button.star:hover { color: var(--warn); background: transparent; }
 
 /* 表单 */
 input, select, button, textarea {
@@ -220,7 +231,20 @@ tr:hover td { background: var(--bg-elev); }
 .type-tag.line_crossing { color: #b07fe8; background: #b07fe822; }
 
 /* 事件详情 */
-.event-detail img { max-width: 480px; width: 100%; border-radius: 6px; border: 1px solid var(--border); }
+.event-detail img { max-width: 640px; width: 100%; border-radius: 6px; border: 1px solid var(--border); }
+.event-media { position: relative; max-width: 640px; }
+.event-media img { display: block; }
+.event-media .time-badge {
+  position: absolute; left: 8px; bottom: 8px;
+  background: rgba(0, 0, 0, 0.75); color: #fff;
+  padding: 4px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 13px;
+}
+.event-clip {
+  display: block; margin-top: 10px; width: 100%; max-width: 640px;
+  background: #000; border-radius: 6px; border: 1px solid var(--border);
+}
+tr.selected td { background: var(--accent-dim); }
 .kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; }
 .kv dt { color: var(--text-dim); }
 .kv dd { font-family: var(--mono); font-size: 13px; }

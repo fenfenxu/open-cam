@@ -1,6 +1,6 @@
 """平台账号 stub：platform_base_url + token 存 data/account.json。
 
-本地功能不强制登录；该模块仅为以后的市场平台预留存储与接口形状。
+无需登录即可使用；该模块仅为以后的市场平台预留存储与接口形状。
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def status():
         "platform_base_url": base_url,
         "logged_in": bool(account.get("token")),
         "note": None if base_url else
-                "本地功能无需登录；配置 platform_base_url 后可接入市场平台。",
+                "无需登录即可使用；配置 platform_base_url 后可接入市场平台。",
     }
 
 
@@ -58,7 +58,7 @@ class LoginRequest(BaseModel):
     token: Optional[str] = None  # 预留：平台签发的访问令牌
 
 
-@router.post("/login", summary="平台登录（stub）", description="未配置 platform_base_url 时返回 400 及说明；本地功能不强制登录。")
+@router.post("/login", summary="平台登录（stub）", description="未配置 platform_base_url 时返回 400 及说明；不强制登录。")
 def login(body: LoginRequest):
     """平台登录（stub）。未配置平台时返回明确错误与说明。"""
     account = load_account()
@@ -66,7 +66,7 @@ def login(body: LoginRequest):
     if not base_url:
         raise HTTPException(
             400,
-            "未配置市场平台。open-cam 是本地软件，全部功能无需登录；"
+            "未配置市场平台。全部功能无需登录；"
             "将来接入市场平台时，请在 config.yaml 设置 platform_base_url 后重试。",
         )
     # 平台未上线，先落 token 占位

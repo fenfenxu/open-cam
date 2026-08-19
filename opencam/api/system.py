@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..config import settings
@@ -30,4 +31,15 @@ def system_info():
         "vlm_configured": bool(settings.vlm_api_key),
         "vlm_model": settings.vlm_model,
         "platform_base_url": settings.platform_base_url,
+        "data_dir": str(settings.data_dir),
     }
+
+
+@router.get("/health", summary="升级质检与健康检查",
+            description="schema 版本/完整性、数据与快照目录可写、近期事件快照文件抽查。"
+                        "全部通过返回 200，否则 503 并附问题明细。升级后可用 `opencam system doctor` 调用。")
+def system_health():
+    from ..doctor import check_health  # 用到再引
+
+    result = check_health()
+    return JSONResponse(result, status_code=200 if result["ok"] else 503)

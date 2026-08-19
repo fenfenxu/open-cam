@@ -23,7 +23,7 @@ def test_system_info_fields(client):
     # 关键字段齐全
     for key in ("version", "device", "device_config", "yolo_model",
                 "detect_fps", "packs_available", "packs_installed",
-                "vlm_configured", "vlm_model"):
+                "vlm_configured", "vlm_model", "data_dir"):
         assert key in info, key
     # 本机无 cuda、mps 可用 → auto 应解析出有效设备
     assert info["device"] in ("cuda", "mps", "cpu")
