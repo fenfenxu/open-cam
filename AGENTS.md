@@ -9,7 +9,7 @@ open-cam 是视频监控分析工具：接入 RTSP 流或视频文件，YOLO + �
 - 语言：Python ≥ 3.12；构建后端 hatchling；包管理/运行用 **uv**。
 - Web 框架：FastAPI + uvicorn（默认端口 8600）；数据库 SQLite + SQLAlchemy + Alembic 版本化迁移（pydantic-settings 管配置）。
 - 检测：ultralytics YOLOv8 + ByteTrack（`lap` 是 ByteTrack 依赖）；OpenCV（headless 版）读流。
-- Web 控制台：**无构建步骤的原生 HTML/JS**（`opencam/web/`），FastAPI 直接挂载。
+- Web 控制台：Vite + React + TypeScript + shadcn/ui（`web/`）。开发用 `make web-dev`（代理到已启动的后端）；`make web-build` 后 FastAPI 挂 `web/dist`，`make run` 提供同一套控制台。需要 Node 20+。
 - 前端、README、代码注释、规则名等用户可见内容均使用**中文**；代码标识符用英文。
 
 ## 运行时架构
@@ -57,9 +57,9 @@ opencam/
 │   └── vlm.py         VlmReviewer 异步复核线程 + OpenAI 兼容调用
 ├── streams/           CaptureWorker 基类、FileSource（循环限速播放）、RTSPSource（指数退避重连）、manager
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
-├── training/          自助训练：任务定义、抽帧、标注、本地微调评估、模型版本登记与 A/B 部署回滚
-└── web/               无构建原生 SPA：index.html + app.js + pages/*.js + style.css
+└── training/          自助训练：任务定义、抽帧、标注、本地微调评估、模型版本登记与 A/B 部署回滚
 
+web/                   Vite 控制台源码（构建产物 web/dist，gitignore）
 tests/                 pytest（见下）
 agent/monitor_agent.py 示例监控 Agent：轮询未确认事件 → LLM 定级 → webhook → 自动 ack
 packs/                 四个内置行业方案包（retail-chain/salon/restaurant/fast-food）
@@ -77,8 +77,10 @@ data/                  旧版默认数据目录（现已默认用户数据目录
 uv venv --python 3.12
 uv pip install -e .
 
-# 启动服务（默认端口 8600）
+# 启动服务（默认端口 8600；控制台需先 make web-build）
 uv run uvicorn opencam.main:app --port 8600
+make web-dev     # 开发控制台（另开终端，代理到 8600）
+make web-build   # 产出 web/dist，随后 make run 即可打开控制台
 
 # 无模型环境/CI（不下载 yolov8n.pt）
 export OPENCAM_DETECTOR=mock
@@ -90,7 +92,7 @@ opencam cameras list        # 或开发时 uv run opencam cameras list
 uv run python scripts/export_openapi.py
 ```
 
-上述命令在根目录 `Makefile` 中有对应 target（`make install / run / run-mock / test / openapi / config / clean`，`make help` 查看全部）。
+上述命令在根目录 `Makefile` 中有对应 target（`make install / run / run-mock / test / web-dev / web-build / openapi / config / clean`，`make help` 查看全部）。跑 `tests/test_web.py` 前必须 `make web-build`。
 
 配置：可选 `config.yaml`（参考 `config.example.yaml`，已在 .gitignore）；任意字段可用 `OPENCAM_` + 大写字段名环境变量覆盖。VLM 的 api_key 可在控制台「设置 → 大模型」填写（写入本机 `data_dir/vlm.json`），也可用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。不要把 key 提交进仓库。
 
