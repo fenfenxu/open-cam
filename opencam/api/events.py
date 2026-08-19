@@ -7,12 +7,20 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..db import session_scope
 from ..models import Event, EventOut
+from ..training.feedback import FeedbackError, ingest_event_feedback
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+
+class EventFeedback(BaseModel):
+    task_id: str = Field(description="归入的训练任务 id")
+    kind: str = Field(description="false_alarm 误报 / miss 漏报")
+    label: Optional[str] = Field(None, description="覆盖默认类别")
 
 
 @router.get("", response_model=list[EventOut], summary="事件列表", description="支持 camera_id / rule_type / vlm_verdict / acked 过滤与 limit/offset 分页，按时间倒序。")
@@ -66,3 +74,27 @@ def event_snapshot(event_id: int, session: Session = Depends(session_scope)):
     if not event.snapshot_path or not Path(event.snapshot_path).exists():
         raise HTTPException(404, "快照不存在")
     return FileResponse(event.snapshot_path, media_type="image/jpeg")
+
+
+@router.post("/{event_id}/feedback", summary="误报/漏报反馈并写入训练数据集")
+def event_feedback(event_id: int, body: EventFeedback,
+                   session: Session = Depends(session_scope)):
+    event = session.get(Event, event_id)
+    if event is None:
+        raise HTTPException(404, "事件不存在")
+    try:
+        sample = ingest_event_feedback(
+            body.task_id, event.id, body.kind,
+            event.snapshot_path, label=body.label)
+    except FeedbackError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    event.acked = True
+    session.commit()
+    return {
+        "event_id": event.id,
+        "acked": True,
+        "task_id": body.task_id,
+        "sample": sample,
+    }

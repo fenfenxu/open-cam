@@ -38,6 +38,24 @@ def task_exists(task_id: str) -> bool:
     return (task_dir(task_id) / "definition.json").is_file()
 
 
+def list_task_ids() -> list[str]:
+    """扫描 data/training/ 下有 definition.json 或 draft.json 的任务。"""
+    root = settings.data_dir / "training"
+    if not root.is_dir():
+        return []
+    ids: list[str] = []
+    for path in sorted(root.iterdir()):
+        if not path.is_dir():
+            continue
+        try:
+            ensure_task_id(path.name)
+        except ValueError:
+            continue
+        if (path / "definition.json").is_file() or (path / "draft.json").is_file():
+            ids.append(path.name)
+    return ids
+
+
 def save_definition(task_id: str, definition: dict[str, Any]) -> Path:
     root = task_dir(task_id)
     root.mkdir(parents=True, exist_ok=True)

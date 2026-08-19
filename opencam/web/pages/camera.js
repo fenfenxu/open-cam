@@ -30,6 +30,8 @@ export async function render(el, ctx = {}) {
     ${live}
     <h2 class="mt">回放</h2>
     ${replay}
+    <h2 class="mt">已部署模型</h2>
+    <div id="model-box"><p class="dim">加载中…</p></div>
   `;
 
   const video = el.querySelector('video.cam-replay');
@@ -50,6 +52,34 @@ export async function render(el, ctx = {}) {
       await render(el, ctx);
     } catch (err) { toast(err.message, true); }
   };
+
+  try {
+    const models = await api('/models');
+    const liveModels = models.filter((m) => m.status === 'live');
+    const box = el.querySelector('#model-box');
+    if (!liveModels.length) {
+      box.innerHTML = '<p class="dim">暂无线上模型。到「模型训练」完成部署。</p>';
+    } else {
+      box.innerHTML = liveModels.map((m) => `
+        <div class="card mt">
+          <div>${m.slot_key} <span class="badge">${m.status}</span></div>
+          <div class="meta mono">任务 ${m.task_id} · 版本 ${m.id}</div>
+          <button data-rb="${m.id}" class="mt">回滚</button>
+        </div>`).join('');
+      box.onclick = async (ev) => {
+        const btn = ev.target.closest('[data-rb]');
+        if (!btn) return;
+        try {
+          const r = await api(`/models/${btn.dataset.rb}/rollback`, { method: 'POST' });
+          toast(r.reason || '已回滚');
+          await render(el, ctx);
+        } catch (err) { toast(err.message, true); }
+      };
+    }
+  } catch (err) {
+    el.querySelector('#model-box').innerHTML =
+      `<p class="dim">模型列表失败：${err.message}</p>`;
+  }
 
   // 离开页面时断开 MJPEG 流
   return () => {

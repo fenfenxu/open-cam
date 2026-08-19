@@ -1,4 +1,4 @@
-// 事件时间线：过滤 + 详情（快照/VLM 理由）+ 一键 ack
+// 事件时间线：过滤 + 详情（快照/VLM 理由）+ 一键 ack + 误报/漏报飞轮
 import { api, fmtTime, RULE_TYPE_NAMES, toast } from '../app.js';
 
 export async function render(el) {
@@ -69,6 +69,62 @@ export async function render(el) {
       </table>`;
   }
 
+  async function fillFeedbackTasks(select) {
+    try {
+      const tasks = (await api('/training/tasks')).filter((t) => t.status === 'confirmed');
+      if (!tasks.length) {
+        select.innerHTML = '<option value="">没有已确认的训练任务</option>';
+        return;
+      }
+      select.innerHTML = tasks.map((t) =>
+        `<option value="${t.task_id}">${t.object} · ${t.property} (${t.task_id})</option>`).join('');
+    } catch {
+      select.innerHTML = '<option value="">无法加载训练任务</option>';
+    }
+  }
+
+  async function renderDetail(e) {
+    el.querySelector('#detail').innerHTML = `
+      <h2>事件 #${e.id}</h2>
+      ${e.snapshot_path ? `<img src="/events/${e.id}/snapshot" alt="快照">` : ''}
+      <dl class="kv mt">
+        <dt>时间</dt><dd>${fmtTime(e.ts)}</dd>
+        <dt>类型</dt><dd>${RULE_TYPE_NAMES[e.type] || e.type}</dd>
+        <dt>置信度</dt><dd>${e.confidence}</dd>
+        <dt>详情</dt><dd>${JSON.stringify(e.detail)}</dd>
+        <dt>VLM 状态</dt><dd>${e.vlm_status}</dd>
+        <dt>VLM 判定</dt><dd>${e.vlm_verdict || '—'}</dd>
+        <dt>VLM 理由</dt><dd>${e.vlm_reason || '—'}</dd>
+      </dl>
+      <div class="card mt" id="fb-box">
+        <h3>训练反馈</h3>
+        <p class="dim">误报/漏报样本会自动进入对应任务的数据集，下次训练会用上。</p>
+        <div class="form-row">
+          <select id="fb-task"><option value="">加载中…</option></select>
+        </div>
+        <div class="form-row">
+          <button data-fb="false_alarm">这是误报</button>
+          <button data-fb="miss">这是漏报</button>
+        </div>
+      </div>`;
+    await fillFeedbackTasks(el.querySelector('#fb-task'));
+    el.querySelector('#fb-box').onclick = async (ev) => {
+      const btn = ev.target.closest('[data-fb]');
+      if (!btn) return;
+      const taskId = el.querySelector('#fb-task').value;
+      if (!taskId) { toast('请先选一个训练任务', true); return; }
+      try {
+        await api(`/events/${e.id}/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task_id: taskId, kind: btn.dataset.fb }),
+        });
+        toast(btn.dataset.fb === 'miss' ? '已记为漏报并入库' : '已记为误报并入库');
+        await reload();
+      } catch (err) { toast(err.message, true); }
+    };
+  }
+
   el.querySelector('#list').onclick = async (ev) => {
     const ackBtn = ev.target.closest('button[data-ack]');
     if (ackBtn) {
@@ -84,18 +140,7 @@ export async function render(el) {
     if (!row) return;
     try {
       const e = await api(`/events/${row.dataset.id}`);
-      el.querySelector('#detail').innerHTML = `
-        <h2>事件 #${e.id}</h2>
-        ${e.snapshot_path ? `<img src="/events/${e.id}/snapshot" alt="快照">` : ''}
-        <dl class="kv mt">
-          <dt>时间</dt><dd>${fmtTime(e.ts)}</dd>
-          <dt>类型</dt><dd>${RULE_TYPE_NAMES[e.type] || e.type}</dd>
-          <dt>置信度</dt><dd>${e.confidence}</dd>
-          <dt>详情</dt><dd>${JSON.stringify(e.detail)}</dd>
-          <dt>VLM 状态</dt><dd>${e.vlm_status}</dd>
-          <dt>VLM 判定</dt><dd>${e.vlm_verdict || '—'}</dd>
-          <dt>VLM 理由</dt><dd>${e.vlm_reason || '—'}</dd>
-        </dl>`;
+      await renderDetail(e);
     } catch (err) { toast(err.message, true); }
   };
 

@@ -95,7 +95,7 @@ def normalize_definition(data: dict[str, Any]) -> dict[str, Any]:
                 break
     rule = data.get("rule") if isinstance(data.get("rule"), dict) else {}
     trigger = str(rule.get("trigger") or "目标状态持续 5 分钟")
-    return {
+    out: dict[str, Any] = {
         "object": str(data.get("object") or "目标").strip() or "目标",
         "property": str(data.get("property") or "状态").strip() or "状态",
         "classes": classes,
@@ -105,6 +105,37 @@ def normalize_definition(data: dict[str, Any]) -> dict[str, Any]:
         },
         "metrics": _as_metrics(data.get("metrics")),
     }
+    if data.get("goal"):
+        out["goal"] = str(data["goal"])
+    region = _as_region(data.get("region"))
+    if region:
+        out["region"] = region
+    alert = data.get("alert_class")
+    if alert in classes:
+        out["alert_class"] = str(alert)
+    if isinstance(data.get("vlm"), dict):
+        out["vlm"] = data["vlm"]
+    try:
+        thr = float(data.get("confidence_threshold"))
+        out["confidence_threshold"] = max(0.0, min(1.0, thr))
+    except (TypeError, ValueError):
+        pass
+    return out
+
+
+def _as_region(raw: Any) -> list[list[float]] | None:
+    """多边形至少 3 个点；非法输入忽略，避免破坏确认落库。"""
+    if not isinstance(raw, list):
+        return None
+    points: list[list[float]] = []
+    for item in raw:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        try:
+            points.append([float(item[0]), float(item[1])])
+        except (TypeError, ValueError):
+            continue
+    return points if len(points) >= 3 else None
 
 
 def parse_definition_response(content: str) -> dict[str, Any]:

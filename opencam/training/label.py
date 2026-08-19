@@ -138,7 +138,7 @@ def call_vlm_label(image_bytes: bytes, definition: dict[str, Any],
     return parse_label_response(content, classes)
 
 
-def _copy_to_dataset(task_id: str, sample: dict[str, Any]) -> None:
+def copy_to_dataset(task_id: str, sample: dict[str, Any]) -> None:
     label = sample.get("label")
     crop_rel = sample.get("crop")
     if not label or not crop_rel:
@@ -216,7 +216,7 @@ def annotate_task(task_id: str, label_fn: Optional[LabelFn] = None) -> dict[str,
         }
         if status == STATUS_AUTO:
             auto += 1
-            _copy_to_dataset(task_id, sample)
+            copy_to_dataset(task_id, sample)
         else:
             review += 1
         samples.append(sample)
@@ -250,7 +250,7 @@ def apply_review(task_id: str, sample_id: str, action: str,
         sample["status"] = STATUS_CONFIRMED
         sample["source"] = "human"
         sample["confidence"] = 1.0
-        _copy_to_dataset(task_id, sample)
+        copy_to_dataset(task_id, sample)
     else:
         raise ValueError("action 只能是 confirm 或 skip")
     save_samples(task_id, samples)

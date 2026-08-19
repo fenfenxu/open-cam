@@ -27,9 +27,27 @@ def test_static_assets(client):
                  "/static/pages/dashboard.js", "/static/pages/rules.js",
                  "/static/pages/events.js", "/static/pages/cameras.js",
                  "/static/pages/camera.js",
-                 "/static/pages/marketplace.js", "/static/pages/settings.js"):
+                 "/static/pages/marketplace.js", "/static/pages/settings.js",
+                 "/static/pages/training.js"):
         resp = client.get(path)
         assert resp.status_code == 200, path
+
+
+def test_training_wizard_page_wired(client):
+    html = client.get("/").text
+    assert 'href="#/training"' in html
+    assert 'data-route="training"' in html
+    app = client.get("/static/app.js").text
+    assert "pages/training.js" in app
+    js = client.get("/static/pages/training.js").text
+    assert "/training/tasks" in js
+    assert "说需求" in js
+    assert "/models" in js
+    events = client.get("/static/pages/events.js").text
+    assert "/events/" in events
+    assert "false_alarm" in events
+    assert "miss" in events
+    assert "/feedback" in events
 
 
 def test_cameras_page_has_video_library(client):
