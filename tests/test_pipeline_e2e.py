@@ -14,8 +14,9 @@ import pytest
 
 from opencam.config import resolve_snapshot_path
 from opencam.db import get_session, init_db
+from opencam.detection.rules import RuleHit
 from opencam.models import CAMERA_RUNNING, Camera, Event, Rule
-from opencam.pipeline import start_camera, stop_camera
+from opencam.pipeline import persist_hit, start_camera, stop_camera
 
 W, H = 320, 240
 
@@ -85,5 +86,33 @@ def test_pipeline_end_to_end(e2e_env):
     assert resolve_snapshot_path(event.snapshot_path).exists(), "快照文件未落盘"
     assert event.source_offset is not None, "文件源事件应记录素材播放位置"
     assert event.source_offset >= 0
+    assert event.intent == "alert"
+    assert event.needs_action is True
+    assert event.status == "open"
     # 无 OPENCAM_VLM_API_KEY 时，事件应被标记 skipped 或仍 pending
     assert event.vlm_status in ("skipped", "pending")
+
+
+def test_persist_hit_observe_is_logged_not_todo(tmp_settings):
+    init_db(tmp_settings.db_url)
+    session = get_session()
+    try:
+        camera = Camera(name="门口", source_type="file", source_uri="/tmp/x.mp4",
+                        status=CAMERA_RUNNING)
+        session.add(camera)
+        session.commit()
+        rule = Rule(
+            camera_id=camera.id, type="line_crossing", intent="observe",
+            escalate={}, cooldown=0,
+            params={"line": [[0, 120], [320, 120]], "direction": "both"})
+        session.add(rule)
+        session.commit()
+        hit = RuleHit(rule_id=rule.id, rule_type="line_crossing",
+                      confidence=0.8, detail={"direction": "in", "count": 1})
+        event = persist_hit(session, camera.id, rule, hit, None)
+        assert event.intent == "observe"
+        assert event.needs_action is False
+        assert event.status == "logged"
+        assert event.vlm_status == "skipped"
+    finally:
+        session.close()

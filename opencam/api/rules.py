@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from ..db import session_scope
-from ..models import RULE_TYPE_NAMES, Camera, Rule, RuleCreate, RuleOut
+from ..models import RULE_TYPE_NAMES, Camera, Rule, RuleCreate, RuleOut, default_intent
 
 router = APIRouter(prefix="/cameras/{camera_id}/rules", tags=["rules"])
 
@@ -23,7 +23,9 @@ def create_rule(camera_id: int, body: RuleCreate,
         raise HTTPException(404, "摄像头不存在")
     rule = Rule(camera_id=camera_id, name=body.name or RULE_TYPE_NAMES[body.type],
                 type=body.type, params=body.params,
-                enabled=body.enabled, cooldown=body.cooldown)
+                enabled=body.enabled, cooldown=body.cooldown,
+                intent=body.intent or default_intent(body.type),
+                escalate=body.escalate or {})
     session.add(rule)
     session.commit()
     session.refresh(rule)
@@ -41,6 +43,8 @@ def update_rule(camera_id: int, rule_id: int, body: RuleCreate,
     rule.params = body.params
     rule.enabled = body.enabled
     rule.cooldown = body.cooldown
+    rule.intent = body.intent or default_intent(body.type)
+    rule.escalate = body.escalate or {}
     session.commit()
     session.refresh(rule)
     return rule

@@ -90,7 +90,8 @@ def test_legacy_db_adopted_and_data_preserved(tmp_path):
         assert conn.execute(text("SELECT COUNT(*) FROM events")).scalar() == 1
         # 新列已补齐
         event_cols = {c["name"] for c in inspect(conn).get_columns("events")}
-        assert {"status", "starred", "assignee", "note"} <= event_cols
+        assert {"status", "starred", "assignee", "note",
+                "intent", "needs_action", "repeat_count"} <= event_cols
         # 新表已补建
         tables = set(inspect(conn).get_table_names())
         assert {"event_actions", "notify_channels", "videos", "model_versions"} <= tables

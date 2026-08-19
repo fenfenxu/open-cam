@@ -65,7 +65,7 @@ def _log_action(session: Session, event_id: int, action: str,
                             actor=actor, payload=payload))
 
 
-@router.get("", response_model=list[EventOut], summary="事件列表", description="支持 camera_id / rule_type / vlm_verdict / acked / status / starred 过滤与 limit/offset 分页，按时间倒序。")
+@router.get("", response_model=list[EventOut], summary="事件列表", description="支持 camera_id / rule_type / vlm_verdict / acked / status / starred / needs_action 过滤与 limit/offset 分页，按时间倒序。不传 needs_action 返回全部。")
 def list_events(
     camera_id: Optional[int] = Query(None, description="按摄像头过滤"),
     rule_type: Optional[str] = Query(
@@ -74,8 +74,10 @@ def list_events(
         None, description="按 VLM 判定过滤：confirmed / false_alarm / uncertain"),
     acked: Optional[bool] = Query(None, description="按确认状态过滤"),
     status: Optional[str] = Query(
-        None, description="按处置状态过滤：open / acked / resolved / ignored"),
+        None, description="按处置状态过滤：open / acked / resolved / ignored / logged"),
     starred: Optional[bool] = Query(None, description="仅看关注（星标）事件"),
+    needs_action: Optional[bool] = Query(
+        None, description="true=待办，false=观察记录；不传返回全部"),
     limit: int = Query(50, ge=1, le=500, description="每页条数"),
     offset: int = Query(0, ge=0, description="分页偏移"),
     session: Session = Depends(session_scope),
@@ -93,6 +95,8 @@ def list_events(
         q = q.filter(Event.status == status)
     if starred is not None:
         q = q.filter(Event.starred == starred)
+    if needs_action is not None:
+        q = q.filter(Event.needs_action == needs_action)
     events = q.order_by(Event.ts.desc()).offset(offset).limit(limit).all()
     return _event_outs(session, events)
 

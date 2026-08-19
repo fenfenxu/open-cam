@@ -6,6 +6,7 @@ const STATUS_NAMES = {
   acked: '已确认',
   resolved: '已处置',
   ignored: '已忽略',
+  logged: '已记录',
 };
 
 const ACTION_NAMES = {
@@ -57,7 +58,7 @@ function sourceLabel(e) {
 export async function render(el) {
   const cameras = await api('/cameras');
   el.innerHTML = `
-    <h1>事件处置</h1>
+    <h1>待办</h1>
     <div class="form-row">
       <select id="f-camera">
         <option value="">全部摄像头</option>
@@ -78,6 +79,7 @@ export async function render(el) {
         <option value="uncertain">不确定</option>
       </select>
       <label><input type="checkbox" id="f-starred"> 仅看关注</label>
+      <label><input type="checkbox" id="f-observe"> 含观察记录</label>
       <button id="f-reload">刷新</button>
     </div>
     <div class="mt" id="list"></div>
@@ -95,6 +97,7 @@ export async function render(el) {
     if (status) params.set('status', status);
     if (verdict) params.set('vlm_verdict', verdict);
     if (el.querySelector('#f-starred').checked) params.set('starred', 'true');
+    if (!el.querySelector('#f-observe').checked) params.set('needs_action', 'true');
     params.set('limit', '100');
 
     const events = await api(`/events?${params}`);
@@ -132,8 +135,11 @@ export async function render(el) {
       api(`/events/${id}`),
       api(`/events/${id}/actions`),
     ]);
-    const nextBtns = (NEXT_ACTIONS[e.status] || [])
-      .map(([st, label]) => `<button data-status="${st}">${label}</button>`).join(' ');
+    const actionable = e.needs_action !== false;
+    const nextBtns = actionable
+      ? (NEXT_ACTIONS[e.status] || [])
+          .map(([st, label]) => `<button data-status="${st}">${label}</button>`).join(' ')
+      : '';
     const range = fmtClipRange(e);
     const hasClip = e.source_offset != null;
     el.querySelector('#detail').innerHTML = `
@@ -156,7 +162,7 @@ export async function render(el) {
         <dt>VLM 理由</dt><dd>${esc(e.vlm_reason) || '—'}</dd>
       </dl>
       <h2>处置</h2>
-      <div class="form-row">${nextBtns}
+      ${actionable ? `<div class="form-row">${nextBtns}
         <button id="d-renotify">重发通知</button></div>
       <div class="form-row">
         <label>负责人</label>
@@ -167,7 +173,7 @@ export async function render(el) {
         <label>备注</label>
         <textarea id="d-note" rows="2" style="flex:1">${esc(e.note) || ''}</textarea>
         <button id="d-save-note">保存</button>
-      </div>
+      </div>` : '<p class="dim">观察记录不进入待办，无需处置。</p>'}
       <h2>处置时间线</h2>
       <div id="d-actions">
         ${actions.length === 0 ? '<p class="dim">暂无处置记录。</p>' : `
@@ -313,6 +319,7 @@ export async function render(el) {
 
   el.querySelector('#f-reload').onclick = reload;
   el.querySelector('#f-starred').onchange = reload;
+  el.querySelector('#f-observe').onchange = reload;
   await reload();
   return null;
 }
