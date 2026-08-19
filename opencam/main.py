@@ -77,7 +77,7 @@ _TAGS = [
     {"name": "stats", "description": "事件聚合统计（分时段客流等）"},
     {"name": "system", "description": "本机算力与运行配置信息"},
     {"name": "account", "description": "市场平台账号（预留 stub，本地功能无需登录）"},
-    {"name": "training", "description": "自助训练：VLM 自动标注与人工确认队列"},
+    {"name": "training", "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"},
 ]
 
 app = FastAPI(

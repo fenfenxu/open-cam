@@ -52,7 +52,7 @@ opencam/
 │   └── vlm.py         VlmReviewer 异步复核线程 + OpenAI 兼容调用
 ├── streams/           CaptureWorker 基类、FileSource（循环限速播放）、RTSPSource（指数退避重连）、manager
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
-├── training/          自助训练：固定区域裁剪、VLM 打标分流、人工确认队列
+├── training/          自助训练：任务定义、感知哈希抽帧、固定区域裁剪、VLM 打标分流、人工确认队列
 └── web/               无构建原生 SPA：index.html + app.js + pages/*.js + style.css
 
 tests/                 pytest（见下）
