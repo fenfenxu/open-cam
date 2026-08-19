@@ -24,7 +24,7 @@ opencam --help
 opencam events --help
 ```
 
-其余资源（cameras、rules、packs、stats、videos、system）同理，用 `opencam <resource> --help` 查看。事件片段下载等冷门参数见 `opencam events --help`。
+其余资源（cameras、rules、packs、stats、videos、system）同理，用 `opencam <resource> --help` 查看。事件片段下载等冷门参数见 `opencam events --help`。CLI 没有的接口用 `opencam api METHOD PATH`，不要 curl。
 
 ## 工作流：查未确认告警
 

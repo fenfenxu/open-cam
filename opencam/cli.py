@@ -217,6 +217,23 @@ def _system(args, client) -> None:
         _emit(_request(client, "GET", "/api/system/info"), args.pretty)
 
 
+def _api(args, client) -> None:
+    method = args.method.upper()
+    path = args.path if args.path.startswith("/") else f"/{args.path}"
+    body = None
+    if args.body:
+        try:
+            body = json.loads(args.body)
+        except json.JSONDecodeError as exc:
+            raise CliError(f"--body 不是合法 JSON：{exc}") from exc
+    raw = bool(args.output)
+    data = _request(client, method, path, body=body, raw=raw)
+    if raw:
+        _emit(_save_bytes(data, args.output), args.pretty)
+    else:
+        _emit(data, args.pretty)
+
+
 # ---------- 参数解析 ----------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -327,6 +344,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp = p.add_subparsers(dest="action", required=True)
     sp.add_parser("info", help="算力与配置信息")
     p.set_defaults(func=_system)
+
+    # 逃生舱：CLI 尚未包到的 REST 路径
+    p = sub.add_parser("api", help="原始 REST 逃生舱")
+    p.add_argument("method", choices=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    p.add_argument("path", help="如 /cameras 或 /events/1/clip")
+    p.add_argument("--body", help="JSON 对象字符串")
+    p.add_argument("-o", "--output", help="把响应体当文件保存（图片/视频）")
+    p.set_defaults(func=_api)
 
     return parser
 
