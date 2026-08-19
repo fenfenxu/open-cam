@@ -26,9 +26,21 @@ def test_static_assets(client):
     for path in ("/static/style.css", "/static/app.js",
                  "/static/pages/dashboard.js", "/static/pages/rules.js",
                  "/static/pages/events.js", "/static/pages/cameras.js",
-                 "/static/pages/marketplace.js", "/static/pages/settings.js"):
+                 "/static/pages/marketplace.js", "/static/pages/settings.js",
+                 "/static/pages/camera.js"):
         resp = client.get(path)
         assert resp.status_code == 200, path
+
+
+def test_camera_detail_live_and_replay_copy(client):
+    js = client.get("/static/pages/camera.js").text
+    assert "/live.mjpg" in js
+    assert "/source" in js
+    assert "该源为直播流，不支持回放" in js
+    app = client.get("/static/app.js").text
+    assert "cameras/" in app
+    dash = client.get("/static/pages/dashboard.js").text
+    assert "#/cameras/" in dash
 
 
 def test_cameras_page_has_video_library(client):

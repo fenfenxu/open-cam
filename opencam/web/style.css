@@ -91,6 +91,18 @@ h2 { font-size: 15px; margin: 20px 0 10px; color: var(--text-dim); }
   margin: 8px 0;
   display: block;
 }
+.card.cam-link { cursor: pointer; }
+.card.cam-link:hover { border-color: var(--accent); }
+.cam-live, .cam-replay {
+  width: 100%;
+  max-width: 960px;
+  background: #000;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin: 8px 0;
+  display: block;
+}
+.cam-live { aspect-ratio: 16/9; object-fit: contain; }
 
 .footfall-chart {
   width: 100%;
