@@ -25,6 +25,7 @@ from ..training.define import (
 from ..training.frames import extract_frames
 from ..training.label import annotate_task, apply_review, pending_review
 from ..training.storage import ensure_task_id, load_definition, task_exists
+from ..training.train import training_manager, validate_trainable
 
 router = APIRouter(prefix="/training/tasks", tags=["training"])
 
@@ -53,6 +54,13 @@ class ExtractFrames(BaseModel):
 class ReviewAction(BaseModel):
     action: str = Field(description="confirm 点选类别，skip 跳过")
     label: Optional[str] = Field(None, description="confirm 时必填，须为任务封闭类别")
+
+
+class TrainRequest(BaseModel):
+    epochs: int = Field(20, ge=1, le=200, description="微调轮数")
+    imgsz: int = Field(224, ge=32, le=1280, description="训练输入边长")
+    val_ratio: float = Field(0.2, gt=0, lt=0.5,
+                             description="自动标注样本进评估集的比例（确认样本必进评估集）")
 
 
 class ReviewItem(BaseModel):
@@ -205,3 +213,28 @@ def review_one(task_id: str, sample_id: str, body: ReviewAction):
         raise HTTPException(404, "样本不存在") from None
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
+
+
+@router.post("/{task_id}/train", status_code=202,
+             summary="启动本地微调训练（后台执行）",
+             description="从预训练 YOLO 分类模型微调，产出 best.pt 与评估报告；"
+                         "评估集必含人工确认样本。状态用 GET 同路径查询。")
+def start_train(task_id: str, body: TrainRequest = TrainRequest()):
+    _require_task(task_id)
+    try:
+        validate_trainable(task_id)
+    except FileNotFoundError:
+        raise HTTPException(404, "训练任务不存在") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    try:
+        return training_manager.start(task_id, body.model_dump())
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.get("/{task_id}/train", summary="查询训练状态与评估报告",
+            description="训练完成后 result 即人话报告（含三指标与典型对错样本）。")
+def train_status(task_id: str):
+    _require_task(task_id)
+    return training_manager.status(task_id)

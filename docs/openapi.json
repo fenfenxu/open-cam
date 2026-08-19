@@ -496,6 +496,88 @@
         }
       }
     },
+    "/cameras/{camera_id}/live.mjpg": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "实时 MJPEG 预览",
+        "description": "从采集缓冲约 8fps 推 JPEG。未运行或无帧时 503，不建立长连接。",
+        "operationId": "live_mjpeg_cameras__camera_id__live_mjpg_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/source": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "文件源原片（供回放）",
+        "description": "仅 source_type=file；直播流 400。支持 HTTP Range。",
+        "operationId": "camera_source_cameras__camera_id__source_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/videos": {
       "get": {
         "tags": [
@@ -1733,6 +1815,100 @@
         }
       }
     },
+    "/training/tasks/{task_id}/train": {
+      "post": {
+        "tags": [
+          "training"
+        ],
+        "summary": "启动本地微调训练（后台执行）",
+        "description": "从预训练 YOLO 分类模型微调，产出 best.pt 与评估报告；评估集必含人工确认样本。状态用 GET 同路径查询。",
+        "operationId": "start_train_training_tasks__task_id__train_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrainRequest",
+                "default": {
+                  "epochs": 20,
+                  "imgsz": 224,
+                  "val_ratio": 0.2
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "查询训练状态与评估报告",
+        "description": "训练完成后 result 即人话报告（含三指标与典型对错样本）。",
+        "operationId": "train_status_training_tasks__task_id__train_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -2469,6 +2645,36 @@
           "camera_id"
         ],
         "title": "RuleOut"
+      },
+      "TrainRequest": {
+        "properties": {
+          "epochs": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Epochs",
+            "description": "微调轮数",
+            "default": 20
+          },
+          "imgsz": {
+            "type": "integer",
+            "maximum": 1280.0,
+            "minimum": 32.0,
+            "title": "Imgsz",
+            "description": "训练输入边长",
+            "default": 224
+          },
+          "val_ratio": {
+            "type": "number",
+            "exclusiveMaximum": 0.5,
+            "exclusiveMinimum": 0.0,
+            "title": "Val Ratio",
+            "description": "自动标注样本进评估集的比例（确认样本必进评估集）",
+            "default": 0.2
+          }
+        },
+        "type": "object",
+        "title": "TrainRequest"
       },
       "ValidationError": {
         "properties": {
