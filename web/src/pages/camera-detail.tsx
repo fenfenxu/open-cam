@@ -82,6 +82,9 @@ export function CameraDetailPage() {
           cam ? (
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{cam.status}</Badge>
+              <Button variant="outline" render={<Link to={`/rules?camera=${cam.id}`} />}>
+                配置规则
+              </Button>
               <Button
                 variant="outline"
                 onClick={() =>

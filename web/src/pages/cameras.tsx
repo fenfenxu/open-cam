@@ -206,6 +206,9 @@ export function CamerasPage() {
               <Button size="xs" variant="outline" render={<Link to={`/cameras/${cam.id}`} />}>
                 查看
               </Button>
+              <Button size="xs" variant="outline" render={<Link to={`/rules?camera=${cam.id}`} />}>
+                规则
+              </Button>
               <Button
                 size="xs"
                 variant="outline"

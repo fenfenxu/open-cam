@@ -4,6 +4,7 @@ import { CameraDetailPage } from "@/pages/camera-detail";
 import { CamerasPage } from "@/pages/cameras";
 import { EventsPage } from "@/pages/events";
 import { PlaceholderPage } from "@/pages/placeholder";
+import { RulesPage } from "@/pages/rules";
 
 export const router = createBrowserRouter([
   {
@@ -13,7 +14,7 @@ export const router = createBrowserRouter([
       { index: true, element: <PlaceholderPage title="仪表盘" /> },
       { path: "cameras", element: <CamerasPage /> },
       { path: "cameras/:id", element: <CameraDetailPage /> },
-      { path: "rules", element: <PlaceholderPage title="规则" /> },
+      { path: "rules", element: <RulesPage /> },
       { path: "events", element: <EventsPage /> },
       { path: "training", element: <PlaceholderPage title="模型训练" /> },
       { path: "training/:id", element: <PlaceholderPage title="训练任务" /> },
