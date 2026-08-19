@@ -105,7 +105,7 @@ def test_cameras_update_requires_a_field(cli_env, capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main(["cameras", "update", "1"])
     assert exc.value.code == 1
-    assert "至少指定" in capsys.readouterr().err
+    assert "请指定 --name" in capsys.readouterr().err
 
 
 def test_cameras_reconnect_stopped_exits(cli_env, capsys):
@@ -247,6 +247,14 @@ def test_system_info(cli_env, capsys):
     info = run_cli(capsys, "system", "info")
     assert info["device"] in ("cuda", "mps", "cpu")
     assert "version" in info
+    assert "data_dir" in info
+
+
+def test_system_doctor(cli_env, capsys):
+    result = run_cli(capsys, "system", "doctor")
+    assert result["ok"] is True
+    assert result["schema"]["problems"] == []
+    assert result["schema"]["revision"] == result["schema"]["head"]
 
 
 def test_models_list_empty(cli_env, capsys):

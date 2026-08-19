@@ -1,6 +1,6 @@
 # open-cam
 
-摄像头视频流分析与监控管理工具：装在某台电脑上的**本地软件**——接入局域网 RTSP / 视频文件流，本地 YOLO + 规则引擎初筛，VLM 抽帧复核，事件入 SQLite，经本地 Web 控制台 / REST API / Agent Skill / 示例监控 Agent 消费。**视频数据不出本机**。
+摄像头视频流分析与监控管理工具：接入 RTSP / 视频文件流，YOLO + 规则引擎初筛，VLM 抽帧复核，事件入 SQLite，经 Web 控制台 / REST API / Agent Skill / 示例监控 Agent 消费。
 
 ## 架构
 
@@ -17,7 +17,6 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲)
               SQLite 事件库 ◄── REST API ◄── Web 控制台 / Skill / 监控 Agent
 ```
 
-- **本地运行**：视频流走局域网，推理用本机算力，没有任何视频数据出本机。
 - **算力自适应**：`device: auto` 启动时探测 cuda → mps（Apple Silicon）→ cpu，也可显式指定。
 - **采样检测而非逐帧**：默认 3 fps，CPU 可承受。
 - **SQLite 单文件**：零运维，模型层用 SQLAlchemy，后续可换 Postgres。
@@ -92,7 +91,7 @@ uv run python scripts/export_openapi.py
 |---|---|
 | `GET/POST /cameras` | 摄像头列表 / 创建（`autostart` 可创建即启动） |
 | `GET/DELETE /cameras/{id}` | 详情 / 删除（运行中会自动停止；级联规则、事件与快照，不删 uploads） |
-| `PUT /cameras/{id}` | 更新名称或视频源（运行中改源 409） |
+| `PUT /cameras/{id}` | 仅更新名称（改类型/视频源 409，请新建摄像头） |
 | `POST /cameras/{id}/start`、`/stop` | 启停采集与分析流水线 |
 | `POST /cameras/{id}/reconnect` | 重连运行中的摄像头（stopped 为 409） |
 | `POST /cameras/batch/start`、`/batch/stop` | 批量启停（body `{ids}`，空列表 422） |
@@ -104,16 +103,20 @@ uv run python scripts/export_openapi.py
 | `GET/POST /cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
 | `GET /api/rules/presets` | 规则场景化预设元数据（引导卡片数据源） |
 | `GET /api/stats/footfall?camera_id=&date=` | 分时段进出店客流（按本地小时分桶统计越线 in/out） |
-| `GET /events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked`，分页：`limit` `offset` |
-| `GET /events/{id}` | 事件详情（含 VLM 判定与理由） |
-| `POST /events/{id}/ack` | 确认事件 |
+| `GET /events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked` `status` `starred`，分页：`limit` `offset` |
+| `GET /events/{id}` | 事件详情（含 VLM 判定与理由、处置状态） |
+| `PATCH /events/{id}` | 处置编辑：状态（open/acked/resolved/ignored）/ 关注星标 / 负责人 / 备注，变更全程留痕 |
+| `GET /events/{id}/actions` | 处置时间线（关注/指派/状态/备注/通知的审计记录） |
+| `POST /events/{id}/ack` | 确认事件（同步 status=acked） |
+| `POST /events/{id}/notify` | 重发通知到匹配的渠道 |
 | `GET /events/{id}/snapshot` | 事件快照图 |
+| `GET/POST /api/notify-channels`、`PATCH/DELETE .../{id}`、`POST .../{id}/test` | 通知渠道 CRUD 与测试推送（webhook，兼容飞书/企业微信/钉钉机器人；摄像头/规则类型留空表示全部） |
 | `GET /api/system/info` | 算力设备 / 内存 / 模型 / 方案包统计 / VLM 配置状态 |
 | `GET /api/packs`、`POST /api/packs/install`、`POST /api/packs/{id}/apply`、`DELETE /api/packs/{id}` | 方案包列出 / 安装 / 应用 / 卸载 |
 | `GET /api/packs/online` | 在线市场（stub，未配置平台时降级为内置包） |
-| `GET /api/account/status`、`POST /api/account/login`、`/logout` | 平台账号（stub，本地功能无需登录） |
+| `GET /api/account/status`、`POST /api/account/login`、`/logout` | 平台账号（stub，不强制登录） |
 | `GET /health` | 健康检查 |
-| `GET /` | 本地 Web 控制台 |
+| `GET /` | Web 控制台 |
 
 服务重启时会自动恢复数据库中 `status=running` 的摄像头。
 
@@ -124,9 +127,9 @@ uv run python scripts/export_openapi.py
 - **仪表盘**：摄像头卡片网格，运行中的卡片约 1fps 轮询快照做准实时画面，附最近事件数；卡片下方内嵌今日 24 小时进/出客流双列柱状图（数据来自 `/api/stats/footfall`）。卡片可点进详情。
 - **摄像头**：CRUD 与启停；详情页 `#/cameras/{id}` 可看 MJPEG 直播，文件源可拖进度回放。
 - **规则**：场景引导式三步配置——选场景卡片 → 填参数（默认值+中文提示）→ 画布画多边形 ROI；已有规则显示中文名与参数摘要，叠加显示可删除。
-- **事件**：时间线 + 摄像头/类型/VLM 判定过滤，查看快照与 VLM 理由，一键 ack。
+- **事件处置**：时间线 + 摄像头/类型/处置状态/VLM 判定过滤与「仅看关注」，行内星标关注；详情区可流转状态（确认/处置完成/误报忽略）、编辑负责人与备注、重发通知，并展示完整处置时间线。
 - **方案市场**：浏览内置方案包、一键应用到摄像头、从本地目录/zip/URL 安装、卸载。
-- **设置**：`/api/system/info` 算力与 VLM 配置状态、平台账号状态。
+- **设置**：`/api/system/info` 算力与 VLM 配置状态、平台账号状态、通知渠道管理（webhook + 适用范围 + 测试推送）。
 
 ## 规则：五种场景
 
@@ -170,7 +173,7 @@ params:
 
 ## 平台账号（预留）
 
-本地功能不强制登录。`platform_base_url` 与 token 存 `data/account.json`，供以后市场平台使用；未配置平台时 `POST /api/account/login` 返回明确说明，市场"在线浏览"降级为只显示内置包。
+不强制登录。`platform_base_url` 与 token 存 `data/account.json`，供以后市场平台使用；未配置平台时 `POST /api/account/login` 返回明确说明，市场"在线浏览"降级为只显示内置包。
 
 ## CLI
 

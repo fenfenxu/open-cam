@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..clip import media_type_for, resolve_source_uri
-from ..config import settings
+from ..config import resolve_snapshot_path, settings
 from ..db import session_scope
 from ..models import (
     CAMERA_RUNNING,
@@ -134,7 +134,8 @@ def get_camera(camera_id: int, session: Session = Depends(session_scope)):
     return camera_out(camera)
 
 
-@router.put("/{camera_id}", response_model=CameraOut, summary="更新摄像头")
+@router.put("/{camera_id}", response_model=CameraOut, summary="更新摄像头",
+            description="停止后可改 source_type / source_uri；运行中改源返回 409。")
 def update_camera(camera_id: int, body: CameraUpdate,
                   session: Session = Depends(session_scope)):
     camera = session.get(Camera, camera_id)
@@ -166,7 +167,7 @@ def delete_camera(camera_id: int, session: Session = Depends(session_scope)):
     for event in events:
         if not event.snapshot_path:
             continue
-        path = Path(event.snapshot_path)
+        path = resolve_snapshot_path(event.snapshot_path)
         try:
             resolved = path.resolve()
         except OSError:

@@ -8,7 +8,7 @@ from typing import Optional
 
 import numpy as np
 
-from .capture import CaptureWorker, make_worker
+from .capture import CaptureWorker, FrameSample, make_worker
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,12 @@ class CameraManager:
             return self._workers.get(camera_id)
 
     def latest_frame(self, camera_id: int) -> Optional[np.ndarray]:
+        sample = self.latest_sample(camera_id)
+        return None if sample is None else sample.frame
+
+    def latest_sample(self, camera_id: int) -> Optional[FrameSample]:
         worker = self.get(camera_id)
-        return worker.latest_frame() if worker else None
+        return worker.latest_sample() if worker else None
 
     def is_running(self, camera_id: int) -> bool:
         worker = self.get(camera_id)

@@ -6,7 +6,7 @@ PORT ?= 8600
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-dev run run-mock test openapi config clean help
+.PHONY: help install install-dev run run-mock test openapi config clean revision help
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -29,6 +29,9 @@ test: ## 运行全部测试（强制 mock detector，不下载模型）
 
 openapi: ## 重新导出 docs/openapi.json（改动 API 后必跑）
 	$(UV) run python scripts/export_openapi.py
+
+revision: ## 生成数据库迁移脚本（用法：make revision m="加 xx 列"，生成后人工 review）
+	$(UV) run alembic revision --autogenerate -m "$(m)"
 
 config: ## 生成 config.yaml（已存在则不覆盖）
 	@test -f config.yaml && echo "config.yaml 已存在，跳过" || cp config.example.yaml config.yaml

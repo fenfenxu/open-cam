@@ -1,8 +1,15 @@
-"""数据库引擎与会话管理（SQLite）。"""
+"""数据库引擎与会话管理（SQLite + Alembic 版本化迁移）。
+
+schema 变更一律走 opencam/migrations/ 版本脚本；init_db 只负责建引擎、
+建/升库（含迁移前备份与失败回滚），具体流程见 migrations.ensure_schema。
+"""
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine, inspect, text
+from pathlib import Path
+from typing import Optional
+
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -12,33 +19,18 @@ _engine = None
 _SessionLocal: sessionmaker | None = None
 
 
-def init_db(db_url: str) -> None:
-    """初始化引擎并建表，然后做轻量自动迁移。测试可传入 tmp_path 下的库地址。"""
+def init_db(db_url: str, backup_dir: Optional[Path] = None) -> None:
+    """初始化引擎并把库结构升到最新版本。测试可传入 tmp_path 下的库地址。
+
+    backup_dir：跨版本升级前的备份目录（生产调用方应传入，通常为 data_dir/backups）。
+    """
     global _engine, _SessionLocal
     _engine = create_engine(db_url, connect_args={"check_same_thread": False})
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
     # 确保模型已注册
-    from . import models  # noqa: F401
+    from . import migrations, models  # noqa: F401
 
-    Base.metadata.create_all(_engine)
-    _migrate(_engine)
-
-
-def _migrate(engine) -> None:
-    """轻量迁移：缺列则 ALTER TABLE 补上，并兜底填充存量数据。"""
-    from .models import RULE_TYPE_NAMES
-
-    with engine.begin() as conn:
-        cols = {c["name"] for c in inspect(conn).get_columns("rules")}
-        if "name" not in cols:
-            conn.execute(text("ALTER TABLE rules ADD COLUMN name VARCHAR(128)"))
-        # 存量行（或迁移前插入的行）用类型中文名兜底
-        for rule_type, cn_name in RULE_TYPE_NAMES.items():
-            conn.execute(
-                text("UPDATE rules SET name = :name "
-                     "WHERE type = :type AND (name IS NULL OR name = '')"),
-                {"name": cn_name, "type": rule_type},
-            )
+    migrations.ensure_schema(_engine, db_url, backup_dir)
 
 
 def get_session() -> Session:

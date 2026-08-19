@@ -14,11 +14,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import account, cameras, events, packs, rule_presets, rules, stats, system, trained_models, training, videos
-from .config import settings
+from .api import account, cameras, events, notify, packs, rule_presets, rules, stats, system, trained_models, training, videos
+from .config import migrate_legacy_data_dir, settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
+from .doctor import verify_startup
 from .models import CAMERA_RUNNING, Camera
+from .notify import notifier
 from .pipeline import pipeline_manager, start_camera
 from .streams.manager import camera_manager
 
@@ -46,22 +48,30 @@ def _restore_cameras() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 旧版本数据在仓库 ./data，首次启动自动搬到用户数据目录
+    if migrate_legacy_data_dir(settings):
+        logger.info("检测到旧版 ./data 数据，已搬迁到 %s", settings.data_dir)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     settings.snapshot_dir.mkdir(parents=True, exist_ok=True)
-    init_db(settings.db_url)
+    # 建库/版本化迁移（迁移前自动备份到 data_dir/backups，失败自动回滚）
+    init_db(settings.db_url, backup_dir=settings.data_dir / "backups")
+    # 启动自检：schema 版本/完整性不合格则拒绝启动
+    verify_startup()
     vlm_reviewer.start()
+    notifier.start()
     _restore_cameras()
     yield
     pipeline_manager.stop_all()
     camera_manager.stop_all()
     vlm_reviewer.stop()
+    notifier.stop()
 
 
-_DESCRIPTION = """open-cam 是装在本地电脑上的视频流分析与监控管理平台：**视频数据不出本机**。
+_DESCRIPTION = """open-cam 是视频流分析与监控管理平台。
 
-- **摄像头**：接入局域网 RTSP 流或本地视频文件，本地 YOLO（cuda/mps/cpu 自适应）检测与跟踪。
+- **摄像头**：接入局域网 RTSP 流或本地视频文件，YOLO（cuda/mps/cpu 自适应）检测与跟踪。
 - **规则引擎**：区域入侵 / 徘徊逗留 / 人数统计 / 区域人数 / 越线计数，支持生效时段与冷却去抖。
-- **事件**：命中规则即落库并存快照，可经 VLM（OpenAI 兼容接口）异步复核，支持确认（ack）流转。
+- **事件**：命中规则即落库并存快照，可经 VLM（OpenAI 兼容接口）异步复核；处置闭环支持关注星标、负责人指派、状态流转与 webhook 通知，全程留痕。
 - **方案包**：行业规则模板包（连锁零售 / 美容美发 / 餐饮 / 快餐），一键安装与应用。
 - **统计**：分时段进出店客流等聚合视图。
 
@@ -72,11 +82,12 @@ _TAGS = [
     {"name": "cameras", "description": "摄像头接入与生命周期管理（RTSP / 视频文件）"},
     {"name": "videos", "description": "本机上传视频文件库（列表、元数据、删除）"},
     {"name": "rules", "description": "检测规则配置与场景化预设"},
-    {"name": "events", "description": "告警事件查询、快照与确认流转"},
+    {"name": "events", "description": "告警事件查询、快照与处置闭环（关注/指派/状态流转/通知）"},
+    {"name": "notify", "description": "通知渠道：webhook 推送配置与测试（飞书/企业微信/钉钉机器人）"},
     {"name": "packs", "description": "行业方案包：浏览、安装、应用与卸载"},
     {"name": "stats", "description": "事件聚合统计（分时段客流等）"},
     {"name": "system", "description": "本机算力与运行配置信息"},
-    {"name": "account", "description": "市场平台账号（预留 stub，本地功能无需登录）"},
+    {"name": "account", "description": "市场平台账号（预留 stub，不强制登录）"},
     {"name": "training", "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"},
     {"name": "models", "description": "训练模型版本登记、A/B 指标对比、部署与回滚"},
 ]
@@ -119,6 +130,7 @@ app.include_router(videos.router)
 app.include_router(rules.router)
 app.include_router(rule_presets.router)
 app.include_router(events.router)
+app.include_router(notify.router)
 app.include_router(system.router)
 app.include_router(stats.router)
 app.include_router(packs.router)

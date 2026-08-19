@@ -12,12 +12,14 @@ from pathlib import Path
 
 import cv2
 
+from .clip import annotate_frame
 from .config import settings
 from .db import get_session
 from .detection.detector import build_detector
 from .detection.rules import RuleEngine
 from .detection.vlm import vlm_reviewer
 from .models import CAMERA_RUNNING, Camera, Event, Rule
+from .notify import notifier
 from .streams.manager import camera_manager
 
 logger = logging.getLogger(__name__)
@@ -59,9 +61,10 @@ class PipelineWorker:
             self._stop.wait(max(interval - elapsed, 0.01))
 
     def _tick(self) -> None:
-        frame = camera_manager.latest_frame(self.camera_id)
-        if frame is None:
+        sample = camera_manager.latest_sample(self.camera_id)
+        if sample is None:
             return
+        frame = sample.frame
         detections = self._detector.detect(frame)
         if not detections:
             return
@@ -72,31 +75,38 @@ class PipelineWorker:
                 camera_id=self.camera_id, enabled=True).all()
             hits = self._engine.evaluate(rules, detections)
             for hit in hits:
-                snapshot = self._save_snapshot(frame)
+                snapshot = self._save_snapshot(frame, sample.offset)
                 event = Event(
                     camera_id=self.camera_id,
                     rule_id=hit.rule_id,
                     type=hit.rule_type,
                     confidence=hit.confidence,
                     snapshot_path=str(snapshot) if snapshot else None,
+                    source_offset=sample.offset,
                     detail=hit.detail,
                 )
                 session.add(event)
                 session.commit()
-                logger.info("事件落库: id=%d camera=%d type=%s",
-                            event.id, event.camera_id, event.type)
+                logger.info("事件落库: id=%d camera=%d type=%s offset=%s",
+                            event.id, event.camera_id, event.type,
+                            event.source_offset)
                 vlm_reviewer.submit(event.id)
+                notifier.submit(event.id)
         finally:
             session.close()
 
-    def _save_snapshot(self, frame) -> Path | None:
+    def _save_snapshot(self, frame, source_offset: float | None = None) -> Path | None:
+        """保存快照，返回相对数据目录的路径（snapshots/xxx.jpg）。
+
+        库里只存相对路径：数据目录整体搬迁/升级后仍然有效。
+        读取侧统一走 config.resolve_snapshot_path。
+        """
         try:
             snap_dir = settings.snapshot_dir
             snap_dir.mkdir(parents=True, exist_ok=True)
             name = f"cam{self.camera_id}_{int(time.time() * 1000)}.jpg"
-            path = snap_dir / name
-            cv2.imwrite(str(path), frame)
-            return path
+            cv2.imwrite(str(snap_dir / name), annotate_frame(frame, source_offset))
+            return Path("snapshots") / name
         except Exception:  # noqa: BLE001 快照失败不影响事件入库
             logger.exception("保存快照失败")
             return None

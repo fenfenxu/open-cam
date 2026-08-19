@@ -15,7 +15,7 @@
 - CLI（`opencam/cli.py`）只能 import httpx/argparse 等轻量依赖，禁止 import 会加载 ultralytics/torch 的包内模块。
 - 测试用 `tmp_settings`，`OPENCAM_DETECTOR=mock`。
 - Python ≥ 3.12；`from __future__ import annotations`；用户可见文案中文，标识符英文。
-- 视频数据不出本机。本轮不改 REST schema，不必重导 OpenAPI，除非 Task 3 为 `api` 加了新 HTTP 路由（不要加）。
+- 本轮不改 REST schema，不必重导 OpenAPI，除非 Task 3 为 `api` 加了新 HTTP 路由（不要加）。
 
 ## 范围边界
 

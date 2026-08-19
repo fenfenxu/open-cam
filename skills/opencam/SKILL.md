@@ -5,7 +5,7 @@ description: Use when the user asks about open-cam cameras, unacked alerts or ev
 
 # opencam
 
-open-cam 是本地视频监控分析服务（RTSP/文件 → YOLO → 规则告警 → VLM 复核 → 事件入库），**视频数据不出本机**。唯一入口是 `opencam` CLI（仓库内用 `uv run opencam`）。
+open-cam 是视频监控分析服务（RTSP/文件 → YOLO → 规则告警 → VLM 复核 → 事件入库）。唯一入口是 `opencam` CLI（仓库内用 `uv run opencam`）。
 
 ## 输出契约
 

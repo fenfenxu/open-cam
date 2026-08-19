@@ -56,3 +56,4 @@ def test_skill_teaches_snapshot_before_polygon_rules():
     text = _text()
     assert "cameras snapshot" in text
     assert "像素" in text
+    assert "opencam_client" not in text

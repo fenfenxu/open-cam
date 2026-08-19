@@ -15,7 +15,7 @@
 - Python ≥ 3.12；`from __future__ import annotations`；用户可见文案中文，标识符英文。
 - CLI（`opencam/cli.py`）只能 import httpx/argparse 等轻量依赖，禁止 import 会加载 ultralytics/torch 的包内模块。
 - 测试用 `tmp_settings`，`OPENCAM_DETECTOR=mock`，不下载模型、不依赖网络。
-- 视频数据不出本机；不要把 api key 写入文件。
+- 不要把 api key 写入文件。
 - 改 API 后必须 `uv run python scripts/export_openapi.py`。
 - 命令：`uv run pytest`；单测示例 `uv run pytest tests/test_videos_api.py -v`。
 - 验证合同：规格「验证方案」里的用例矩阵必须全部落地为 pytest，禁止只测 happy path。
