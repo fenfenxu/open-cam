@@ -84,7 +84,8 @@ curl -X POST http://127.0.0.1:8600/cameras \
 | `POST /cameras/{id}/start`、`/stop` | 启停采集与分析流水线 |
 | `GET /cameras/{id}/snapshot.jpg` | 当前实时帧 JPEG |
 | `GET/POST /cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
-| `GET /api/rules/presets` | 三种规则场景化预设元数据（引导卡片数据源） |
+| `GET /api/rules/presets` | 规则场景化预设元数据（引导卡片数据源） |
+| `GET /api/stats/footfall?camera_id=&date=` | 分时段进出店客流（按本地小时分桶统计越线 in/out） |
 | `GET /events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked`，分页：`limit` `offset` |
 | `GET /events/{id}` | 事件详情（含 VLM 判定与理由） |
 | `POST /events/{id}/ack` | 确认事件 |
@@ -102,7 +103,7 @@ curl -X POST http://127.0.0.1:8600/cameras \
 
 浏览器打开 `http://127.0.0.1:8600`：
 
-- **仪表盘**：摄像头卡片网格，运行中的卡片约 1fps 轮询快照做准实时画面，附最近事件数。
+- **仪表盘**：摄像头卡片网格，运行中的卡片约 1fps 轮询快照做准实时画面，附最近事件数；卡片下方内嵌今日 24 小时进/出客流双列柱状图（数据来自 `/api/stats/footfall`）。
 - **摄像头**：CRUD 与启停。
 - **规则**：场景引导式三步配置——选场景卡片 → 填参数（默认值+中文提示）→ 画布画多边形 ROI；已有规则显示中文名与参数摘要，叠加显示可删除。
 - **事件**：时间线 + 摄像头/类型/VLM 判定过滤，查看快照与 VLM 理由，一键 ack。
