@@ -62,18 +62,17 @@ def _request(client: httpx.Client, method: str, path: str,
 
 def _emit(data: Any, pretty: bool) -> None:
     if data is None:
-        print("ok")
-        return
+        data = {"ok": True}
     if pretty:
         print(json.dumps(data, ensure_ascii=False, indent=2))
     else:
         print(json.dumps(data, ensure_ascii=False, separators=(",", ":")))
 
 
-def _save_bytes(data: bytes, path: str) -> None:
+def _save_bytes(data: bytes, path: str) -> dict:
     with open(path, "wb") as f:
         f.write(data)
-    print(f"已保存 {path}（{len(data)} 字节）")
+    return {"ok": True, "path": path, "bytes": len(data)}
 
 
 def _parse_params(text: Optional[str]) -> dict:
@@ -105,7 +104,7 @@ def _cameras(args, client) -> None:
               args.pretty)
     elif args.action == "delete":
         _request(client, "DELETE", f"/cameras/{args.id}")
-        print(f"摄像头 {args.id} 已删除")
+        _emit({"ok": True, "id": args.id}, args.pretty)
     elif args.action == "update":
         payload = {}
         if args.name is not None:
@@ -129,7 +128,8 @@ def _cameras(args, client) -> None:
                        body={"ids": args.ids}), args.pretty)
     elif args.action == "snapshot":
         data = _request(client, "GET", f"/cameras/{args.id}/snapshot.jpg", raw=True)
-        _save_bytes(data, args.output or f"snapshot_cam{args.id}.jpg")
+        _emit(_save_bytes(data, args.output or f"snapshot_cam{args.id}.jpg"),
+              args.pretty)
 
 
 # ---------- videos ----------
@@ -145,7 +145,7 @@ def _videos(args, client) -> None:
             _emit(_request(client, "POST", "/videos", files=files), args.pretty)
     elif args.action == "delete":
         _request(client, "DELETE", f"/videos/{args.id}")
-        print(f"视频 {args.id} 已删除")
+        _emit({"ok": True, "id": args.id}, args.pretty)
 
 
 # ---------- rules ----------
@@ -165,7 +165,7 @@ def _rules(args, client) -> None:
         }), args.pretty)
     elif args.action == "delete":
         _request(client, "DELETE", f"/cameras/{args.camera_id}/rules/{args.id}")
-        print(f"规则 {args.id} 已删除")
+        _emit({"ok": True, "id": args.id}, args.pretty)
 
 
 # ---------- events ----------
@@ -183,7 +183,8 @@ def _events(args, client) -> None:
         _emit(_request(client, "POST", f"/events/{args.id}/ack"), args.pretty)
     elif args.action == "snapshot":
         data = _request(client, "GET", f"/events/{args.id}/snapshot", raw=True)
-        _save_bytes(data, args.output or f"event_{args.id}.jpg")
+        _emit(_save_bytes(data, args.output or f"event_{args.id}.jpg"),
+              args.pretty)
 
 
 # ---------- packs ----------
@@ -199,7 +200,7 @@ def _packs(args, client) -> None:
                        body={"camera_id": args.camera_id}), args.pretty)
     elif args.action == "uninstall":
         _request(client, "DELETE", f"/api/packs/{args.pack_id}")
-        print(f"方案包 {args.pack_id} 已卸载")
+        _emit({"ok": True, "id": args.pack_id}, args.pretty)
 
 
 # ---------- stats / system ----------
@@ -225,7 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
                         default=os.environ.get("OPENCAM_BASE_URL", DEFAULT_BASE_URL),
                         help="服务地址，默认 %(default)s（可用 OPENCAM_BASE_URL 覆盖）")
     parser.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
-    sub = parser.add_subparsers(dest="resource", required=True)
+    sub = parser.add_subparsers(dest="resource", required=False)
 
     # cameras
     p = sub.add_parser("cameras", help="摄像头管理")
@@ -292,8 +293,10 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--type", dest="type")
     q.add_argument("--vlm-verdict", choices=["confirmed", "false_alarm", "uncertain"])
     q.add_argument("--acked", choices=["true", "false"])
-    q.add_argument("--page-size", type=int, default=20)
-    q.add_argument("--offset", type=int, default=0)
+    q.add_argument("--page-size", type=int, default=20,
+                   help="每页条数，默认 20；结果满页时用 --offset 再拉下一页")
+    q.add_argument("--offset", type=int, default=0,
+                   help="跳过条数，与 --page-size 配合翻页")
     q = sp.add_parser("get", help="事件详情"); q.add_argument("id", type=int)
     q = sp.add_parser("ack", help="确认事件"); q.add_argument("id", type=int)
     q = sp.add_parser("snapshot", help="下载事件快照")
@@ -343,9 +346,13 @@ def main(argv: Optional[list[str]] = None) -> None:
             else:
                 hoisted["base_url"] = args_list[i + 1]
                 del args_list[i:i + 2]
-    args = build_parser().parse_args(args_list)
+    parser = build_parser()
+    args = parser.parse_args(args_list)
     for key, value in hoisted.items():
         setattr(args, key, value)
+    if not args.resource:
+        parser.print_help()
+        sys.exit(0)
     try:
         with _client(args.base_url) as client:
             args.func(args, client)

@@ -107,9 +107,47 @@ def test_cameras_batch_start_partial(cli_env, capsys):
 def test_cameras_delete(cli_env, capsys):
     run_cli(capsys, "cameras", "create", "--name", "x",
             "--source-type", "file", "--source-uri", "/tmp/x.mp4")
-    cli.main(["cameras", "delete", "1"])
-    assert "已删除" in capsys.readouterr().out
+    deleted = run_cli(capsys, "cameras", "delete", "1")
+    assert deleted == {"ok": True, "id": 1}
     assert run_cli(capsys, "cameras", "list") == []
+
+
+def test_rules_delete_stdout_is_json(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "x",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    rule = run_cli(capsys, "rules", "create", "1", "--type", "zone_count",
+                   "--params", '{"threshold": 5}')
+    deleted = run_cli(capsys, "rules", "delete", "1", str(rule["id"]))
+    assert deleted == {"ok": True, "id": rule["id"]}
+
+
+def test_snapshot_stdout_is_json(cli_env, capsys, tmp_path, monkeypatch):
+    run_cli(capsys, "cameras", "create", "--name", "x",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    jpeg = b"\xff\xd8fake"
+    real_request = cli._request
+
+    def fake_request(client, method, path, **kwargs):
+        if str(path).endswith("snapshot.jpg"):
+            return jpeg
+        return real_request(client, method, path, **kwargs)
+
+    monkeypatch.setattr(cli, "_request", fake_request)
+    dest = tmp_path / "cam.jpg"
+    out = run_cli(capsys, "cameras", "snapshot", "1", "-o", str(dest))
+    assert out["ok"] is True
+    assert out["bytes"] == len(jpeg)
+    assert out["path"] == str(dest)
+    assert dest.read_bytes() == jpeg
+
+
+def test_no_args_prints_help(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main([])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "cameras" in out
+    assert "events" in out
 
 
 def test_camera_not_found_exit_code(cli_env, capsys):
