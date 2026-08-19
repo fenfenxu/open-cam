@@ -278,3 +278,7 @@ def test_openapi_includes_training_skeleton_paths(client):
     assert "post" in paths["/training/tasks/{task_id}/confirm"]
     assert "post" in paths["/training/tasks/{task_id}/frames"]
     assert "post" in paths["/training/tasks/{task_id}/annotate"]
+    assert "get" in paths["/training/tasks"]
+    assert "get" in paths["/training/tasks/{task_id}"]
+    assert "put" in paths["/training/tasks/{task_id}/region"]
+    assert "post" in paths["/events/{event_id}/feedback"]

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..db import get_session
@@ -24,7 +25,16 @@ from ..training.define import (
 )
 from ..training.frames import extract_frames
 from ..training.label import annotate_task, apply_review, pending_review
-from ..training.storage import ensure_task_id, load_definition, task_exists
+from ..training.storage import (
+    ensure_task_id,
+    list_frames,
+    list_task_ids,
+    load_definition,
+    load_samples,
+    save_definition,
+    task_dir,
+    task_exists,
+)
 from ..training.train import training_manager, validate_trainable
 
 router = APIRouter(prefix="/training/tasks", tags=["training"])
@@ -56,6 +66,10 @@ class ReviewAction(BaseModel):
     label: Optional[str] = Field(None, description="confirm 时必填，须为任务封闭类别")
 
 
+class RegionBody(BaseModel):
+    region: list[list[float]] = Field(min_length=3, description="固定区域多边形")
+
+
 class TrainRequest(BaseModel):
     epochs: int = Field(20, ge=1, le=200, description="微调轮数")
     imgsz: int = Field(224, ge=32, le=1280, description="训练输入边长")
@@ -75,6 +89,51 @@ class ReviewItem(BaseModel):
 class ReviewQueue(BaseModel):
     remaining: int
     items: list[ReviewItem]
+
+
+def _sample_counts(task_id: str) -> dict[str, int]:
+    counts: dict[str, int] = {
+        "total": 0, "auto": 0, "review": 0, "confirmed": 0,
+        "skipped": 0, "feedback": 0,
+    }
+    for sample in load_samples(task_id):
+        counts["total"] += 1
+        status = str(sample.get("status") or "")
+        if status in counts:
+            counts[status] += 1
+        if sample.get("source") == "feedback":
+            counts["feedback"] += 1
+    return counts
+
+
+def _summarize_task(task_id: str) -> dict[str, Any]:
+    confirmed = task_exists(task_id)
+    definition: dict[str, Any] = {}
+    goal = ""
+    status = "draft"
+    if confirmed:
+        definition = load_definition(task_id)
+        goal = str(definition.get("goal") or "")
+        status = "confirmed"
+    else:
+        try:
+            draft = load_draft(task_id)
+            definition = draft.get("definition") or {}
+            goal = str(draft.get("goal") or "")
+        except FileNotFoundError:
+            raise HTTPException(404, "训练任务不存在") from None
+    return {
+        "task_id": task_id,
+        "status": status,
+        "goal": goal,
+        "object": definition.get("object"),
+        "property": definition.get("property"),
+        "classes": definition.get("classes") or [],
+        "has_region": bool(definition.get("region")),
+        "frames": len(list_frames(task_id)),
+        "samples": _sample_counts(task_id),
+        "metrics_explained": explain_metrics(definition.get("metrics") or {}),
+    }
 
 
 def _require_task(task_id: str) -> None:
@@ -105,6 +164,11 @@ def _resolve_source(body: ExtractFrames) -> Path:
         return Path(video.path)
     finally:
         session.close()
+
+
+@router.get("", summary="训练任务列表")
+def list_tasks():
+    return [_summarize_task(tid) for tid in list_task_ids()]
 
 
 @router.post("", summary="创建训练任务（语义目标 → 结构化定义）",
@@ -155,6 +219,52 @@ def confirm_task(task_id: str, body: ConfirmTask = ConfirmTask()):
         "definition": saved,
         "metrics_explained": explain_metrics(saved.get("metrics") or {}),
     }
+
+
+@router.get("/{task_id}", summary="训练任务详情")
+def get_task(task_id: str):
+    try:
+        ensure_task_id(task_id)
+    except ValueError:
+        raise HTTPException(400, "非法任务 id") from None
+    summary = _summarize_task(task_id)
+    if task_exists(task_id):
+        summary["definition"] = load_definition(task_id)
+    else:
+        summary["definition"] = load_draft(task_id).get("definition") or {}
+    summary["train"] = training_manager.status(task_id)
+    return summary
+
+
+@router.put("/{task_id}/region", summary="保存固定监控区域")
+def set_region(task_id: str, body: RegionBody):
+    _require_task(task_id)
+    definition = load_definition(task_id)
+    definition["region"] = [[float(p[0]), float(p[1])] for p in body.region]
+    save_definition(task_id, definition)
+    return {"task_id": task_id, "region": definition["region"]}
+
+
+@router.get("/{task_id}/preview.jpg", summary="抽帧预览（第一张，用于画区域）")
+def preview_frame(task_id: str):
+    _require_task(task_id)
+    frames = list_frames(task_id)
+    if not frames:
+        raise HTTPException(404, "还没有抽帧")
+    return FileResponse(frames[0], media_type="image/jpeg")
+
+
+@router.get("/{task_id}/crop/{sample_id}.jpg", summary="标注裁剪图")
+def crop_image(task_id: str, sample_id: str):
+    _require_task(task_id)
+    try:
+        ensure_task_id(sample_id)
+    except ValueError:
+        raise HTTPException(400, "非法样本 id") from None
+    path = task_dir(task_id) / "crops" / f"{sample_id}.jpg"
+    if not path.is_file():
+        raise HTTPException(404, "裁剪图不存在")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.post("/{task_id}/frames", summary="从摄像头录像或上传视频抽帧",

@@ -5,6 +5,7 @@ const routes = {
   camera: () => import('./pages/camera.js'),
   rules: () => import('./pages/rules.js'),
   events: () => import('./pages/events.js'),
+  training: () => import('./pages/training.js'),
   marketplace: () => import('./pages/marketplace.js'),
   settings: () => import('./pages/settings.js'),
 };
@@ -52,6 +53,9 @@ function parseHash() {
   const parts = raw.split('/').filter(Boolean);
   if (parts[0] === 'cameras' && parts[1] && /^\d+$/.test(parts[1])) {
     return { page: 'camera', id: Number(parts[1]), sidebar: 'cameras' };
+  }
+  if (parts[0] === 'training' && parts[1]) {
+    return { page: 'training', id: parts[1], sidebar: 'training' };
   }
   const page = routes[parts[0]] ? parts[0] : 'dashboard';
   return { page, id: null, sidebar: page };

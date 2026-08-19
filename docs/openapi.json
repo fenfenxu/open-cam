@@ -1199,6 +1199,56 @@
         }
       }
     },
+    "/events/{event_id}/feedback": {
+      "post": {
+        "tags": [
+          "events"
+        ],
+        "summary": "误报/漏报反馈并写入训练数据集",
+        "operationId": "event_feedback_events__event_id__feedback_post",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventFeedback"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/system/info": {
       "get": {
         "tags": [
@@ -1532,6 +1582,23 @@
       }
     },
     "/training/tasks": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "训练任务列表",
+        "operationId": "list_tasks_training_tasks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "training"
@@ -1599,6 +1666,185 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "训练任务详情",
+        "operationId": "get_task_training_tasks__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/region": {
+      "put": {
+        "tags": [
+          "training"
+        ],
+        "summary": "保存固定监控区域",
+        "operationId": "set_region_training_tasks__task_id__region_put",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/preview.jpg": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "抽帧预览（第一张，用于画区域）",
+        "operationId": "preview_frame_training_tasks__task_id__preview_jpg_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/training/tasks/{task_id}/crop/{sample_id}.jpg": {
+      "get": {
+        "tags": [
+          "training"
+        ],
+        "summary": "标注裁剪图",
+        "operationId": "crop_image_training_tasks__task_id__crop__sample_id__jpg_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "sample_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2646,6 +2892,38 @@
         ],
         "title": "DeployResult"
       },
+      "EventFeedback": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "归入的训练任务 id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "false_alarm 误报 / miss 漏报"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "覆盖默认类别"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "kind"
+        ],
+        "title": "EventFeedback"
+      },
       "EventOut": {
         "properties": {
           "id": {
@@ -2885,6 +3163,27 @@
           "status"
         ],
         "title": "ModelVersionOut"
+      },
+      "RegionBody": {
+        "properties": {
+          "region": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "minItems": 3,
+            "title": "Region",
+            "description": "固定区域多边形"
+          }
+        },
+        "type": "object",
+        "required": [
+          "region"
+        ],
+        "title": "RegionBody"
       },
       "RegisterModel": {
         "properties": {
