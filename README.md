@@ -169,7 +169,7 @@ params:
 
 应用到摄像头时，相对坐标按该摄像头画面分辨率换算为绝对像素，之后就是普通规则，可在 Rules 页自由修改。
 
-仓库内置四个示例包（`packs/`）：`retail-chain`（连锁零售）、`salon`（美容美发）、`restaurant`（餐饮）、`fast-food`（餐饮-快餐，含越线计数与闭店时段规则）。第三方作者按上述格式打包（目录或 zip）即可通过 `POST /api/packs/install` 或控制台安装；在线市场平台为预留 stub，平台后端后续接入。
+仓库内置四个示例包（`packs/`）：`retail-chain`（连锁零售）、`salon`（美容美发）、`restaurant`（餐饮）、`fast-food`（餐饮-快餐，含越线计数与闭店时段规则）。应用快餐店包会创建门口 / 点餐 / 后厨 / 店内 4 路演示摄像头（可先跑演示源，再到摄像头页改成真实源）；另外三包仍选一台已有摄像头应用。第三方作者按上述格式打包（目录或 zip）即可通过 `POST /api/packs/install` 或控制台安装；在线市场平台为预留 stub，平台后端后续接入。
 
 ## 平台账号（预留）
 
@@ -187,7 +187,9 @@ opencam rules list 1 | presets                      # 规则与场景预设
 opencam rules create 1 --type zone_count --params '{"threshold": 5}'
 opencam events list --acked false                   # 未确认事件
 opencam events ack 42
-opencam packs list | apply fast-food 1              # 方案包
+opencam packs list
+opencam packs apply fast-food                       # 快餐店：创建 4 路演示摄像头
+opencam packs apply restaurant 1                    # 旧包：应用到指定摄像头
 opencam stats footfall --camera-id 1                # 分时段客流
 opencam system info                                 # 算力与配置
 ```

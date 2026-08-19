@@ -250,6 +250,33 @@ def test_system_info(cli_env, capsys):
     assert "data_dir" in info
 
 
+def test_packs_apply_fast_food(cli_env, capsys):
+    result = run_cli(capsys, "packs", "apply", "fast-food")
+    assert "cameras" in result and "rules" in result
+    assert len(result["cameras"]) == 4
+    assert len(result["rules"]) == 4
+
+
+def test_packs_apply_restaurant_with_camera_id(cli_env, capsys, tmp_path):
+    import cv2
+    import numpy as np
+
+    video = tmp_path / "cam.mp4"
+    writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"),
+                             10, (320, 240))
+    assert writer.isOpened()
+    frame = np.zeros((240, 320, 3), dtype=np.uint8)
+    for _ in range(5):
+        writer.write(frame)
+    writer.release()
+    cam = run_cli(capsys, "cameras", "create", "--name", "门口",
+                  "--source-type", "file", "--source-uri", str(video))
+    result = run_cli(capsys, "packs", "apply", "restaurant", str(cam["id"]))
+    assert len(result["cameras"]) == 1
+    assert result["cameras"][0]["id"] == cam["id"]
+    assert len(result["rules"]) == 3
+
+
 def test_system_doctor(cli_env, capsys):
     result = run_cli(capsys, "system", "doctor")
     assert result["ok"] is True

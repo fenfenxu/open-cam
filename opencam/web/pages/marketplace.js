@@ -1,8 +1,40 @@
 // 方案市场：浏览内置/已安装包，一键应用、安装（路径/URL）、卸载
 import { api, RULE_TYPE_NAMES, toast } from '../app.js';
 
+function uninstallBtn(p) {
+  return p.origin === 'installed'
+    ? `<button class="danger" data-uninstall="${p.id}">卸载</button>` : '';
+}
+
+function newPackBody(p) {
+  const rows = (p.cameras || []).map((c) => {
+    const names = (p.rules || [])
+      .filter((r) => r.camera === c.id)
+      .map((r) => r.name)
+      .join('、');
+    return `<li>${c.name}${names ? `：${names}` : ''}</li>`;
+  }).join('');
+  return `
+        <ul class="meta mt">${rows}</ul>
+        <div class="form-row mt">
+          <button data-apply="${p.id}">应用</button>
+          ${uninstallBtn(p)}
+        </div>`;
+}
+
+function legacyPackBody(p, existing) {
+  return `
+        <div class="meta mt">规则模板：${p.rules.map((r) => r.name).join('、')}</div>
+        <div class="form-row mt">
+          <select data-cam-for="${p.id}">
+            ${existing.map((c) => `<option value="${c.id}">应用到：[${c.id}] ${c.name}</option>`).join('')}
+          </select>
+          <button data-apply="${p.id}" ${existing.length ? '' : 'disabled'}>应用</button>
+          ${uninstallBtn(p)}
+        </div>`;
+}
+
 export async function render(el) {
-  const cameras = await api('/cameras');
   el.innerHTML = `
     <h1>方案市场</h1>
     <div class="card">
@@ -23,22 +55,17 @@ export async function render(el) {
   } catch { /* 忽略 */ }
 
   async function reload() {
-    const packs = await api('/api/packs');
+    const [packs, existing] = await Promise.all([
+      api('/api/packs'),
+      api('/cameras'),
+    ]);
     const grid = el.querySelector('#pack-grid');
     grid.innerHTML = packs.map((p) => `
       <div class="card">
         <h3>${p.name} <span class="badge">${p.origin === 'builtin' ? '内置' : '已安装'}</span></h3>
         <div class="meta">${p.vertical} · v${p.version} · ${p.author || '匿名'}</div>
         <p>${p.description}</p>
-        <div class="meta mt">规则模板：${p.rules.map((r) => r.name).join('、')}</div>
-        <div class="form-row mt">
-          <select data-cam-for="${p.id}">
-            ${cameras.map((c) => `<option value="${c.id}">应用到：[${c.id}] ${c.name}</option>`).join('')}
-          </select>
-          <button data-apply="${p.id}" ${cameras.length ? '' : 'disabled'}>应用</button>
-          ${p.origin === 'installed'
-            ? `<button class="danger" data-uninstall="${p.id}">卸载</button>` : ''}
-        </div>
+        ${p.cameras == null ? legacyPackBody(p, existing) : newPackBody(p)}
       </div>`).join('');
   }
 
@@ -62,13 +89,19 @@ export async function render(el) {
     try {
       if (applyBtn) {
         const packId = applyBtn.dataset.apply;
-        const camId = el.querySelector(`select[data-cam-for="${packId}"]`).value;
-        const rules = await api(`/api/packs/${packId}/apply`, {
+        const camSelect = el.querySelector(`select[data-cam-for="${packId}"]`);
+        const body = camSelect ? { camera_id: Number(camSelect.value) } : {};
+        const data = await api(`/api/packs/${packId}/apply`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ camera_id: Number(camId) }),
+          body: JSON.stringify(body),
         });
-        toast(`已应用 ${rules.length} 条规则（含：${rules.map((r) => RULE_TYPE_NAMES[r.type]).join('、')}），可到「规则」页调整`);
+        if (camSelect) {
+          toast(`已应用 ${data.rules.length} 条规则（含：${data.rules.map((r) => RULE_TYPE_NAMES[r.type]).join('、')}），可到「规则」页调整`);
+        } else {
+          toast(`已创建 ${data.cameras.length} 路摄像头，请到「摄像头」页改成真实源后再启动`);
+        }
+        await reload();
       } else if (unBtn) {
         await api(`/api/packs/${unBtn.dataset.uninstall}`, { method: 'DELETE' });
         toast('已卸载');

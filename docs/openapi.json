@@ -248,7 +248,7 @@
           "cameras"
         ],
         "summary": "更新摄像头",
-        "description": "仅允许改名称。类型与视频源创建后不可改（传入 source_type / source_uri 返回 409），请新建摄像头。",
+        "description": "停止后可改 source_type / source_uri；运行中改源返回 409。",
         "operationId": "update_camera_cameras__camera_id__put",
         "parameters": [
           {
@@ -3244,7 +3244,8 @@
           "source_uri": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -3255,7 +3256,7 @@
         },
         "type": "object",
         "title": "CameraUpdate",
-        "description": "仅允许改名称。传入 source_type / source_uri 会 409，请新建摄像头。"
+        "description": "更新摄像头。停止后可改 source_type / source_uri；运行中改源会 409。"
       },
       "ConfirmTask": {
         "properties": {
