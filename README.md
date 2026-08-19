@@ -86,9 +86,14 @@ uv run python scripts/export_openapi.py
 | 方法与路径 | 说明 |
 |---|---|
 | `GET/POST /cameras` | 摄像头列表 / 创建（`autostart` 可创建即启动） |
-| `GET/DELETE /cameras/{id}` | 详情 / 删除（运行中会自动停止） |
+| `GET/DELETE /cameras/{id}` | 详情 / 删除（运行中会自动停止；级联规则、事件与快照，不删 uploads） |
+| `PUT /cameras/{id}` | 更新名称或视频源（运行中改源 409） |
 | `POST /cameras/{id}/start`、`/stop` | 启停采集与分析流水线 |
+| `POST /cameras/{id}/reconnect` | 重连运行中的摄像头（stopped 为 409） |
+| `POST /cameras/batch/start`、`/batch/stop` | 批量启停（body `{ids}`，空列表 422） |
 | `GET /cameras/{id}/snapshot.jpg` | 当前实时帧 JPEG |
+| `GET/POST /videos`、`GET/DELETE /videos/{id}` | 本机上传视频库（被摄像头 `source_uri` 引用时删除 409） |
+| `POST /cameras/upload` | 上传别名，与 `POST /videos` 同一套入库，响应含 `path` |
 | `GET/POST /cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
 | `GET /api/rules/presets` | 规则场景化预设元数据（引导卡片数据源） |
 | `GET /api/stats/footfall?camera_id=&date=` | 分时段进出店客流（按本地小时分桶统计越线 in/out） |

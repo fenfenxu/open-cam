@@ -29,3 +29,9 @@ def test_static_assets(client):
                  "/static/pages/marketplace.js", "/static/pages/settings.js"):
         resp = client.get(path)
         assert resp.status_code == 200, path
+
+
+def test_cameras_page_has_video_library(client):
+    js = client.get("/static/pages/cameras.js").text
+    assert "/videos" in js
+    assert "data-act=\"save\"" in js or "data-act='save'" in js

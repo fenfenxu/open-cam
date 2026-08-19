@@ -45,7 +45,7 @@ opencam/
 ├── hardware.py        推理设备探测（cuda→mps→cpu）
 ├── pipeline.py        PipelineWorker/PipelineManager、start_camera/stop_camera
 ├── cli.py             opencam CLI（argparse + httpx，见下方约束）
-├── api/               FastAPI 路由：cameras/rules/rule_presets/events/stats/system/packs/account/training
+├── api/               FastAPI 路由：cameras/videos/rules/rule_presets/events/stats/system/packs/account/training
 ├── detection/
 │   ├── detector.py    YoloDetector / MockDetector / build_detector / Detection
 │   ├── rules.py       RuleEngine：五种规则纯逻辑，可注入时钟便于单测

@@ -55,6 +55,23 @@ def test_cameras_create_and_list(cli_env, capsys):
     assert got["source_type"] == "file"
 
 
+def test_cameras_update(cli_env, capsys):
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    updated = run_cli(capsys, "cameras", "update", "1", "--name", "后门")
+    assert updated["name"] == "后门"
+
+
+def test_videos_list_after_upload(cli_env, capsys, tmp_path):
+    video = tmp_path / "c.mp4"
+    video.write_bytes(b"fake")
+    uploaded = run_cli(capsys, "videos", "upload", str(video))
+    assert uploaded["path"].endswith("c.mp4")
+    listed = run_cli(capsys, "videos", "list")
+    assert len(listed) == 1
+    assert listed[0]["id"] == uploaded["id"]
+
+
 def test_cameras_delete(cli_env, capsys):
     run_cli(capsys, "cameras", "create", "--name", "x",
             "--source-type", "file", "--source-uri", "/tmp/x.mp4")

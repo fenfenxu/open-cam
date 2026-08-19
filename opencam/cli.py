@@ -34,10 +34,15 @@ def _client(base_url: str) -> httpx.Client:
 
 def _request(client: httpx.Client, method: str, path: str,
              params: Optional[dict] = None, body: Any = None,
-             raw: bool = False) -> Any:
+             raw: bool = False, files: Any = None) -> Any:
     params = {k: v for k, v in (params or {}).items() if v is not None}
     try:
-        resp = client.request(method, path, params=params, json=body)
+        kwargs: dict[str, Any] = {"params": params}
+        if files is not None:
+            kwargs["files"] = files
+        elif body is not None:
+            kwargs["json"] = body
+        resp = client.request(method, path, **kwargs)
     except httpx.ConnectError as exc:
         raise CliError(f"连不上 open-cam 服务（{client.base_url}）：{exc}") from exc
     except httpx.HTTPError as exc:
@@ -101,9 +106,46 @@ def _cameras(args, client) -> None:
     elif args.action == "delete":
         _request(client, "DELETE", f"/cameras/{args.id}")
         print(f"摄像头 {args.id} 已删除")
+    elif args.action == "update":
+        payload = {}
+        if args.name is not None:
+            payload["name"] = args.name
+        if args.source_type is not None:
+            payload["source_type"] = args.source_type
+        if args.source_uri is not None:
+            payload["source_uri"] = args.source_uri
+        if not payload:
+            raise CliError("请至少指定 --name / --source-type / --source-uri 之一")
+        _emit(_request(client, "PUT", f"/cameras/{args.id}", body=payload),
+              args.pretty)
+    elif args.action == "reconnect":
+        _emit(_request(client, "POST", f"/cameras/{args.id}/reconnect"),
+              args.pretty)
+    elif args.action == "batch-start":
+        _emit(_request(client, "POST", "/cameras/batch/start",
+                       body={"ids": args.ids}), args.pretty)
+    elif args.action == "batch-stop":
+        _emit(_request(client, "POST", "/cameras/batch/stop",
+                       body={"ids": args.ids}), args.pretty)
     elif args.action == "snapshot":
         data = _request(client, "GET", f"/cameras/{args.id}/snapshot.jpg", raw=True)
         _save_bytes(data, args.output or f"snapshot_cam{args.id}.jpg")
+
+
+# ---------- videos ----------
+
+def _videos(args, client) -> None:
+    if args.action == "list":
+        _emit(_request(client, "GET", "/videos"), args.pretty)
+    elif args.action == "get":
+        _emit(_request(client, "GET", f"/videos/{args.id}"), args.pretty)
+    elif args.action == "upload":
+        with open(args.path, "rb") as fh:
+            files = {"file": (os.path.basename(args.path), fh)}
+            _emit(_request(client, "POST", "/videos", files=files), args.pretty)
+    elif args.action == "delete":
+        _request(client, "DELETE", f"/videos/{args.id}")
+        print(f"视频 {args.id} 已删除")
 
 
 # ---------- rules ----------
@@ -201,7 +243,28 @@ def build_parser() -> argparse.ArgumentParser:
     q = sp.add_parser("delete", help="删除摄像头"); q.add_argument("id", type=int)
     q = sp.add_parser("snapshot", help="抓当前帧")
     q.add_argument("id", type=int); q.add_argument("-o", "--output")
+    q = sp.add_parser("update", help="更新摄像头")
+    q.add_argument("id", type=int)
+    q.add_argument("--name")
+    q.add_argument("--source-type", choices=["file", "rtsp"])
+    q.add_argument("--source-uri")
+    q = sp.add_parser("reconnect", help="重连运行中的摄像头")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("batch-start", help="批量启动")
+    q.add_argument("ids", nargs="+", type=int)
+    q = sp.add_parser("batch-stop", help="批量停止")
+    q.add_argument("ids", nargs="+", type=int)
     p.set_defaults(func=_cameras)
+
+    # videos
+    p = sub.add_parser("videos", help="上传视频库")
+    sp = p.add_subparsers(dest="action", required=True)
+    sp.add_parser("list", help="已上传视频列表")
+    q = sp.add_parser("get", help="视频详情"); q.add_argument("id", type=int)
+    q = sp.add_parser("upload", help="上传本地文件")
+    q.add_argument("path")
+    q = sp.add_parser("delete", help="删除上传文件"); q.add_argument("id", type=int)
+    p.set_defaults(func=_videos)
 
     # rules
     p = sub.add_parser("rules", help="检测规则")

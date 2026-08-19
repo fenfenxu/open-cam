@@ -19,7 +19,7 @@
           "cameras"
         ],
         "summary": "上传本地视频文件",
-        "description": "上传本地视频文件，保存到数据目录，返回可用作 source_uri 的路径。",
+        "description": "别名：与 POST /videos 同一套入库，响应含 path 以兼容旧客户端。",
         "operationId": "upload_video_cameras_upload_post",
         "requestBody": {
           "content": {
@@ -36,7 +36,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/VideoOut"
+                }
               }
             }
           },
@@ -118,6 +120,88 @@
         }
       }
     },
+    "/cameras/batch/start": {
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "批量启动摄像头",
+        "operationId": "batch_start_cameras_batch_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIds"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/batch/stop": {
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "批量停止摄像头",
+        "operationId": "batch_stop_cameras_batch_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchIds"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/cameras/{camera_id}": {
       "get": {
         "tags": [
@@ -159,12 +243,62 @@
           }
         }
       },
+      "put": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "更新摄像头",
+        "operationId": "update_camera_cameras__camera_id__put",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "cameras"
         ],
         "summary": "删除摄像头",
-        "description": "运行中的摄像头会先停止再删除。",
+        "description": "运行中的摄像头会先停止再删除。级联删除规则、事件与快照文件，不删除 uploads 视频。",
         "operationId": "delete_camera_cameras__camera_id__delete",
         "parameters": [
           {
@@ -180,6 +314,48 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/reconnect": {
+      "post": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "重连摄像头",
+        "operationId": "reconnect_cameras__camera_id__reconnect_post",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraOut"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -306,6 +482,145 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos": {
+      "get": {
+        "tags": [
+          "videos"
+        ],
+        "summary": "已上传视频列表",
+        "operationId": "list_videos_videos_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VideoOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Videos Videos Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "videos"
+        ],
+        "summary": "上传视频文件",
+        "operationId": "upload_video_videos_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_video_videos_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos/{video_id}": {
+      "get": {
+        "tags": [
+          "videos"
+        ],
+        "summary": "视频详情",
+        "operationId": "get_video_videos__video_id__get",
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "videos"
+        ],
+        "summary": "删除已上传视频",
+        "operationId": "delete_video_videos__video_id__delete",
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -1312,6 +1627,68 @@
         ],
         "title": "ApplyRequest"
       },
+      "BatchIds": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "title": "BatchIds"
+      },
+      "BatchResult": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchResultItem"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "BatchResult"
+      },
+      "BatchResultItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ok"
+        ],
+        "title": "BatchResultItem"
+      },
       "Body_upload_video_cameras_upload_post": {
         "properties": {
           "file": {
@@ -1325,6 +1702,20 @@
           "file"
         ],
         "title": "Body_upload_video_cameras_upload_post"
+      },
+      "Body_upload_video_videos_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_video_videos_post"
       },
       "CameraCreate": {
         "properties": {
@@ -1355,6 +1746,60 @@
         ],
         "title": "CameraCreate"
       },
+      "CameraHealth": {
+        "properties": {
+          "alive": {
+            "type": "boolean",
+            "title": "Alive"
+          },
+          "has_frame": {
+            "type": "boolean",
+            "title": "Has Frame"
+          },
+          "last_frame_age_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Frame Age Sec"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alive",
+          "has_frame",
+          "last_frame_age_sec",
+          "width",
+          "height"
+        ],
+        "title": "CameraHealth"
+      },
       "CameraOut": {
         "properties": {
           "id": {
@@ -1376,6 +1821,16 @@
           "status": {
             "type": "string",
             "title": "Status"
+          },
+          "health": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CameraHealth"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1387,6 +1842,46 @@
           "status"
         ],
         "title": "CameraOut"
+      },
+      "CameraUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(file|rtsp)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
+          "source_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Uri"
+          }
+        },
+        "type": "object",
+        "title": "CameraUpdate"
       },
       "EventOut": {
         "properties": {
@@ -1752,6 +2247,75 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VideoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "path",
+          "size_bytes",
+          "duration_sec",
+          "width",
+          "height",
+          "created_at"
+        ],
+        "title": "VideoOut"
       }
     }
   },
@@ -1759,6 +2323,10 @@
     {
       "name": "cameras",
       "description": "摄像头接入与生命周期管理（RTSP / 视频文件）"
+    },
+    {
+      "name": "videos",
+      "description": "本机上传视频文件库（列表、元数据、删除）"
     },
     {
       "name": "rules",
