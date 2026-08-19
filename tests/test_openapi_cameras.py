@@ -24,3 +24,5 @@ def test_openapi_includes_camera_video_management_paths(client):
     assert "/cameras/batch/start" in paths
     assert "/cameras/batch/stop" in paths
     assert "/cameras/{camera_id}/reconnect" in paths
+    assert "/cameras/{camera_id}/live.mjpg" in paths
+    assert "/cameras/{camera_id}/source" in paths
