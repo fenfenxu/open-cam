@@ -80,3 +80,11 @@ def test_events_page_defaults_to_todos(client):
     assert "needs_action" in js
     assert "待办" in js
     assert "含观察记录" in js
+
+
+def test_marketplace_new_pack_has_no_camera_select(client):
+    js = client.get("/static/pages/marketplace.js").text
+    assert "cameras" in js
+    assert "null" in js
+    # 新包分支不得绑定 data-cam-for（旧包分支仍可有）
+    assert "请到「摄像头」页" in js or "改成你的真实源" in js or "真实源" in js
