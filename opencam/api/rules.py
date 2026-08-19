@@ -6,9 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from ..db import session_scope
+from ..detection.escalate import validate_escalate_payload
 from ..models import RULE_TYPE_NAMES, Camera, Rule, RuleCreate, RuleOut, default_intent
 
 router = APIRouter(prefix="/cameras/{camera_id}/rules", tags=["rules"])
+
+
+def _validated_escalate(body: RuleCreate) -> dict:
+    try:
+        validate_escalate_payload(body.escalate)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return body.escalate or {}
 
 
 @router.get("", response_model=list[RuleOut], summary="摄像头的规则列表")
@@ -21,11 +30,12 @@ def create_rule(camera_id: int, body: RuleCreate,
                 session: Session = Depends(session_scope)):
     if session.get(Camera, camera_id) is None:
         raise HTTPException(404, "摄像头不存在")
+    escalate = _validated_escalate(body)
     rule = Rule(camera_id=camera_id, name=body.name or RULE_TYPE_NAMES[body.type],
                 type=body.type, params=body.params,
                 enabled=body.enabled, cooldown=body.cooldown,
                 intent=body.intent or default_intent(body.type),
-                escalate=body.escalate or {})
+                escalate=escalate)
     session.add(rule)
     session.commit()
     session.refresh(rule)
@@ -44,7 +54,7 @@ def update_rule(camera_id: int, rule_id: int, body: RuleCreate,
     rule.enabled = body.enabled
     rule.cooldown = body.cooldown
     rule.intent = body.intent or default_intent(body.type)
-    rule.escalate = body.escalate or {}
+    rule.escalate = _validated_escalate(body)
     session.commit()
     session.refresh(rule)
     return rule

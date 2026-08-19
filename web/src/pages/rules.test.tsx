@@ -142,6 +142,8 @@ describe("RulesPage", () => {
     });
     fireEvent.click(screen.getByRole("heading", { name: "区域入侵" }));
     expect(screen.getByText("规则名称")).toBeInTheDocument();
+    expect(screen.getByText("意图")).toBeInTheDocument();
+    expect(screen.getByText("升格方式")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "下一步" })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText("该摄像头还没有规则，从上面的场景卡片开始吧。")).toBeInTheDocument();

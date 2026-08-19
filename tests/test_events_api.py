@@ -285,6 +285,25 @@ def test_rule_rejects_bad_intent(client):
     assert resp.status_code == 422
 
 
+def test_rule_rejects_bad_escalate(client):
+    camera_id = _make_camera(client)
+    resp = client.post(f"/cameras/{camera_id}/rules", json={
+        "type": "zone_intrusion",
+        "escalate": {"mode": "nope"},
+        "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
+    })
+    assert resp.status_code == 400, resp.text
+    assert "escalate" in str(resp.json()["detail"])
+    resp = client.post(f"/cameras/{camera_id}/rules", json={
+        "type": "zone_intrusion",
+        "escalate": {"mode": "immediate",
+                     "compound": {"metric": "foo", "op": "gte", "value": 1}},
+        "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
+    })
+    assert resp.status_code == 400, resp.text
+    assert "escalate" in str(resp.json()["detail"])
+
+
 def test_events_needs_action_filter(client):
     camera_id = _make_camera(client)
     session = get_session()

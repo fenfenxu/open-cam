@@ -21,7 +21,9 @@ import { jsonBody, type Camera } from "@/lib/cameras";
 import { RULE_TYPE_NAMES } from "@/lib/labels";
 import {
   DIRECTION_NAMES,
+  buildEscalate,
   buildRuleParams,
+  defaultEscalateValues,
   defaultFieldValues,
   ruleDisplayName,
   ruleParamSummary,
@@ -106,6 +108,8 @@ export function RulesPage() {
         type: preset.type,
         params: buildRuleParams(preset, values, points),
         cooldown: Number(values.cooldown) || 30,
+        intent: values.intent === "observe" ? "observe" : "alert",
+        escalate: buildEscalate(values),
       }));
     },
     onSuccess: async () => {
@@ -275,7 +279,10 @@ export function RulesPage() {
                       className="rounded-lg border p-4 text-left hover:bg-muted/60"
                       onClick={() => {
                         setPreset(item);
-                        setValues(defaultFieldValues(item));
+                        setValues({
+                          ...defaultFieldValues(item),
+                          ...defaultEscalateValues(item.type),
+                        });
                         setPoints([]);
                         setStep(2);
                       }}
@@ -364,6 +371,94 @@ export function RulesPage() {
                   </p>
                 </div>
               ))}
+              <div className="grid gap-1.5">
+                <Label>意图</Label>
+                <Select
+                  value={String(values.intent ?? "alert")}
+                  onValueChange={(next) =>
+                    setValues((prev) => ({ ...prev, intent: next ?? "alert" }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="observe">观察（只记账，不进待办）</SelectItem>
+                    <SelectItem value="alert">告警（可升格待办）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {values.intent === "alert" ? (
+                <>
+                  <div className="grid gap-1.5">
+                    <Label>升格方式</Label>
+                    <Select
+                      value={String(values.escalate_mode ?? "immediate")}
+                      onValueChange={(next) =>
+                        setValues((prev) => ({
+                          ...prev,
+                          escalate_mode: next ?? "immediate",
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="immediate">立即</SelectItem>
+                        <SelectItem value="sustained">持续</SelectItem>
+                        <SelectItem value="consecutive">连续</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {values.escalate_mode === "sustained" ? (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="rf-sustained">持续秒数</Label>
+                      <Input
+                        id="rf-sustained"
+                        type="number"
+                        value={String(values.sustained_sec ?? 120)}
+                        onChange={(e) =>
+                          setValues((prev) => ({
+                            ...prev,
+                            sustained_sec: Number(e.target.value) || 120,
+                          }))
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {values.escalate_mode === "consecutive" ? (
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="rf-consecutive">连续次数</Label>
+                      <Input
+                        id="rf-consecutive"
+                        type="number"
+                        value={String(values.consecutive_count ?? 3)}
+                        onChange={(e) =>
+                          setValues((prev) => ({
+                            ...prev,
+                            consecutive_count: Number(e.target.value) || 3,
+                          }))
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="rf-footfall">当日进店 ≥（可空）</Label>
+                    <Input
+                      id="rf-footfall"
+                      type="number"
+                      value={String(values.footfall_gte ?? "")}
+                      onChange={(e) =>
+                        setValues((prev) => ({ ...prev, footfall_gte: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      空=不配复合客流条件；填数字则当日进店不足时不升格。
+                    </p>
+                  </div>
+                </>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => void goStep3()}>
                   {preset.needs_zone ? "下一步" : "保存规则"}

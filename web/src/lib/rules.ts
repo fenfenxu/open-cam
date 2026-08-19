@@ -37,6 +37,8 @@ export type CameraRule = {
   params: Record<string, unknown>;
   cooldown: number;
   enabled: boolean;
+  intent?: string;
+  escalate?: Record<string, unknown>;
 };
 
 export const DIRECTION_NAMES: Record<string, string> = {
@@ -49,6 +51,41 @@ export function defaultFieldValues(preset: RulePreset): Record<string, unknown> 
   const values: Record<string, unknown> = {};
   for (const field of preset.fields) values[field.key] = field.default;
   return values;
+}
+
+export function defaultEscalateValues(type: string): Record<string, unknown> {
+  return {
+    intent: type === "line_crossing" ? "observe" : "alert",
+    escalate_mode: type === "zone_count" || type === "object_count" ? "sustained" : "immediate",
+    sustained_sec: 120,
+    consecutive_count: 3,
+    consecutive_window: 600,
+    footfall_gte: "",
+  };
+}
+
+/** 告警规则的升格 JSON；观察规则固定空对象。 */
+export function buildEscalate(values: Record<string, unknown>): Record<string, unknown> {
+  if (values.intent !== "alert") return {};
+  const mode = String(values.escalate_mode || "immediate");
+  const escalate: Record<string, unknown> = { mode, fold_open: true };
+  if (mode === "sustained") {
+    escalate.sustained = { duration_sec: Number(values.sustained_sec) || 120 };
+  }
+  if (mode === "consecutive") {
+    escalate.consecutive = {
+      count: Number(values.consecutive_count) || 3,
+      window_sec: Number(values.consecutive_window) || 600,
+    };
+  }
+  const raw = String(values.footfall_gte ?? "").trim();
+  if (raw) {
+    const value = Number(raw);
+    if (Number.isFinite(value) && value >= 0) {
+      escalate.compound = { metric: "footfall_in_today", op: "gte", value };
+    }
+  }
+  return escalate;
 }
 
 /** 与现网 rules.js buildParams 相同：像素坐标、object_count 用 class 单值。 */
