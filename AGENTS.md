@@ -45,13 +45,14 @@ opencam/
 ├── hardware.py        推理设备探测（cuda→mps→cpu）
 ├── pipeline.py        PipelineWorker/PipelineManager、start_camera/stop_camera
 ├── cli.py             opencam CLI（argparse + httpx，见下方约束）
-├── api/               FastAPI 路由：cameras/rules/rule_presets/events/stats/system/packs/account
+├── api/               FastAPI 路由：cameras/rules/rule_presets/events/stats/system/packs/account/training
 ├── detection/
 │   ├── detector.py    YoloDetector / MockDetector / build_detector / Detection
 │   ├── rules.py       RuleEngine：五种规则纯逻辑，可注入时钟便于单测
 │   └── vlm.py         VlmReviewer 异步复核线程 + OpenAI 兼容调用
 ├── streams/           CaptureWorker 基类、FileSource（循环限速播放）、RTSPSource（指数退避重连）、manager
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
+├── training/          自助训练：固定区域裁剪、VLM 打标分流、人工确认队列
 └── web/               无构建原生 SPA：index.html + app.js + pages/*.js + style.css
 
 tests/                 pytest（见下）
@@ -99,7 +100,7 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 - `tests/conftest.py` 的 `tmp_settings` 夹具把 `settings.data_dir` 指到 `tmp_path` 并强制 `OPENCAM_DETECTOR=mock`。**测试绝不触碰真实 YOLO 模型、不依赖网络。**
 - 端到端测试（`test_pipeline_e2e.py`）用 OpenCV 生成合成视频（移动矩形）走完整链路。
 - 规则引擎（`detection/rules.py`）是纯逻辑、时钟可注入，优先为规则变更补单测。
-- 当前基线：74 个测试全部通过（本文件撰写时验证）。
+- 当前基线：85 个测试全部通过（本文件撰写时验证）。
 
 ## 代码约定
 

@@ -31,16 +31,26 @@ class Settings(BaseModel):
     yolo_model: str = "yolov8n.pt"
     # 检测置信度阈值
     conf_threshold: float = 0.25
-    # VLM 复核配置（OpenAI 兼容协议）
+    # VLM 复核配置（OpenAI 兼容协议；运行侧告警复核）
     vlm_base_url: str = "https://api.moonshot.cn/v1"
     vlm_model: str = "moonshot-v1-8k-vision-preview"
     vlm_timeout: float = 30.0
+    # 训练侧自动标注：与复核分开，默认 GLM-4V-Flash 免费档；任务 definition.vlm 可覆盖
+    vlm_label_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
+    vlm_label_model: str = "glm-4v-flash"
+    vlm_label_timeout: float = 30.0
+    vlm_label_confidence_threshold: float = 0.8
     # HTTP 服务端口（仅文档用途，实际由 uvicorn 命令行决定）
     port: int = 8600
 
     @property
     def vlm_api_key(self) -> Optional[str]:
         return os.environ.get("OPENCAM_VLM_API_KEY") or None
+
+    @property
+    def vlm_label_api_key(self) -> Optional[str]:
+        """标注专用 key，未设时回退到复核用的 OPENCAM_VLM_API_KEY。"""
+        return os.environ.get("OPENCAM_VLM_LABEL_API_KEY") or None
 
     @property
     def db_url(self) -> str:
