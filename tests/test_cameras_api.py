@@ -31,6 +31,7 @@ def _make_camera(client, **kw) -> dict:
 
 def test_stopped_camera_health_is_null(client):
     cam = _make_camera(client)
+    assert cam["health"] is None
     got = client.get(f"/cameras/{cam['id']}").json()
     assert got["health"] is None
     listed = client.get("/cameras").json()
