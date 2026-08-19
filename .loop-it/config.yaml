@@ -1,0 +1,12 @@
+workspace: open-cam
+project: null
+base_branch: main
+repo: fenfenxu/open-cam
+executors: [rd-cursor, rd-kimi]
+orchestrator: rd-cursor
+patrol:
+  cron: "*/15 * * * *"
+  auto_merge: true
+daily_digest:
+  enabled: false
+  issue_key: null
