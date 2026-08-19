@@ -43,6 +43,11 @@ export OPENCAM_DETECTOR=mock
 uv run uvicorn opencam.main:app --port 8600
 ```
 
+控制台点仪表盘卡片进入摄像头详情：运行中显示 MJPEG 直播。仅视频文件源可在详情页拖进度回放；RTSP 直播不支持回放（不会在本机录像）。
+
+- `GET /cameras/{id}/live.mjpg` 实时预览
+- `GET /cameras/{id}/source` 文件源原片（RTSP 返回 400）
+
 启动后打开 `http://127.0.0.1:8600/docs`（Swagger UI）或 `http://127.0.0.1:8600/redoc`（ReDoc）查看 API 文档；机器可读的 schema 在 `/openapi.json`。
 
 ### 接入一路视频文件
@@ -92,6 +97,8 @@ uv run python scripts/export_openapi.py
 | `POST /cameras/{id}/reconnect` | 重连运行中的摄像头（stopped 为 409） |
 | `POST /cameras/batch/start`、`/batch/stop` | 批量启停（body `{ids}`，空列表 422） |
 | `GET /cameras/{id}/snapshot.jpg` | 当前实时帧 JPEG |
+| `GET /cameras/{id}/live.mjpg` | 实时 MJPEG 预览（未运行或无帧 503） |
+| `GET /cameras/{id}/source` | 文件源原片回放（仅 `file`；RTSP 返回 400） |
 | `GET/POST /videos`、`GET/DELETE /videos/{id}` | 本机上传视频库（被摄像头 `source_uri` 引用时删除 409） |
 | `POST /cameras/upload` | 上传别名，与 `POST /videos` 同一套入库，响应含 `path` |
 | `GET/POST /cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
@@ -114,8 +121,8 @@ uv run python scripts/export_openapi.py
 
 浏览器打开 `http://127.0.0.1:8600`：
 
-- **仪表盘**：摄像头卡片网格，运行中的卡片约 1fps 轮询快照做准实时画面，附最近事件数；卡片下方内嵌今日 24 小时进/出客流双列柱状图（数据来自 `/api/stats/footfall`）。
-- **摄像头**：CRUD 与启停。
+- **仪表盘**：摄像头卡片网格，运行中的卡片约 1fps 轮询快照做准实时画面，附最近事件数；卡片下方内嵌今日 24 小时进/出客流双列柱状图（数据来自 `/api/stats/footfall`）。卡片可点进详情。
+- **摄像头**：CRUD 与启停；详情页 `#/cameras/{id}` 可看 MJPEG 直播，文件源可拖进度回放。
 - **规则**：场景引导式三步配置——选场景卡片 → 填参数（默认值+中文提示）→ 画布画多边形 ROI；已有规则显示中文名与参数摘要，叠加显示可删除。
 - **事件**：时间线 + 摄像头/类型/VLM 判定过滤，查看快照与 VLM 理由，一键 ack。
 - **方案市场**：浏览内置方案包、一键应用到摄像头、从本地目录/zip/URL 安装、卸载。
