@@ -1,14 +1,17 @@
-"""摄像头管理 API：CRUD + 启停 + 实时抓帧 + 视频上传别名。"""
+"""摄像头管理 API：CRUD + 启停 + 实时抓帧 + MJPEG 预览 + 文件源回放 + 视频文件上传。"""
 
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 
 import cv2
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
+from ..clip import media_type_for, resolve_source_uri
 from ..config import settings
 from ..db import session_scope
 from ..models import (
@@ -233,3 +236,60 @@ def snapshot(camera_id: int, session: Session = Depends(session_scope)):
     if not ok:
         raise HTTPException(500, "帧编码失败")
     return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
+_MJPEG_BOUNDARY = "frame"
+_MJPEG_INTERVAL = 0.125
+
+
+async def _iter_mjpeg(camera_id: int, request: Request):
+    """从采集缓冲持续吐 JPEG part；摄像头停止或客户端断开则结束。"""
+    while True:
+        if await request.is_disconnected():
+            return
+        worker = camera_manager.get(camera_id)
+        if worker is None or not worker.is_alive():
+            return
+        frame = camera_manager.latest_frame(camera_id)
+        if frame is not None:
+            ok, buf = cv2.imencode(
+                ".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            if ok:
+                payload = buf.tobytes()
+                yield (
+                    b"--" + _MJPEG_BOUNDARY.encode()
+                    + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(payload)).encode()
+                    + b"\r\n\r\n" + payload + b"\r\n"
+                )
+        await asyncio.sleep(_MJPEG_INTERVAL)
+
+
+@router.get("/{camera_id}/live.mjpg", summary="实时 MJPEG 预览",
+            description="从采集缓冲约 8fps 推 JPEG。未运行或无帧时 503，不建立长连接。")
+def live_mjpeg(camera_id: int, request: Request,
+               session: Session = Depends(session_scope)):
+    camera = session.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(404, "摄像头不存在")
+    if camera.status != CAMERA_RUNNING or camera_manager.latest_frame(camera_id) is None:
+        raise HTTPException(503, "暂无可用帧（摄像头未运行或流未就绪）")
+    return StreamingResponse(
+        _iter_mjpeg(camera_id, request),
+        media_type=f"multipart/x-mixed-replace; boundary={_MJPEG_BOUNDARY}",
+    )
+
+
+@router.get("/{camera_id}/source", summary="文件源原片（供回放）",
+            description="仅 source_type=file；直播流 400。支持 HTTP Range。")
+def camera_source(camera_id: int, session: Session = Depends(session_scope)):
+    camera = session.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(404, "摄像头不存在")
+    if camera.source_type != "file":
+        raise HTTPException(400, "该源为直播流，不支持文件回放")
+    path = resolve_source_uri(camera.source_uri)
+    if not path.is_file():
+        raise HTTPException(404, "源文件不存在")
+    return FileResponse(
+        path, media_type=media_type_for(path), filename=path.name)
