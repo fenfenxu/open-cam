@@ -1,0 +1,29 @@
+# open-cam 服务配置示例。复制为 config.yaml 后修改。
+# 所有字段均可被环境变量覆盖，规则：OPENCAM_ + 大写字段名，如 OPENCAM_DETECT_FPS=5。
+# VLM 的 api_key 不写在这里，只走环境变量 OPENCAM_VLM_API_KEY。
+
+# 数据目录：SQLite 库与事件快照都存这里
+data_dir: data
+
+# 检测采样帧率：每秒从帧缓冲取多少帧送检测器（CPU 可承受范围内 2-5 即可）
+detect_fps: 3
+
+# 检测器：yolo / mock（mock 返回合成检测框，用于无模型环境与 CI）
+detector: yolo
+
+# 推理设备：auto（自动探测 cuda→mps→cpu）或显式 cpu/mps/cuda/cuda:0
+device: auto
+
+# 市场平台地址（预留；本地功能不依赖，不配置也能用全部功能）
+platform_base_url:
+
+# YOLO 权重：首次使用 ultralytics 会自动下载到工作目录
+yolo_model: yolov8n.pt
+
+# 检测置信度阈值
+conf_threshold: 0.25
+
+# VLM 复核（OpenAI 兼容协议，兼容 Kimi 等）
+vlm_base_url: https://api.moonshot.cn/v1
+vlm_model: moonshot-v1-8k-vision-preview
+vlm_timeout: 30

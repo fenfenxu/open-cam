@@ -1,0 +1,9 @@
+name: 门口进出客流
+type: line_crossing
+cooldown: 5
+params:
+  # 默认门口中部一条横线（相对坐标，应用时按实际分辨率换算）。
+  # 方向约定：沿第一点→第二点看，左侧穿到右侧为 in（进店方向按实际门朝向调整线的两端顺序）。
+  line: [[0.3, 0.5], [0.7, 0.5]]
+  direction: both
+  classes: [person]

@@ -1,0 +1,8 @@
+name: 点餐区排队超员
+type: zone_count
+cooldown: 120
+params:
+  # 默认点餐区（画面中部偏左，相对坐标）
+  polygon: [[0.15, 0.4], [0.55, 0.4], [0.55, 1.0], [0.15, 1.0]]
+  threshold: 5
+  classes: [person]

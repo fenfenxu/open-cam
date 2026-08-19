@@ -1,0 +1,7 @@
+name: 闭店时段区域入侵
+type: zone_intrusion
+cooldown: 60
+params:
+  # 默认全画面；闭店后启用该规则即可（可在 Rules 页停用/启用）
+  polygon: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+  classes: [person]

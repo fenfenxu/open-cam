@@ -1,0 +1,7 @@
+id: retail-chain
+name: 连锁零售门店
+version: 1.0.0
+vertical: 连锁零售
+description: 面向连锁零售门店的安防与运营告警：门口客流聚集、收银台徘徊、闭店时段区域入侵。
+author: open-cam
+min_opencam_version: 0.2.0

@@ -1,0 +1,8 @@
+name: 收银台长时间徘徊
+type: loitering
+cooldown: 300
+params:
+  # 默认取画面右下四分之一作为收银台区域（相对坐标，应用时按实际分辨率换算）
+  polygon: [[0.6, 0.4], [1.0, 0.4], [1.0, 1.0], [0.6, 1.0]]
+  duration: 120
+  classes: [person]

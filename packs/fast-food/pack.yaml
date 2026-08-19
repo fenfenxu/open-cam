@@ -1,0 +1,7 @@
+id: fast-food
+name: 快餐店
+version: 1.0.0
+vertical: 餐饮-快餐
+description: 面向快餐门店：门口进出客流统计、点餐区排队超员、闭店后入侵、后厨闯入告警。
+author: open-cam
+min_opencam_version: 0.2.0

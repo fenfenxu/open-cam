@@ -1,0 +1,8 @@
+name: 闭店后入侵
+type: zone_intrusion
+cooldown: 60
+params:
+  # 默认全画面；仅在 22:00-07:00 生效（支持跨午夜）
+  polygon: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+  classes: [person]
+  active_hours: "22:00-07:00"

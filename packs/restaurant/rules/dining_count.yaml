@@ -1,0 +1,6 @@
+name: 用餐区客流统计
+type: object_count
+cooldown: 300
+params:
+  class: person
+  threshold: 20

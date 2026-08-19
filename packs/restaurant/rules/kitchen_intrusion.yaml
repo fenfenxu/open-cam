@@ -1,0 +1,7 @@
+name: 后厨区域入侵
+type: zone_intrusion
+cooldown: 60
+params:
+  # 默认取画面左侧后厨区域（相对坐标，应用时按实际分辨率换算）
+  polygon: [[0.0, 0.2], [0.4, 0.2], [0.4, 1.0], [0.0, 1.0]]
+  classes: [person]

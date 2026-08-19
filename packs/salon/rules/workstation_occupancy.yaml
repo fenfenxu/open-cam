@@ -1,0 +1,7 @@
+name: 工位区域占用
+type: zone_intrusion
+cooldown: 120
+params:
+  # 默认取画面中部工位带（相对坐标，应用时按实际分辨率换算）
+  polygon: [[0.2, 0.3], [0.8, 0.3], [0.8, 0.9], [0.2, 0.9]]
+  classes: [person]

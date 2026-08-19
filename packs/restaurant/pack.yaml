@@ -1,0 +1,7 @@
+id: restaurant
+name: 餐饮门店
+version: 1.0.0
+vertical: 餐饮
+description: 面向餐饮门店：后厨区域入侵、用餐区客流统计、明火区域人员检测。
+author: open-cam
+min_opencam_version: 0.2.0

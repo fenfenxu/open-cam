@@ -1,0 +1,8 @@
+name: 等候区长时间等待
+type: loitering
+cooldown: 600
+params:
+  # 默认取画面左下角等候区
+  polygon: [[0.0, 0.5], [0.35, 0.5], [0.35, 1.0], [0.0, 1.0]]
+  duration: 600
+  classes: [person]

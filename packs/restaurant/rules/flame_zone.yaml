@@ -1,0 +1,7 @@
+name: 明火区域人员检测
+type: zone_intrusion
+cooldown: 30
+params:
+  # 默认灶台附近小区域（画面左中）
+  polygon: [[0.05, 0.3], [0.25, 0.3], [0.25, 0.6], [0.05, 0.6]]
+  classes: [person]

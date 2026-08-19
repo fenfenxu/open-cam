@@ -1,0 +1,7 @@
+name: 后厨闯入
+type: zone_intrusion
+cooldown: 60
+params:
+  # 默认后厨区域（画面右侧，相对坐标）
+  polygon: [[0.7, 0.2], [1.0, 0.2], [1.0, 1.0], [0.7, 1.0]]
+  classes: [person]

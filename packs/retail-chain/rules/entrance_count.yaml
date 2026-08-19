@@ -1,0 +1,6 @@
+name: 门口客流聚集
+type: object_count
+cooldown: 60
+params:
+  class: person
+  threshold: 10

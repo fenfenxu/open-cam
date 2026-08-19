@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>open-cam 控制台</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="layout">
+    <aside id="sidebar">
+      <div id="brand">open-cam</div>
+      <nav>
+        <a href="#/dashboard" data-route="dashboard">仪表盘</a>
+        <a href="#/cameras" data-route="cameras">摄像头</a>
+        <a href="#/rules" data-route="rules">规则</a>
+        <a href="#/events" data-route="events">事件</a>
+        <a href="#/marketplace" data-route="marketplace">方案市场</a>
+        <a href="#/settings" data-route="settings">设置</a>
+      </nav>
+      <div id="sidebar-footer">本地运行 · 数据不出本机</div>
+    </aside>
+    <main id="app"></main>
+  </div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

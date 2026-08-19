@@ -1,0 +1,30 @@
+# 规则示例。规则最终存 DB 的 JSON 字段，这里给出可通过 API 创建的参数样板。
+# 坐标为像素值，基于 1280x720 画面；polygon 为顺时针/逆时针均可的多边形顶点。
+
+rules:
+  # 入口区域入侵：检测框底边中点进入多边形即触发
+  - type: zone_intrusion
+    cooldown: 30          # 同一规则 30 秒内只触发一次（去抖）
+    params:
+      polygon: [[0, 400], [640, 400], [640, 720], [0, 720]]   # 画面左下入口区
+      classes: [person]   # 可选，只统计这些类别；缺省不过滤
+
+  # 徘徊滞留：同一 track id 在区域内连续驻留超过 60 秒触发
+  - type: loitering
+    cooldown: 120
+    params:
+      polygon: [[800, 100], [1280, 100], [1280, 500], [800, 500]]
+      duration: 60        # 驻留秒数
+      classes: [person]
+
+  # 数量超限：画面内 person 达到 5 个触发
+  - type: object_count
+    cooldown: 60
+    params:
+      class: person       # 类别名（COCO：person/car/dog...）
+      threshold: 5
+
+# 通过 API 创建（以第一条为例）：
+#   curl -X POST http://127.0.0.1:8600/cameras/1/rules \
+#     -H 'Content-Type: application/json' \
+#     -d '{"type": "zone_intrusion", "cooldown": 30, "params": {"polygon": [[0,400],[640,400],[640,720],[0,720]], "classes": ["person"]}}'

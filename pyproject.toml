@@ -1,0 +1,26 @@
+[project]
+name = "open-cam"
+version = "0.2.0"
+description = "摄像头视频流分析与监控管理工具（本地运行）"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "opencv-python-headless",
+    "ultralytics",
+    "sqlalchemy",
+    "pydantic-settings",
+    "pyyaml",
+    "httpx",
+    "numpy",
+    "lap>=0.5.13",
+    "python-multipart>=0.0.32",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

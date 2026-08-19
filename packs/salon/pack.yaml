@@ -1,0 +1,7 @@
+id: salon
+name: 美容美发门店
+version: 1.0.0
+vertical: 美容美发
+description: 面向美容美发门店：工位占用提醒、等候区客人长时间等待提醒。
+author: open-cam
+min_opencam_version: 0.2.0
