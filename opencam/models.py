@@ -174,10 +174,10 @@ class CameraCreate(BaseModel):
 
 
 class CameraUpdate(BaseModel):
-    """仅允许改名称。传入 source_type / source_uri 会 409，请新建摄像头。"""
+    """更新摄像头。停止后可改 source_type / source_uri；运行中改源会 409。"""
     name: Optional[str] = None
     source_type: Optional[str] = Field(default=None, pattern="^(file|rtsp)$")
-    source_uri: Optional[str] = None
+    source_uri: Optional[str] = Field(default=None, min_length=1)
 
     @model_validator(mode="after")
     def at_least_one_field(self):

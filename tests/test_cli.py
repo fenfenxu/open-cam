@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from opencam import cli
 from opencam.db import get_session
-from opencam.models import Event
+from opencam.models import CAMERA_RUNNING, Camera, Event
 
 
 @pytest.fixture()
@@ -77,24 +77,35 @@ def test_videos_list_after_upload(cli_env, capsys, tmp_path):
     assert run_cli(capsys, "videos", "list") == []
 
 
+def test_cameras_update_rejects_source(cli_env, capsys):
+    """停止态可改源；运行中改源失败。"""
+    run_cli(capsys, "cameras", "create", "--name", "门口",
+            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
+    updated = run_cli(capsys, "cameras", "update", "1",
+                      "--source-uri", "/tmp/y.mp4")
+    assert updated["source_uri"] == "/tmp/y.mp4"
+    got = run_cli(capsys, "cameras", "get", "1")
+    assert got["source_uri"] == "/tmp/y.mp4"
+
+    session = get_session()
+    try:
+        session.get(Camera, 1).status = CAMERA_RUNNING
+        session.commit()
+    finally:
+        session.close()
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["cameras", "update", "1", "--source-uri", "/tmp/z.mp4"])
+    assert exc.value.code == 1
+    assert "请先停止摄像头再修改视频源" in capsys.readouterr().err
+
+
 def test_cameras_update_requires_a_field(cli_env, capsys):
     run_cli(capsys, "cameras", "create", "--name", "门口",
             "--source-type", "file", "--source-uri", "/tmp/x.mp4")
     with pytest.raises(SystemExit) as exc:
         cli.main(["cameras", "update", "1"])
     assert exc.value.code == 1
-    assert "请指定 --name" in capsys.readouterr().err
-
-
-def test_cameras_update_rejects_source(cli_env, capsys):
-    run_cli(capsys, "cameras", "create", "--name", "门口",
-            "--source-type", "file", "--source-uri", "/tmp/x.mp4")
-    with pytest.raises(SystemExit) as exc:
-        cli.main(["cameras", "update", "1", "--source-uri", "/tmp/y.mp4"])
-    assert exc.value.code == 1
-    assert "请新建摄像头" in capsys.readouterr().err
-    got = run_cli(capsys, "cameras", "get", "1")
-    assert got["source_uri"] == "/tmp/x.mp4"
+    assert "请至少指定 --name / --source-type / --source-uri 之一" in capsys.readouterr().err
 
 
 def test_cameras_reconnect_stopped_exits(cli_env, capsys):

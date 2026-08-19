@@ -135,16 +135,21 @@ def get_camera(camera_id: int, session: Session = Depends(session_scope)):
 
 
 @router.put("/{camera_id}", response_model=CameraOut, summary="更新摄像头",
-            description="仅允许改名称。类型与视频源创建后不可改（传入 source_type / source_uri 返回 409），请新建摄像头。")
+            description="停止后可改 source_type / source_uri；运行中改源返回 409。")
 def update_camera(camera_id: int, body: CameraUpdate,
                   session: Session = Depends(session_scope)):
     camera = session.get(Camera, camera_id)
     if camera is None:
         raise HTTPException(404, "摄像头不存在")
-    if "source_type" in body.model_fields_set or "source_uri" in body.model_fields_set:
-        raise HTTPException(409, "类型和视频源创建后不可修改，请新建摄像头")
+    source_touched = "source_type" in body.model_fields_set or "source_uri" in body.model_fields_set
+    if source_touched and camera.status == CAMERA_RUNNING:
+        raise HTTPException(409, "请先停止摄像头再修改视频源")
     if body.name is not None:
         camera.name = body.name
+    if body.source_type is not None:
+        camera.source_type = body.source_type
+    if body.source_uri is not None:
+        camera.source_uri = body.source_uri
     session.commit()
     session.refresh(camera)
     return camera_out(camera)

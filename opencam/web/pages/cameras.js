@@ -1,4 +1,4 @@
-// 摄像头管理：列表 + 新建 + 启停 + 行内改名 + 已上传视频
+// 摄像头管理：列表 + 新建 + 启停 + 行内保存 + 已上传视频
 import { api, toast } from '../app.js';
 
 function dash(value) {
@@ -26,7 +26,6 @@ export async function render(el) {
         <button id="c-create">添加</button>
       </div>
     </div>
-    <p class="dim mt">已创建的摄像头只能改名称；更换类型或视频源请新建。</p>
     <div class="mt" id="list"></div>
     <h2 class="mt">已上传视频</h2>
     <div class="mt" id="videos"></div>
@@ -97,11 +96,16 @@ export async function render(el) {
       <table>
         <tr><th>ID</th><th>名称</th><th>类型</th><th>源地址</th><th>状态</th><th>操作</th></tr>
         ${cameras.map((c) => `
-          <tr>
+          <tr data-orig-type="${c.source_type}" data-orig-uri="${c.source_uri}">
             <td class="mono">${c.id}</td>
             <td><input class="c-name" data-id="${c.id}" value="${c.name}"></td>
-            <td>${c.source_type === 'rtsp' ? 'RTSP 流' : '视频文件'}</td>
-            <td class="mono">${c.source_uri}</td>
+            <td>
+              <select class="c-type" data-id="${c.id}"${c.status === 'running' ? ' disabled' : ''}>
+                <option value="file"${c.source_type === 'file' ? ' selected' : ''}>视频文件</option>
+                <option value="rtsp"${c.source_type === 'rtsp' ? ' selected' : ''}>RTSP 流</option>
+              </select>
+            </td>
+            <td><input class="c-uri" data-id="${c.id}" size="36" value="${c.source_uri}"${c.status === 'running' ? ' disabled' : ''}></td>
             <td><span class="badge ${c.status}">${c.status}</span></td>
             <td>
               <button data-act="view" data-id="${c.id}">查看</button>
@@ -151,14 +155,24 @@ export async function render(el) {
         toast('已删除');
       } else if (act === 'save') {
         const row = btn.closest('tr');
+        const running = row.querySelector('.badge.running');
+        const name = row.querySelector('.c-name').value;
+        const source_type = row.querySelector('.c-type').value;
+        const source_uri = row.querySelector('.c-uri').value;
+        const body = running
+          ? { name }
+          : { name, source_type, source_uri };
         await api(`/cameras/${id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: row.querySelector('.c-name').value,
-          }),
+          body: JSON.stringify(body),
         });
-        toast('已保存');
+        if (!running && (source_type !== row.dataset.origType
+            || source_uri !== row.dataset.origUri)) {
+          toast('已保存。请到「规则」页按真实画面调整区域');
+        } else {
+          toast('已保存');
+        }
       } else {
         await api(`/cameras/${id}/${act}`, { method: 'POST' });
         toast(act === 'start' ? '已启动' : '已停止');

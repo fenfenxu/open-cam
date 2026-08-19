@@ -107,12 +107,14 @@ def _cameras(args, client) -> None:
         _emit({"ok": True, "id": args.id}, args.pretty)
     elif args.action == "update":
         payload = {}
-        if args.source_type is not None or args.source_uri is not None:
-            raise CliError("类型和视频源创建后不可修改，请新建摄像头")
         if args.name is not None:
             payload["name"] = args.name
+        if args.source_type is not None:
+            payload["source_type"] = args.source_type
+        if args.source_uri is not None:
+            payload["source_uri"] = args.source_uri
         if not payload:
-            raise CliError("请指定 --name")
+            raise CliError("请至少指定 --name / --source-type / --source-uri 之一")
         _emit(_request(client, "PUT", f"/cameras/{args.id}", body=payload),
               args.pretty)
     elif args.action == "reconnect":
@@ -294,13 +296,12 @@ def build_parser() -> argparse.ArgumentParser:
     q = sp.add_parser("delete", help="删除摄像头"); q.add_argument("id", type=int)
     q = sp.add_parser("snapshot", help="抓当前帧")
     q.add_argument("id", type=int); q.add_argument("-o", "--output")
-    q = sp.add_parser("update", help="更新摄像头名称（类型与视频源不可改）")
+    q = sp.add_parser("update", help="更新摄像头（停止后可改类型与视频源）")
     q.add_argument("id", type=int)
     q.add_argument("--name")
     q.add_argument("--source-type", choices=["file", "rtsp"],
-                   help="已废弃：类型创建后不可改，传入会报错")
-    q.add_argument("--source-uri",
-                   help="已废弃：视频源创建后不可改，传入会报错")
+                   help="停止后可改；运行中改源会失败")
+    q.add_argument("--source-uri", help="停止后可改；运行中改源会失败")
     q = sp.add_parser("reconnect", help="重连运行中的摄像头")
     q.add_argument("id", type=int)
     q = sp.add_parser("batch-start", help="批量启动")
