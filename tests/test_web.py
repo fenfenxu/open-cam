@@ -55,6 +55,10 @@ def test_cameras_page_has_video_library(client):
     assert "/videos" in js
     assert "data-act=\"save\"" in js or "data-act='save'" in js
     assert "method: 'PUT'" in js or 'method: "PUT"' in js or "method: `PUT`" in js
+    assert "c-type" in js
+    assert "c-uri" in js
+    assert "请新建" not in js
+    assert "请先停止" in js or "规则" in js
 
 
 def test_camera_detail_live_and_replay_copy(client):
