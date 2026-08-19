@@ -496,6 +496,88 @@
         }
       }
     },
+    "/cameras/{camera_id}/live.mjpg": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "实时 MJPEG 预览",
+        "description": "从采集缓冲约 8fps 推 JPEG。未运行或无帧时 503，不建立长连接。",
+        "operationId": "live_mjpeg_cameras__camera_id__live_mjpg_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cameras/{camera_id}/source": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "文件源原片（供回放）",
+        "description": "仅 source_type=file；直播流 400。支持 HTTP Range。",
+        "operationId": "camera_source_cameras__camera_id__source_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/videos": {
       "get": {
         "tags": [
@@ -1733,6 +1815,295 @@
         }
       }
     },
+    "/models": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "登记模型版本",
+        "description": "记录指标、产物路径与来源任务；不改变线上模型。",
+        "operationId": "register_models_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelVersionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "模型版本列表",
+        "operationId": "list_models_models_get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "slot_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Slot Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelVersionOut"
+                  },
+                  "title": "Response List Models Models Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{model_id}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "模型版本详情",
+        "operationId": "get_model_models__model_id__get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelVersionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{model_id}/deploy": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "部署模型",
+        "description": "与线上模型做 A/B 对比，仅在三项指标全面更优时建议并执行替换；未更优返回 409，force=true 可强行上线。旧 live 降为 previous，回滚入口常驻。",
+        "operationId": "deploy_models__model_id__deploy_post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeployBody",
+                "default": {
+                  "force": false
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeployResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{model_id}/rollback": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "回滚到上一线上版本",
+        "description": "按该版本所在槽位恢复 previous；没有上一版本时 400。",
+        "operationId": "rollback_models__model_id__rollback_post",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeployResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/models/{model_id}/compare": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "与线上模型对比（不部署）",
+        "operationId": "compare_models__model_id__compare_get",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -2089,6 +2460,98 @@
         ],
         "title": "CreateTask"
       },
+      "DeployBody": {
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "未全面更优时仍强制替换；默认拒绝以免训出更差模型上线",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "DeployBody"
+      },
+      "DeployResult": {
+        "properties": {
+          "deployed": {
+            "type": "boolean",
+            "title": "Deployed"
+          },
+          "already_live": {
+            "type": "boolean",
+            "title": "Already Live",
+            "default": false
+          },
+          "rolled_back": {
+            "type": "boolean",
+            "title": "Rolled Back",
+            "default": false
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "default": false
+          },
+          "recommend_replace": {
+            "type": "boolean",
+            "title": "Recommend Replace"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "candidate_id": {
+            "type": "integer",
+            "title": "Candidate Id"
+          },
+          "live_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Id"
+          },
+          "slot_key": {
+            "type": "string",
+            "title": "Slot Key"
+          },
+          "previous_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Id"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelVersionOut"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deployed",
+          "recommend_replace",
+          "reason",
+          "metrics",
+          "candidate_id",
+          "slot_key",
+          "model"
+        ],
+        "title": "DeployResult"
+      },
       "EventOut": {
         "properties": {
           "id": {
@@ -2284,6 +2747,89 @@
         },
         "type": "object",
         "title": "LoginRequest"
+      },
+      "ModelVersionOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "slot_key": {
+            "type": "string",
+            "title": "Slot Key"
+          },
+          "artifact_path": {
+            "type": "string",
+            "title": "Artifact Path"
+          },
+          "metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metrics"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "slot_key",
+          "artifact_path",
+          "metrics",
+          "created_at",
+          "status"
+        ],
+        "title": "ModelVersionOut"
+      },
+      "RegisterModel": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id",
+            "description": "来源训练任务 id"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metrics",
+            "description": "accuracy / recall / false_alarm_per_day；缺省读 eval.json"
+          },
+          "artifact_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Path",
+            "description": "产物路径；缺省 data/training/<task_id>/best.pt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id"
+        ],
+        "title": "RegisterModel"
       },
       "ReviewAction": {
         "properties": {
@@ -2617,6 +3163,10 @@
     {
       "name": "training",
       "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"
+    },
+    {
+      "name": "models",
+      "description": "训练模型版本登记、A/B 指标对比、部署与回滚"
     }
   ]
 }

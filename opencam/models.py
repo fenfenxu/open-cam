@@ -90,6 +90,28 @@ class Event(Base):
     acked: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
 
+# 训练产物版本状态
+MODEL_REGISTERED = "registered"
+MODEL_LIVE = "live"
+MODEL_PREVIOUS = "previous"
+MODEL_RETIRED = "retired"
+
+
+class ModelVersion(Base):
+    """一次训练产出的可部署模型版本（指标 + 产物路径 + 来源任务）。"""
+
+    __tablename__ = "model_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(String(64), index=True)
+    # 同一对象+属性共用一个线上槽位，便于新任务替换旧任务的线上模型
+    slot_key: Mapped[str] = mapped_column(String(128), index=True)
+    artifact_path: Mapped[str] = mapped_column(Text)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    status: Mapped[str] = mapped_column(String(16), default=MODEL_REGISTERED, index=True)
+
+
 # ---------- Pydantic schema ----------
 
 class CameraCreate(BaseModel):
@@ -188,5 +210,17 @@ class EventOut(BaseModel):
     vlm_verdict: Optional[str]
     vlm_reason: Optional[str]
     acked: bool
+
+    model_config = {"from_attributes": True}
+
+
+class ModelVersionOut(BaseModel):
+    id: int
+    task_id: str
+    slot_key: str
+    artifact_path: str
+    metrics: dict[str, Any]
+    created_at: float
+    status: str
 
     model_config = {"from_attributes": True}

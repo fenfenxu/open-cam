@@ -217,6 +217,31 @@ def _system(args, client) -> None:
         _emit(_request(client, "GET", "/api/system/info"), args.pretty)
 
 
+def _models(args, client) -> None:
+    if args.action == "list":
+        _emit(_request(client, "GET", "/models", params={
+            "task_id": args.task_id, "slot_key": args.slot_key,
+        }), args.pretty)
+    elif args.action == "get":
+        _emit(_request(client, "GET", f"/models/{args.id}"), args.pretty)
+    elif args.action == "register":
+        body: dict[str, Any] = {"task_id": args.task_id}
+        if args.metrics:
+            body["metrics"] = _parse_params(args.metrics)
+        if args.artifact:
+            body["artifact_path"] = args.artifact
+        _emit(_request(client, "POST", "/models", body=body), args.pretty)
+    elif args.action == "deploy":
+        _emit(_request(client, "POST", f"/models/{args.id}/deploy",
+                       body={"force": args.force}), args.pretty)
+    elif args.action == "rollback":
+        _emit(_request(client, "POST", f"/models/{args.id}/rollback"),
+              args.pretty)
+    elif args.action == "compare":
+        _emit(_request(client, "GET", f"/models/{args.id}/compare"),
+              args.pretty)
+
+
 # ---------- 参数解析 ----------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -327,6 +352,26 @@ def build_parser() -> argparse.ArgumentParser:
     sp = p.add_subparsers(dest="action", required=True)
     sp.add_parser("info", help="算力与配置信息")
     p.set_defaults(func=_system)
+
+    # models
+    p = sub.add_parser("models", help="训练模型版本：登记、A/B 对比、部署与回滚")
+    sp = p.add_subparsers(dest="action", required=True)
+    q = sp.add_parser("list", help="版本列表")
+    q.add_argument("--task-id")
+    q.add_argument("--slot-key")
+    q = sp.add_parser("get", help="版本详情"); q.add_argument("id", type=int)
+    q = sp.add_parser("register", help="登记产物与指标")
+    q.add_argument("task_id")
+    q.add_argument("--metrics", help="JSON，含 accuracy/recall/false_alarm_per_day")
+    q.add_argument("--artifact", help="产物路径，默认 data/training/<task_id>/best.pt")
+    q = sp.add_parser("compare", help="与线上模型对比（不部署）")
+    q.add_argument("id", type=int)
+    q = sp.add_parser("deploy", help="部署；未全面更优时需 --force")
+    q.add_argument("id", type=int)
+    q.add_argument("--force", action="store_true")
+    q = sp.add_parser("rollback", help="回滚到上一线上版本")
+    q.add_argument("id", type=int)
+    p.set_defaults(func=_models)
 
     return parser
 

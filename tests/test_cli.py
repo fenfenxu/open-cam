@@ -227,6 +227,11 @@ def test_system_info(cli_env, capsys):
     assert "version" in info
 
 
+def test_models_list_empty(cli_env, capsys):
+    listed = run_cli(capsys, "models", "list")
+    assert listed == []
+
+
 def test_pretty_output(cli_env, capsys):
     run_cli(capsys, "cameras", "create", "--name", "x",
             "--source-type", "file", "--source-uri", "/tmp/x.mp4")

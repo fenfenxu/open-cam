@@ -24,7 +24,7 @@ opencam --help
 opencam events --help
 ```
 
-其余资源（cameras、rules、packs、stats、videos、system）同理，用 `opencam <resource> --help` 查看。事件片段下载等冷门参数见 `opencam events --help`。
+其余资源（cameras、rules、packs、stats、videos、system、models）同理，用 `opencam <resource> --help` 查看。事件片段下载等冷门参数见 `opencam events --help`。
 
 ## 工作流：查未确认告警
 
@@ -53,6 +53,22 @@ opencam rules create 1 --type zone_count --name 排队超员 --params '{"polygon
 4. `rules create` 用刚量出的像素坐标建规则。
 
 量不到坐标就问用户要，**禁止**凭 1080p 经验编造矩形——假坐标会产生永远不触发或乱触发的规则。
+
+## 工作流：部署训练模型
+
+```bash
+opencam models list
+opencam models compare 2
+opencam models deploy 2
+opencam models rollback 2
+```
+
+1. `models list` 看已登记版本的指标、产物路径、来源任务与 `status`（registered / live / previous）。
+2. `models compare <id>` 与同槽位线上模型比三项指标（accuracy / recall / false_alarm_per_day）；只有全面更优才建议替换。
+3. `models deploy <id>` 上线；未更优会 HTTP 409。店主明确要求时才加 `--force`。
+4. `models rollback <id>` 按该版本所在槽位恢复上一线上版本，回滚入口常驻。
+
+登记新产物：`opencam models register --help`（默认读 `eval.json` 与 `best.pt`）。
 
 ## 事件字段速查
 

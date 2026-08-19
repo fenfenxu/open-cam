@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import account, cameras, events, packs, rule_presets, rules, stats, system, training, videos
+from .api import account, cameras, events, packs, rule_presets, rules, stats, system, trained_models, training, videos
 from .config import settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
@@ -78,6 +78,7 @@ _TAGS = [
     {"name": "system", "description": "本机算力与运行配置信息"},
     {"name": "account", "description": "市场平台账号（预留 stub，本地功能无需登录）"},
     {"name": "training", "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"},
+    {"name": "models", "description": "训练模型版本登记、A/B 指标对比、部署与回滚"},
 ]
 
 app = FastAPI(
@@ -123,6 +124,7 @@ app.include_router(stats.router)
 app.include_router(packs.router)
 app.include_router(account.router)
 app.include_router(training.router)
+app.include_router(trained_models.router)
 
 
 @app.get("/health", tags=["system"], summary="健康检查")
