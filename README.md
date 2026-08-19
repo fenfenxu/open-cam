@@ -21,7 +21,7 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲)
 - **采样检测而非逐帧**：默认 3 fps，CPU 可承受。
 - **SQLite 单文件**：零运维，模型层用 SQLAlchemy，后续可换 Postgres。
 - **VLM 走 OpenAI 兼容协议**：一家客户端代码覆盖多数供应商；api_key 只走环境变量 `OPENCAM_VLM_API_KEY`。
-- **Web 控制台**：无构建步骤的原生 HTML/JS，FastAPI 直接挂载，浏览器打开 `http://127.0.0.1:8600` 即用。
+- **Web 控制台**：Vite + React + shadcn/ui。开发：`make web-dev`（需另开 `make run`）。发布：`make web-build` 后 `make run`，浏览器打开 `http://127.0.0.1:8600`。需要 Node 20+。
 
 ## 快速开始
 
@@ -39,6 +39,7 @@ export OPENCAM_VLM_API_KEY=sk-...
 export OPENCAM_DETECTOR=mock
 
 # 启动服务（默认端口 8600）
+# 控制台：先 make web-build（Node 20+），或开发时另开 make web-dev
 uv run uvicorn opencam.main:app --port 8600
 ```
 

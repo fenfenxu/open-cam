@@ -9,7 +9,7 @@ open-cam 是视频监控分析工具：接入 RTSP 流或视频文件，YOLO + �
 - 语言：Python ≥ 3.12；构建后端 hatchling；包管理/运行用 **uv**。
 - Web 框架：FastAPI + uvicorn（默认端口 8600）；数据库 SQLite + SQLAlchemy + Alembic 版本化迁移（pydantic-settings 管配置）。
 - 检测：ultralytics YOLOv8 + ByteTrack（`lap` 是 ByteTrack 依赖）；OpenCV（headless 版）读流。
-- Web 控制台：**无构建步骤的原生 HTML/JS**（`opencam/web/`），FastAPI 直接挂载。
+- Web 控制台：**Vite + React + TypeScript + shadcn/ui**（`web/`），发布期构建到 `web/dist` 由 FastAPI 提供；开发用 `make web-dev`（代理到 `:8600`）。
 - 前端、README、代码注释、规则名等用户可见内容均使用**中文**；代码标识符用英文。
 
 ## 运行时架构
@@ -58,7 +58,9 @@ opencam/
 ├── streams/           CaptureWorker 基类、FileSource（循环限速播放）、RTSPSource（指数退避重连）、manager
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
 ├── training/          自助训练：任务定义、抽帧、标注、本地微调评估、模型版本登记与 A/B 部署回滚
-└── web/               无构建原生 SPA：index.html + app.js + pages/*.js + style.css
+```
+
+web/                   Vite + React 控制台（shadcn/ui）；产物 web/dist
 
 tests/                 pytest（见下）
 agent/monitor_agent.py 示例监控 Agent：轮询未确认事件 → LLM 定级 → webhook → 自动 ack
@@ -77,8 +79,14 @@ data/                  旧版默认数据目录（现已默认用户数据目录
 uv venv --python 3.12
 uv pip install -e .
 
-# 启动服务（默认端口 8600）
+# 启动服务（默认端口 8600；控制台需先 make web-build）
 uv run uvicorn opencam.main:app --port 8600
+
+# 开发控制台（另开终端，Vite :5173 代理到后端）
+make web-dev
+
+# 构建控制台到 web/dist（make run / make test 需要）
+make web-build
 
 # 无模型环境/CI（不下载 yolov8n.pt）
 export OPENCAM_DETECTOR=mock
@@ -90,7 +98,7 @@ opencam cameras list        # 或开发时 uv run opencam cameras list
 uv run python scripts/export_openapi.py
 ```
 
-上述命令在根目录 `Makefile` 中有对应 target（`make install / run / run-mock / test / openapi / config / clean`，`make help` 查看全部）。
+上述命令在根目录 `Makefile` 中有对应 target（`make install / run / run-mock / web-dev / web-build / test / openapi / config / clean`，`make help` 查看全部）。
 
 配置：可选 `config.yaml`（参考 `config.example.yaml`，已在 .gitignore）；任意字段可用 `OPENCAM_` + 大写字段名环境变量覆盖。VLM 的 api_key **只能**走环境变量 `OPENCAM_VLM_API_KEY`，不写进任何文件。
 
@@ -98,10 +106,12 @@ uv run python scripts/export_openapi.py
 
 ```bash
 uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，不下载模型）
+make test            # 先 npm 构建 web/dist，再跑前端 Vitest 与 pytest
 ```
 
 约定：
 
+- 跑 `tests/test_web.py` 前必须有 `web/dist`（`make web-build` 或 `make test`）。
 - `tests/conftest.py` 的 `tmp_settings` 夹具把 `settings.data_dir` 指到 `tmp_path` 并强制 `OPENCAM_DETECTOR=mock`。**测试绝不触碰真实 YOLO 模型、不依赖网络。**
 - 端到端测试（`test_pipeline_e2e.py`）用 OpenCV 生成合成视频（移动矩形）走完整链路。
 - 规则引擎（`detection/rules.py`）是纯逻辑、时钟可注入，优先为规则变更补单测。

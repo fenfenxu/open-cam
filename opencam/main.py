@@ -9,9 +9,10 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from . import __version__
 from .api import account, cameras, events, notify, packs, rule_presets, rules, stats, system, trained_models, training, videos
@@ -144,12 +145,53 @@ def health():
     return {"status": "ok"}
 
 
-# ---- 本地 Web 控制台（无构建步骤的原生 SPA）----
+# ---- Web 控制台（Vite 构建产物 web/dist）----
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
-app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
+
+_CONSOLE_PREFIXES = (
+    "/cameras", "/events", "/training", "/marketplace",
+    "/settings", "/rules", "/dashboard",
+)
 
 
-@app.get("/", include_in_schema=False)
-def console():
-    return FileResponse(WEB_DIR / "index.html")
+def _wants_html(accept: str) -> bool:
+    first = accept.split(",")[0].split(";")[0].strip().lower()
+    return first in {"text/html", "application/xhtml+xml"}
+
+
+def _is_console_nav(path: str) -> bool:
+    if path == "/":
+        return True
+    return any(path == p or path.startswith(p + "/") for p in _CONSOLE_PREFIXES)
+
+
+class _HtmlSpaMiddleware(BaseHTTPMiddleware):
+    """浏览器刷新 History 路由时返回 index.html；REST 客户端仍走 JSON。"""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        if (
+            request.method == "GET"
+            and _wants_html(request.headers.get("accept", ""))
+            and _is_console_nav(request.url.path)
+        ):
+            index = DIST / "index.html"
+            if index.is_file():
+                return FileResponse(index)
+        return await call_next(request)
+
+
+app.add_middleware(_HtmlSpaMiddleware)
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa(full_path: str):
+    """History 路由：存在的 dist 文件直接返回，否则回退 index.html。"""
+    if not (DIST / "index.html").is_file():
+        raise HTTPException(503, "控制台未构建，请运行 make web-build")
+    candidate = (DIST / full_path).resolve()
+    dist_root = DIST.resolve()
+    if dist_root in candidate.parents or candidate == dist_root:
+        if candidate.is_file():
+            return FileResponse(candidate)
+    return FileResponse(DIST / "index.html")

@@ -6,7 +6,7 @@ PORT ?= 8600
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install-dev run run-mock test openapi config clean revision help
+.PHONY: help install install-dev run run-mock test openapi config clean revision web-dev web-build help
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -24,7 +24,14 @@ run: ## 启动服务（默认端口 8600，PORT=xxxx 覆盖）
 run-mock: ## 以 mock detector 启动服务（不下载 yolov8n.pt）
 	OPENCAM_DETECTOR=mock $(UV) run uvicorn opencam.main:app --port $(PORT)
 
-test: ## 运行全部测试（强制 mock detector，不下载模型）
+web-dev: ## 启动 Vite 控制台（需另开 make run）
+	cd web && npm run dev
+
+web-build: ## 构建 web/dist
+	cd web && npm ci && npm run build
+
+test: web-build ## 运行全部测试（强制 mock detector，不下载模型）
+	cd web && npm test
 	OPENCAM_DETECTOR=mock $(UV) run pytest
 
 openapi: ## 重新导出 docs/openapi.json（改动 API 后必跑）
