@@ -137,7 +137,7 @@ def test_apply_pack_writes_name(tmp_settings, tmp_path):
         session.add(camera)
         session.commit()
 
-        created = apply_pack("restaurant", camera.id, session)
+        created = apply_pack("restaurant", session, camera_id=camera.id).rules
         names = {r.name for r in created}
         assert "后厨区域入侵" in names
         assert "用餐区客流统计" in names

@@ -1,5 +1,6 @@
 name: 后厨闯入
 type: zone_intrusion
+camera: kitchen
 cooldown: 60
 params:
   # 默认后厨区域（画面右侧，相对坐标）

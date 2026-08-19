@@ -1,5 +1,6 @@
 name: 门口进出客流
 type: line_crossing
+camera: door
 cooldown: 5
 params:
   # 默认门口中部一条横线（相对坐标，应用时按实际分辨率换算）。

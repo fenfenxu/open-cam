@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session_scope
-from ..models import RuleOut
+from ..models import CameraOut, RuleOut
 from ..packs import installer
 from ..packs.apply import apply_pack
 from ..packs.manifest import PackError
+from .cameras import camera_out
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
 
@@ -48,16 +49,27 @@ def install(body: InstallRequest):
 
 
 class ApplyRequest(BaseModel):
-    camera_id: int
+    camera_id: int | None = None
 
 
-@router.post("/{pack_id}/apply", response_model=list[RuleOut], status_code=201, summary="应用方案包到摄像头", description="规则模板的相对坐标按摄像头画面分辨率换算为绝对像素后写入规则表。")
+class PackApplyOut(BaseModel):
+    cameras: list[CameraOut]
+    rules: list[RuleOut]
+
+
+@router.post("/{pack_id}/apply", response_model=PackApplyOut, status_code=201,
+             summary="应用方案包",
+             description="新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。")
 def apply(pack_id: str, body: ApplyRequest,
           session: Session = Depends(session_scope)):
     try:
-        return apply_pack(pack_id, body.camera_id, session)
+        result = apply_pack(pack_id, session, camera_id=body.camera_id)
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
+    return PackApplyOut(
+        cameras=[camera_out(c) for c in result.cameras],
+        rules=[RuleOut.model_validate(r) for r in result.rules],
+    )
 
 
 @router.delete("/{pack_id}", status_code=204, summary="卸载方案包", description="仅已安装的包可卸载；内置包返回 400。")

@@ -196,8 +196,11 @@ def _packs(args, client) -> None:
         _emit(_request(client, "POST", "/api/packs/install",
                        body={"source": args.source}), args.pretty)
     elif args.action == "apply":
+        body: dict = {}
+        if args.camera_id is not None:
+            body["camera_id"] = args.camera_id
         _emit(_request(client, "POST", f"/api/packs/{args.pack_id}/apply",
-                       body={"camera_id": args.camera_id}), args.pretty)
+                       body=body), args.pretty)
     elif args.action == "uninstall":
         _request(client, "DELETE", f"/api/packs/{args.pack_id}")
         _emit({"ok": True, "id": args.pack_id}, args.pretty)
@@ -351,8 +354,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_parser("list", help="内置 + 已安装方案包")
     q = sp.add_parser("install", help="安装（目录/zip/URL）")
     q.add_argument("--source", required=True)
-    q = sp.add_parser("apply", help="应用到摄像头")
-    q.add_argument("pack_id"); q.add_argument("camera_id", type=int)
+    q = sp.add_parser("apply", help="新包不跟摄像头 id，旧包必须跟")
+    q.add_argument("pack_id")
+    q.add_argument("camera_id", nargs="?", type=int,
+                   help="新包不跟摄像头 id，旧包必须跟")
     q = sp.add_parser("uninstall", help="卸载"); q.add_argument("pack_id")
     p.set_defaults(func=_packs)
 
