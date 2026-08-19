@@ -9,7 +9,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -144,12 +144,60 @@ def health():
     return {"status": "ok"}
 
 
-# ---- 本地 Web 控制台（无构建步骤的原生 SPA）----
+# ---- 本地 Web 控制台（Vite 构建产物 web/dist + History SPA fallback）----
+# REST 与前端同路径（如 GET /events）。浏览器导航 Accept 含 text/html 时回 index.html；
+# fetch/API 客户端默认 */* 仍走 JSON。/docs /redoc 保持文档页。
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
-app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")
+DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
+_SPA_HTML_SKIP = {"/docs", "/redoc", "/openapi.json"}
+
+
+def _dist_file(rel: str) -> Path | None:
+    """只返回 dist 内的真实文件，拒绝 .. 逃出目录。"""
+    if not DIST.is_dir() or rel.startswith("/"):
+        return None
+    candidate = (DIST / rel).resolve()
+    root = DIST.resolve()
+    if root not in candidate.parents and candidate != root:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _console_index() -> FileResponse:
+    index = DIST / "index.html"
+    if not index.is_file():
+        raise HTTPException(503, "控制台未构建，请先运行 make web-build")
+    return FileResponse(index)
+
+
+@app.middleware("http")
+async def spa_html_navigation(request: Request, call_next):
+    """刷新 /events、/cameras 等 History 路由时返回 HTML，避免撞上 REST 出 JSON。"""
+    if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+        path = request.url.path
+        if path not in _SPA_HTML_SKIP:
+            rel = path.lstrip("/")
+            asset = _dist_file(rel) if rel else None
+            if asset is not None:
+                return FileResponse(asset)
+            if DIST.joinpath("index.html").is_file():
+                return _console_index()
+    return await call_next(request)
+
+
+_assets = DIST / "assets"
+if _assets.is_dir():
+    app.mount("/assets", StaticFiles(directory=_assets), name="assets")
 
 
 @app.get("/", include_in_schema=False)
 def console():
-    return FileResponse(WEB_DIR / "index.html")
+    return _console_index()
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa(full_path: str):
+    asset = _dist_file(full_path)
+    if asset is not None:
+        return FileResponse(asset)
+    return _console_index()

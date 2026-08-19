@@ -21,7 +21,7 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲)
 - **采样检测而非逐帧**：默认 3 fps，CPU 可承受。
 - **SQLite 单文件**：零运维，模型层用 SQLAlchemy，后续可换 Postgres。
 - **VLM 走 OpenAI 兼容协议**：一家客户端代码覆盖多数供应商；API Key 在控制台「设置 → 大模型」填写，或用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。
-- **Web 控制台**：无构建步骤的原生 HTML/JS，FastAPI 直接挂载，浏览器打开 `http://127.0.0.1:8600` 即用。
+- **Web 控制台**：Vite + React + shadcn/ui。开发用 `make web-dev`（需另开 `make run`）；生产式访问先 `make web-build` 再打开 `http://127.0.0.1:8600`。需要 Node 20+。
 
 ## 快速开始
 
@@ -40,6 +40,11 @@ export OPENCAM_DETECTOR=mock
 
 # 启动服务（默认端口 8600）
 uv run uvicorn opencam.main:app --port 8600
+
+# 控制台：先构建一次（Node 20+），再打开 http://127.0.0.1:8600
+make web-build
+# 开发时另开终端热更新（代理到已启动的 8600）
+make web-dev
 ```
 
 控制台点仪表盘卡片进入摄像头详情：运行中显示 MJPEG 直播。仅视频文件源可在详情页拖进度回放；RTSP 直播不支持回放（不会在本机录像）。
@@ -121,6 +126,8 @@ uv run python scripts/export_openapi.py
 服务重启时会自动恢复数据库中 `status=running` 的摄像头。
 
 ## Web 控制台
+
+源码在 `web/`（Vite + React）。`make web-build` 产出 `web/dist`，FastAPI 挂载该目录并用 SPA fallback：刷新 `/events` 等 History 路由返回 HTML，不 404。开发请 `make run`（或 `make run-mock`）后再 `make web-dev`。
 
 浏览器打开 `http://127.0.0.1:8600`：
 
@@ -219,6 +226,7 @@ uv run python agent/monitor_agent.py \
 ## 测试
 
 ```bash
+make web-build       # 控制台冒烟测试依赖 dist
 uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，不下载模型）
 ```
 

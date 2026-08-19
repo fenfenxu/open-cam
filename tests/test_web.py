@@ -1,9 +1,18 @@
-"""Web 控制台冒烟：首页与静态资源可访问。"""
+"""Web 控制台冒烟：构建产物存在，History 路由刷新回 HTML。"""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
+
+DIST_INDEX = Path(__file__).resolve().parents[1] / "web" / "dist" / "index.html"
+
+pytestmark = pytest.mark.skipif(
+    not DIST_INDEX.is_file(),
+    reason="web/dist 未构建，先运行 make web-build",
+)
 
 
 @pytest.fixture()
@@ -19,72 +28,43 @@ def test_console_index(client):
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
     assert "open-cam" in resp.text
-    assert "/static/app.js" in resp.text
+    assert "/static/app.js" not in resp.text
+    assert "/assets/" in resp.text
 
 
-def test_static_assets(client):
-    for path in ("/static/style.css", "/static/app.js",
-                 "/static/pages/dashboard.js", "/static/pages/rules.js",
-                 "/static/pages/events.js", "/static/pages/cameras.js",
-                 "/static/pages/camera.js",
-                 "/static/pages/marketplace.js", "/static/pages/settings.js",
-                 "/static/pages/training.js"):
-        resp = client.get(path)
-        assert resp.status_code == 200, path
-
-
-def test_training_wizard_page_wired(client):
+def test_legacy_native_assets_gone(client):
     html = client.get("/").text
-    assert 'href="#/training"' in html
-    assert 'data-route="training"' in html
-    app = client.get("/static/app.js").text
-    assert "pages/training.js" in app
-    js = client.get("/static/pages/training.js").text
-    assert "/training/tasks" in js
-    assert "说需求" in js
-    assert "/models" in js
-    settings_js = client.get("/static/pages/settings.js").text
-    assert "/api/system/vlm" in settings_js
-    assert "API Key" in settings_js
-    events = client.get("/static/pages/events.js").text
-    assert "/events/" in events
-    assert "false_alarm" in events
-    assert "miss" in events
-    assert "/feedback" in events
+    assert 'id="root"' in html
+    assert "/static/app.js" not in html
+    resp = client.get("/static/pages/events.js")
+    assert "text/html" in resp.headers["content-type"]
+    assert "open-cam" in resp.text
 
 
-def test_cameras_page_has_video_library(client):
-    js = client.get("/static/pages/cameras.js").text
-    assert "/videos" in js
-    assert "data-act=\"save\"" in js or "data-act='save'" in js
-    assert "method: 'PUT'" in js or 'method: "PUT"' in js or "method: `PUT`" in js
-    assert "c-type" in js
-    assert "c-uri" in js
-    assert "请新建" not in js
-    assert "请先停止" in js or "规则" in js
+def test_spa_fallback_events_html(client):
+    resp = client.get("/events", headers={"Accept": "text/html"})
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "open-cam" in resp.text
 
 
-def test_camera_detail_live_and_replay_copy(client):
-    js = client.get("/static/pages/camera.js").text
-    assert "/live.mjpg" in js
-    assert "/source" in js
-    assert "该源为直播流，不支持回放" in js
-    app = client.get("/static/app.js").text
-    assert "cameras/" in app
-    dash = client.get("/static/pages/dashboard.js").text
-    assert "#/cameras/" in dash
+def test_spa_fallback_unmatched_route(client):
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "open-cam" in resp.text
 
 
-def test_events_page_defaults_to_todos(client):
-    js = client.get("/static/pages/events.js").text
-    assert "needs_action" in js
-    assert "待办" in js
-    assert "含观察记录" in js
+def test_events_api_still_json(client):
+    resp = client.get("/events")
+    assert resp.status_code == 200
+    assert "application/json" in resp.headers["content-type"]
+    assert isinstance(resp.json(), list)
 
 
-def test_marketplace_new_pack_has_no_camera_select(client):
-    js = client.get("/static/pages/marketplace.js").text
-    assert "cameras" in js
-    assert "null" in js
-    # 新包分支不得绑定 data-cam-for（旧包分支仍可有）
-    assert "请到「摄像头」页" in js or "改成你的真实源" in js or "真实源" in js
+def test_spa_does_not_escape_dist(client):
+    resp = client.get("/../opencam/main.py", headers={"Accept": "text/html"})
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "def health" not in resp.text
+    assert "open-cam" in resp.text
