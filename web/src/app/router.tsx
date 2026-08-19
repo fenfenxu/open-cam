@@ -2,6 +2,7 @@ import { createBrowserRouter } from "react-router";
 import { AppShell } from "@/components/app/app-shell";
 import { CameraDetailPage } from "@/pages/camera-detail";
 import { CamerasPage } from "@/pages/cameras";
+import { DashboardPage } from "@/pages/dashboard";
 import { EventsPage } from "@/pages/events";
 import { PlaceholderPage } from "@/pages/placeholder";
 import { RulesPage } from "@/pages/rules";
@@ -11,7 +12,7 @@ export const router = createBrowserRouter([
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <PlaceholderPage title="仪表盘" /> },
+      { index: true, element: <DashboardPage /> },
       { path: "cameras", element: <CamerasPage /> },
       { path: "cameras/:id", element: <CameraDetailPage /> },
       { path: "rules", element: <RulesPage /> },
