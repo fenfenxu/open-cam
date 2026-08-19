@@ -1,83 +1,61 @@
 ---
 name: opencam
-description: 查询与控制 open-cam 本地视频监控系统（摄像头、规则、告警事件、方案包、客流统计）。当用户想查看摄像头状态、查询/确认告警、看分时段客流、给摄像头应用行业方案包、抓实时画面时使用。服务默认 http://127.0.0.1:8600，CLI 为 opencam。
+description: Use when the user asks about open-cam cameras, unacked alerts or events, footfall stats, industry packs, live snapshots, or detection rules.
 ---
 
 # opencam
 
-open-cam 是本地视频流分析服务（RTSP/视频文件 → YOLO 检测 → 规则告警 → VLM 复核 → 事件入库），**视频数据不出本机**。通过 `opencam` CLI 操作（资源式子命令，默认输出紧凑 JSON，`--pretty` 美化）。
+open-cam 是本地视频监控分析服务（RTSP/文件 → YOLO → 规则告警 → VLM 复核 → 事件入库），**视频数据不出本机**。唯一入口是 `opencam` CLI（仓库内用 `uv run opencam`）。
 
-## 前提
+## 输出契约
 
-- 服务已启动（`uv run uvicorn opencam.main:app --port 8600`）。
-- CLI 已随包安装：`uv run opencam ...`（仓库内），或 `uv tool install` 后直接 `opencam ...`。
-- 服务地址：`--base-url` 或环境变量 `OPENCAM_BASE_URL`，默认 `http://127.0.0.1:8600`。
-- 完整接口文档：`{base_url}/docs`（Swagger UI）与 `{base_url}/redoc`。
+- 成功 stdout 永远是紧凑 JSON，直接 `json.loads`；**不要加 `--pretty`**（那是给人看的）。
+- 删除/卸载返回 `{"ok":true,"id":...}`；snapshot 返回 `{"ok":true,"path":...,"bytes":...}`。
+- 失败时信息在 stderr、退出码 1，stdout 不掺成功 JSON。
+- 事件 `ts` 是 Unix 秒。列表默认 `--page-size 20`，返回满页必须再用 `--offset` 翻页拉完。
+- 服务地址：`--base-url` 或 `OPENCAM_BASE_URL`，默认 `http://127.0.0.1:8600`。
 
-## 典型任务
+## 发现命令
 
-### 查最近的告警事件
+命令树以 `--help` 为准，不要凭记忆或本文抄参数：
 
 ```bash
-opencam events list --pretty
-opencam events list --acked false --camera-id 1        # 只看 1 号摄像头未确认的
-opencam events list --type zone_intrusion              # 按类型过滤
-opencam events get 42 --pretty                         # 详情（含 VLM 判定与理由）
+opencam --help
+opencam events --help
 ```
 
-### 确认（ack）告警
+其余资源（cameras、rules、packs、stats、videos、system）同理，用 `opencam <resource> --help` 查看。事件片段下载等冷门参数见 `opencam events --help`。
+
+## 工作流：查未确认告警
 
 ```bash
+opencam events list --acked false
+opencam events get 42
 opencam events ack 42
 ```
 
-### 看分时段客流统计
+1. `events list --acked false` 拉未确认事件；返回满 `--page-size` 条时用 `--offset` 继续拉，可按 `--camera-id` / `--type` 过滤。
+2. 逐条 `events get <id>` 看详情（含 VLM 判定 `vlm_verdict` 与理由）。
+3. 向用户说明判定依据后，才 `events ack <id>` 确认。
+
+## 工作流：加区域规则
 
 ```bash
-opencam stats footfall --camera-id 1 --pretty          # 今天 24 小时进/出分桶
-opencam stats footfall --camera-id 1 --date 2026-08-19 # 指定日期
+opencam cameras get 1
+opencam cameras snapshot 1 -o cam1.jpg
+opencam rules presets
+opencam rules create 1 --type zone_count --name 排队超员 --params '{"polygon": [[120,80],[900,80],[900,700],[120,700]], "threshold": 5}'
 ```
 
-### 给摄像头应用方案包
+1. `cameras get` 确认摄像头存在与分辨率。
+2. `cameras snapshot` 抓当前帧，**多边形像素坐标必须从这张图上量**。
+3. `rules presets` 查五种规则类型的参数说明。
+4. `rules create` 用刚量出的像素坐标建规则。
 
-```bash
-opencam packs list                                     # 浏览内置/已安装包
-opencam packs apply fast-food 1                        # 应用到 1 号摄像头
-opencam rules list 1                                   # 确认规则已生成
-```
-
-### 摄像头与规则管理
-
-```bash
-opencam cameras list
-opencam cameras create --name 门口 --source-type file --source-uri /v/demo.mp4 --autostart
-opencam cameras update 1 --name 后门
-opencam cameras start 1 / stop 1 / delete 1
-opencam cameras reconnect 1
-opencam cameras batch-start 1 2
-opencam cameras snapshot 1 -o /tmp/cam1.jpg            # 抓实时帧
-opencam videos list
-opencam videos upload /v/demo.mp4
-
-opencam rules presets                                  # 五种规则的引导元数据
-opencam rules create 1 --type zone_count --name 排队超员 \
-  --params '{"polygon": [[0,0],[320,0],[320,240],[0,240]], "threshold": 5}'
-opencam rules delete 1 3                               # 摄像头 1 的规则 3
-```
-
-### 系统状态
-
-```bash
-opencam system info          # 推理设备/模型/方案包统计/VLM 配置
-```
+量不到坐标就问用户要，**禁止**凭 1080p 经验编造矩形——假坐标会产生永远不触发或乱触发的规则。
 
 ## 事件字段速查
 
-- `type`：zone_intrusion 区域入侵 / loitering 徘徊逗留 / object_count 人数统计 / zone_count 区域人数 / line_crossing 越线计数。
-- `vlm_status`：pending / skipped（无 key）/ done / failed；`vlm_verdict`：confirmed / false_alarm / uncertain。
-- `detail`：命中目标框、track id、数量；line_crossing 另有 `direction`（in/out）与 `crossings`。
+- `type`：zone_intrusion 区域入侵 / loitering 徘徊 / object_count 人数统计 / zone_count 区域人数 / line_crossing 越线计数。
+- `vlm_status`：pending / skipped / done / failed；`vlm_verdict`：confirmed / false_alarm / uncertain。
 - `acked`：是否已确认。
-
-## 兼容旧脚本
-
-`scripts/opencam_client.py` 保留旧子命令（events/status/snapshot/ack），内部转发到新 CLI；新任务请直接用 `opencam`。
