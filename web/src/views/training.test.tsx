@@ -61,7 +61,7 @@ describe("MarketplacePage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/api/packs") {
+        if (url.startsWith("/api/packs?view=cards")) {
           return jsonResp([
             {
               id: "fast-food",
@@ -70,9 +70,18 @@ describe("MarketplacePage", () => {
               vertical: "餐饮",
               version: "1.0",
               author: "open-cam",
+              fingerprint: "fp",
+              tagline: "多路摄像头方案",
               description: "多路摄像头方案",
-              cameras: [{ id: "counter", name: "柜台" }],
-              rules: [{ name: "排队", camera: "counter" }],
+              availability: "available",
+              unavailable_reason: null,
+              camera_count: 1,
+              rule_count: 1,
+              scene_count: 1,
+              has_demo: true,
+              trial_available: false,
+              application_mode: "create_cameras",
+              cover_asset_id: null,
             },
           ]);
         }
@@ -89,7 +98,10 @@ describe("MarketplacePage", () => {
     });
     expect(screen.getByLabelText("安装源")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择方案包文件" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "应用" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "查看详情" })).toHaveAttribute(
+      "href",
+      "/marketplace/fast-food",
+    );
   });
 
   it("uploads a selected zip file when installing a local pack", async () => {
@@ -99,7 +111,7 @@ describe("MarketplacePage", () => {
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         requests.push({ url, body: init?.body });
-        if (url === "/api/packs") return jsonResp([]);
+        if (url.startsWith("/api/packs?view=cards")) return jsonResp([]);
         if (url === "/api/cameras") return jsonResp([]);
         if (url === "/api/packs/online") return jsonResp({ note: "在线目录暂不可用" });
         if (url === "/api/packs/install-upload") {
