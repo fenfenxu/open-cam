@@ -1,9 +1,4 @@
-"""事件通知：异步队列把命中事件推送到配置的 webhook 渠道（飞书/企业微信/钉钉机器人等）。
-
-- 仿 VLM 复核线程：daemon 线程 + 队列消费，绝不阻塞主链路。
-- 渠道的 camera_id / rule_type 为空表示通配；推送结果逐渠道记入 EventAction。
-- 无启用渠道时直接丢弃，不记日志噪音。
-"""
+"""事件通知：个人渠道 + 群机器人兜底；仅待办推送。"""
 
 from __future__ import annotations
 
@@ -16,7 +11,8 @@ from typing import Any, Optional
 import httpx
 
 from .db import get_session
-from .models import RULE_TYPE_NAMES, Event, EventAction, NotifyChannel
+from .models import (RULE_TYPE_NAMES, Event, EventAction, EventRouting,
+                      NotifyChannel, Person, PersonChannel)
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +31,28 @@ def event_payload(event: Event) -> dict[str, Any]:
         "time": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(event.ts)),
         "status": event.status,
         "assignee": event.assignee,
+        "assignee_id": event.assignee_id,
+        "needs_action": event.needs_action,
+        "intent": event.intent,
+        "repeat_count": event.repeat_count,
+        "verdict": event.verdict,
         "detail": event.detail,
     }
 
 
+def match_routings(session, event: Event) -> list[EventRouting]:
+    """匹配启用路由：camera_id / rule_type 为空视为通配，按 id 升序。"""
+    routings = (session.query(EventRouting).filter_by(enabled=True)
+                .order_by(EventRouting.id.asc()).all())
+    return [
+        r for r in routings
+        if (r.camera_id is None or r.camera_id == event.camera_id)
+        and (r.rule_type is None or r.rule_type == event.type)
+    ]
+
+
 def match_channels(session, event: Event) -> list[NotifyChannel]:
-    """匹配启用中的渠道：camera_id / rule_type 为空视为通配。"""
+    """匹配启用中的群渠道：camera_id / rule_type 为空视为通配。"""
     channels = session.query(NotifyChannel).filter_by(enabled=True).all()
     return [
         ch for ch in channels
@@ -55,36 +67,64 @@ def send_webhook(client: httpx.Client, url: str, payload: dict[str, Any]) -> Non
     resp.raise_for_status()
 
 
-def notify_event(event_id: int, client: Optional[httpx.Client] = None) -> int:
-    """把事件推送到所有匹配渠道，结果记入 EventAction；返回推送的渠道数。
+def _push_one(session, event_id: int, client: httpx.Client, url: str,
+              actor: str, payload: dict[str, Any]) -> bool:
+    try:
+        send_webhook(client, url, payload)
+        result: dict[str, Any] = {"ok": True, "webhook": url}
+        ok = True
+    except Exception as exc:  # noqa: BLE001 单渠道失败不影响其他渠道
+        logger.warning("通知渠道 %s 推送失败 event=%d: %s", actor, event_id, exc)
+        result = {"ok": False, "webhook": url, "error": str(exc)[:200]}
+        ok = False
+    session.add(EventAction(event_id=event_id, action="notify",
+                            actor=actor, payload=result))
+    return ok
 
-    同步实现，供 Notifier 线程与「重发通知」API 复用。
-    """
+
+def notify_event(event_id: int, client: Optional[httpx.Client] = None) -> int:
+    """推送待办：先个人渠道再群渠道；返回推送次数。"""
     session = get_session()
     own_client = client is None
     if own_client:
         client = httpx.Client()
+    sent = 0
     try:
         event = session.get(Event, event_id)
-        if event is None:
+        if event is None or not event.needs_action:
             return 0
-        channels = match_channels(session, event)
-        if not channels:
-            return 0
+
+        routings = match_routings(session, event)
+        if routings:
+            lead = routings[0]
+            person = session.get(Person, lead.person_id)
+            if person is not None:
+                event.assignee_id = person.id
+                event.assignee = person.name
+
         payload = event_payload(event)
-        for ch in channels:
-            try:
-                send_webhook(client, ch.webhook, payload)
-                result: dict[str, Any] = {"ok": True, "webhook": ch.webhook}
-            except Exception as exc:  # noqa: BLE001 单渠道失败不影响其他渠道
-                logger.warning("通知渠道 %s 推送失败 event=%d: %s",
-                               ch.name, event_id, exc)
-                result = {"ok": False, "webhook": ch.webhook,
-                          "error": str(exc)[:200]}
-            session.add(EventAction(event_id=event_id, action="notify",
-                                    actor=ch.name, payload=result))
+        seen_persons: set[int] = set()
+        for routing in routings:
+            if routing.person_id in seen_persons:
+                continue
+            seen_persons.add(routing.person_id)
+            person = session.get(Person, routing.person_id)
+            if person is None:
+                continue
+            channels = (session.query(PersonChannel)
+                        .filter_by(person_id=person.id, enabled=True)
+                        .order_by(PersonChannel.id.asc()).all())
+            for ch in channels:
+                _push_one(session, event_id, client, ch.webhook,
+                          f"{person.name}({ch.kind})", payload)
+                sent += 1
+
+        for ch in match_channels(session, event):
+            _push_one(session, event_id, client, ch.webhook, ch.name, payload)
+            sent += 1
+
         session.commit()
-        return len(channels)
+        return sent
     finally:
         session.close()
         if own_client:
@@ -115,8 +155,6 @@ class Notifier:
     def submit(self, event_id: int) -> None:
         self._queue.put(event_id)
 
-    # ---- 内部 ----
-
     def _run(self) -> None:
         with httpx.Client() as client:
             while not self._stop.is_set():
@@ -132,5 +170,4 @@ class Notifier:
                     self._queue.task_done()
 
 
-# 全局单例
 notifier = Notifier()

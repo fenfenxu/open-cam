@@ -9,7 +9,6 @@ import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -22,7 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError, fmtTime } from "@/lib/api";
 import {
   ACTION_NAMES,
-  NEXT_ACTIONS,
+  HUMAN_VERDICT_NAMES,
   RULE_TYPE_NAMES,
   STATUS_NAMES,
   VLM_VERDICT_NAMES,
@@ -49,6 +48,8 @@ type CamEvent = {
   status: string;
   starred: boolean;
   assignee: string | null;
+  assignee_id: number | null;
+  verdict: string | null;
   note: string | null;
   needs_action: boolean;
   clip_start?: number | null;
@@ -69,6 +70,8 @@ type TrainingTask = {
   property: string;
   status: string;
 };
+
+type Person = { id: number; name: string; login_name: string | null };
 
 type Filters = {
   cameraId: string;
@@ -123,7 +126,15 @@ function fmtPayload(a: EventAction): string {
     const to = String(p.to ?? "");
     return `${STATUS_NAMES[from] || from} → ${STATUS_NAMES[to] || to}`;
   }
-  if (a.action === "assign") return `→ ${p.to || "（取消指派）"}`;
+  if (a.action === "assign") {
+    const to = p.to;
+    return `→ ${to == null ? "（取消指派）" : String(to)}`;
+  }
+  if (a.action === "verdict") {
+    const from = String(p.from ?? "—");
+    const to = String(p.to ?? "—");
+    return `${HUMAN_VERDICT_NAMES[from] || from} → ${HUMAN_VERDICT_NAMES[to] || to}`;
+  }
   if (a.action === "note") return String(p.text || "");
   return "";
 }
@@ -213,7 +224,7 @@ export function EventsPage() {
     includeObserve: false,
   });
   const [openId, setOpenId] = useState<number | null>(null);
-  const [assignee, setAssignee] = useState("");
+  const [assigneeId, setAssigneeId] = useState<string>(ALL);
   const [note, setNote] = useState("");
   const [feedbackTask, setFeedbackTask] = useState("");
 
@@ -255,9 +266,19 @@ export function EventsPage() {
     enabled: openId != null,
   });
 
+  const peopleQuery = useQuery({
+    queryKey: ["people"],
+    queryFn: () => api<Person[]>("/api/people"),
+    enabled: openId != null,
+  });
+
   useEffect(() => {
     if (detailQuery.data) {
-      setAssignee(detailQuery.data.assignee ?? "");
+      setAssigneeId(
+        detailQuery.data.assignee_id != null
+          ? String(detailQuery.data.assignee_id)
+          : ALL,
+      );
       setNote(detailQuery.data.note ?? "");
     }
   }, [detailQuery.data]);
@@ -543,27 +564,70 @@ export function EventsPage() {
               <Kv label="VLM 状态">{event.vlm_status}</Kv>
               <Kv label="VLM 判定">{event.vlm_verdict || "—"}</Kv>
               <Kv label="VLM 理由">{event.vlm_reason || "—"}</Kv>
+              <Kv label="人工判定">
+                {event.verdict ? HUMAN_VERDICT_NAMES[event.verdict] || event.verdict : "—"}
+              </Kv>
             </dl>
 
             <h2 className="text-base font-medium">处置</h2>
             {actionable ? (
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  {(NEXT_ACTIONS[event.status] || []).map(([st, label]) => (
-                    <Button
-                      key={st}
-                      size="sm"
-                      onClick={() =>
-                        patchEvent.mutate({
-                          id: event.id,
-                          body: { status: st },
-                          msg: "状态已更新",
-                        })
-                      }
-                    >
-                      {label}
-                    </Button>
-                  ))}
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      patchEvent.mutate({
+                        id: event.id,
+                        body: { verdict: "confirmed" },
+                        msg: "已标记属实",
+                      })
+                    }
+                  >
+                    属实
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      patchEvent.mutate({
+                        id: event.id,
+                        body: { verdict: "false_alarm" },
+                        msg: "已标记误报",
+                      })
+                    }
+                  >
+                    误报
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      patchEvent.mutate({
+                        id: event.id,
+                        body: { verdict: "unclear" },
+                        msg: "已标记看不清",
+                      })
+                    }
+                  >
+                    看不清
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={
+                      event.verdict !== "confirmed" ||
+                      event.status === "resolved" ||
+                      event.status === "ignored"
+                    }
+                    onClick={() =>
+                      patchEvent.mutate({
+                        id: event.id,
+                        body: { status: "resolved" },
+                        msg: "已结案",
+                      })
+                    }
+                  >
+                    处置完成
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -574,20 +638,29 @@ export function EventsPage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Label htmlFor="d-assignee">负责人</Label>
-                  <Input
-                    id="d-assignee"
-                    className="max-w-xs"
-                    value={assignee}
-                    placeholder="处置负责人"
-                    onChange={(e) => setAssignee(e.target.value)}
-                  />
+                  <Select value={assigneeId} onValueChange={(v) => setAssigneeId(v ?? ALL)}>
+                    <SelectTrigger id="d-assignee" className="max-w-xs">
+                      <SelectValue placeholder="选择员工" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>未指派</SelectItem>
+                      {(peopleQuery.data ?? []).map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() =>
                       patchEvent.mutate({
                         id: event.id,
-                        body: { assignee: assignee || null },
+                        body: {
+                          assignee_id:
+                            assigneeId === ALL ? null : Number(assigneeId),
+                        },
                         msg: "负责人已保存",
                       })
                     }
