@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
@@ -6,17 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
-import { jsonBody, type Camera } from "@/lib/cameras";
-import { RULE_TYPE_NAMES } from "@/lib/labels";
-import { isLegacyPack, type PackApplyResult, type SolutionPack } from "@/lib/packs";
+import { jsonBody } from "@/lib/cameras";
+import {
+  AVAILABILITY_NAMES,
+  ORIGIN_NAMES,
+  packDetailPath,
+  type PackCard,
+} from "@/lib/packs";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -24,52 +22,41 @@ function errorMessage(err: unknown): string {
   return "请求失败";
 }
 
+function experienceBadge(pack: PackCard): string {
+  if (pack.availability !== "available") return "不可体验";
+  if (pack.has_demo) return pack.trial_available ? "效果演示 · 可试跑" : "效果演示";
+  return "演示降级";
+}
+
 export function MarketplacePage() {
   const queryClient = useQueryClient();
   const [source, setSource] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [legacyCam, setLegacyCam] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const packsQuery = useQuery({
-    queryKey: ["packs"],
-    queryFn: () => api<SolutionPack[]>("/api/packs"),
-  });
-  const camerasQuery = useQuery({
-    queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/api/cameras"),
+    queryKey: ["packs", "cards"],
+    queryFn: () => api<PackCard[]>("/api/packs?view=cards"),
   });
   const onlineQuery = useQuery({
     queryKey: ["packs-online"],
     queryFn: () => api<{ note?: string }>("/api/packs/online"),
   });
 
-  const cameras = camerasQuery.data ?? [];
   const packs = packsQuery.data ?? [];
 
   useEffect(() => {
     if (packsQuery.isError) toast.error(errorMessage(packsQuery.error));
   }, [packsQuery.isError, packsQuery.error]);
 
-  useEffect(() => {
-    if (!cameras.length) return;
-    setLegacyCam((prev) => {
-      const next = { ...prev };
-      for (const p of packs) {
-        if (isLegacyPack(p) && !next[p.id]) next[p.id] = String(cameras[0].id);
-      }
-      return next;
-    });
-  }, [packs, cameras]);
-
   const install = useMutation({
     mutationFn: ({ source: installSource, file }: { source?: string; file?: File }) => {
       if (file) {
         const body = new FormData();
         body.append("file", file);
-        return api<SolutionPack>("/api/packs/install-upload", { method: "POST", body });
+        return api<PackCard>("/api/packs/install-upload", { method: "POST", body });
       }
-      return api<SolutionPack>(
+      return api<PackCard>(
         "/api/packs/install",
         jsonBody("POST", { source: installSource?.trim() ?? "" }),
       );
@@ -79,31 +66,6 @@ export function MarketplacePage() {
       setSource("");
       setSelectedFile(null);
       await queryClient.invalidateQueries({ queryKey: ["packs"] });
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  });
-
-  const apply = useMutation({
-    mutationFn: async (pack: SolutionPack) => {
-      const body = isLegacyPack(pack)
-        ? { camera_id: Number(legacyCam[pack.id]) }
-        : {};
-      return {
-        pack,
-        data: await api<PackApplyResult>(`/api/packs/${pack.id}/apply`, jsonBody("POST", body)),
-      };
-    },
-    onSuccess: async ({ pack, data }) => {
-      if (isLegacyPack(pack)) {
-        const names = (data.rules || []).map((r) => RULE_TYPE_NAMES[r.type] || r.type).join("、");
-        toast.success(`已应用 ${data.rules?.length ?? 0} 条规则（含：${names}），可到「规则」页调整`);
-      } else {
-        toast.success(
-          `已创建 ${data.cameras?.length ?? 0} 路摄像头，请到「摄像头」页改成真实源后再启动`,
-        );
-      }
-      await queryClient.invalidateQueries({ queryKey: ["packs"] });
-      await queryClient.invalidateQueries({ queryKey: ["cameras"] });
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
@@ -119,7 +81,10 @@ export function MarketplacePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="方案市场" description="浏览内置/已安装包，一键应用、安装或卸载。" />
+      <PageHeader
+        title="方案市场"
+        description="浏览内置/已安装方案包，进入详情了解业务价值、机位部署与检测效果。"
+      />
 
       <form
         className="flex flex-wrap items-end gap-3 rounded-lg border p-4"
@@ -183,78 +148,45 @@ export function MarketplacePage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {packs.map((p) => (
-            <article key={p.id} className="space-y-3 rounded-lg border p-3">
+            <article key={p.id} className="flex flex-col gap-3 rounded-lg border p-3">
               <header className="flex items-start justify-between gap-2">
                 <h3 className="text-sm font-medium">{p.name}</h3>
-                <Badge variant="secondary">{p.origin === "builtin" ? "内置" : "已安装"}</Badge>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                  <Badge variant="secondary">{ORIGIN_NAMES[p.origin] ?? p.origin}</Badge>
+                  {p.availability !== "available" ? (
+                    <Badge variant="destructive">
+                      {AVAILABILITY_NAMES[p.availability] ?? p.availability}
+                    </Badge>
+                  ) : null}
+                </div>
               </header>
               <p className="text-xs text-muted-foreground">
                 {p.vertical} · v{p.version} · {p.author || "匿名"}
               </p>
-              <p className="text-sm">{p.description}</p>
-              {isLegacyPack(p) ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    规则模板：{(p.rules || []).map((r) => r.name).join("、")}
-                  </p>
-                  <Select
-                    value={legacyCam[p.id] ?? ""}
-                    onValueChange={(v) => v && setLegacyCam((prev) => ({ ...prev, [p.id]: String(v) }))}
-                    disabled={!cameras.length}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue>
-                        {(() => {
-                          const camera = cameras.find(
-                            (item) => String(item.id) === legacyCam[p.id],
-                          );
-                          return camera ? `应用到：[${camera.id}] ${camera.name}` : "选择摄像头";
-                        })()}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cameras.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          应用到：[{c.id}] {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              ) : (
-                <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-                  {(p.cameras || []).map((c) => {
-                    const names = (p.rules || [])
-                      .filter((r) => r.camera === c.id)
-                      .map((r) => r.name)
-                      .join("、");
-                    return (
-                      <li key={c.id}>
-                        {c.name}
-                        {names ? `：${names}` : ""}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  disabled={(isLegacyPack(p) && !cameras.length) || apply.isPending}
-                  onClick={() => apply.mutate(p)}
-                >
-                  应用
-                </Button>
-                {p.origin === "installed" ? (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => uninstall.mutate(p.id)}
-                    disabled={uninstall.isPending}
-                  >
-                    卸载
+              <p className="text-sm">{p.tagline || p.description}</p>
+              {p.unavailable_reason ? (
+                <p className="text-xs text-destructive">{p.unavailable_reason}</p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {p.camera_count} 路机位 · {p.rule_count} 条规则 · {p.scene_count} 个场景
+              </p>
+              <div className="mt-auto flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{experienceBadge(p)}</Badge>
+                <div className="flex flex-1 justify-end gap-2">
+                  {p.origin === "installed" ? (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => uninstall.mutate(p.id)}
+                      disabled={uninstall.isPending}
+                    >
+                      卸载
+                    </Button>
+                  ) : null}
+                  <Button size="sm" render={<Link prefetch={false} href={packDetailPath(p.id)} />}>
+                    查看详情
                   </Button>
-                ) : null}
+                </div>
               </div>
             </article>
           ))}

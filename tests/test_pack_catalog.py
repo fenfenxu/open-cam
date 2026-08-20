@@ -311,6 +311,40 @@ def test_get_detail_404(tmp_settings):
         assert client.get("/api/packs/no-such-pack-xyz").status_code == 404
 
 
+def test_list_packs_cards_view(tmp_settings, tmp_path, monkeypatch):
+    """view=cards 返回规范化 PackCard（含不可用包）；默认 brief 保持兼容。"""
+    from opencam.main import app
+    import opencam.packs.catalog as cat
+    import opencam.packs.installer as inst
+
+    _make_pack(tmp_path, "cards-pack")
+    (tmp_path / "broken-pack").mkdir()
+    (tmp_path / "broken-pack" / "pack.yaml").write_text(
+        "id: broken-pack\nversion: [oops\n", encoding="utf-8")
+    installed = tmp_settings.data_dir / "packs"
+    for mod in (cat, inst):
+        monkeypatch.setattr(mod, "builtin_packs_dir", lambda: tmp_path)
+        monkeypatch.setattr(mod, "installed_packs_dir", lambda: installed)
+
+    init_db(tmp_settings.db_url)
+    with TestClient(app) as client:
+        cards = client.get("/api/packs", params={"view": "cards"})
+        assert cards.status_code == 200
+        by_id = {c["id"]: c for c in cards.json()}
+        assert by_id["cards-pack"]["availability"] == "available"
+        assert by_id["cards-pack"]["application_mode"] == "existing_camera"
+        assert "fingerprint" in by_id["cards-pack"]
+        # 无效包不静默消失，带原因
+        assert by_id["broken-pack"]["availability"] == "unavailable"
+        assert by_id["broken-pack"]["unavailable_reason"]
+
+        brief = client.get("/api/packs")
+        assert brief.status_code == 200
+        brief_ids = {p["id"] for p in brief.json()}
+        assert "cards-pack" in brief_ids
+        assert "broken-pack" not in brief_ids  # brief 跳过无效包（兼容行为）
+
+
 def test_apply_unchanged_after_catalog(tmp_settings, tmp_path):
     """Catalog 不改变现有 apply 行为。"""
     from opencam.db import get_session

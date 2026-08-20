@@ -2567,14 +2567,36 @@
           "packs"
         ],
         "summary": "方案包列表",
-        "description": "内置 + 已安装；同 id 时已安装覆盖内置。",
+        "description": "内置 + 已安装；同 id 时已安装覆盖内置。view=cards 返回规范化卡片。",
         "operationId": "list_packs_api_packs_get",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "brief",
+              "title": "View"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }

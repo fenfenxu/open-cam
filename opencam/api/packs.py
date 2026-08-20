@@ -27,9 +27,15 @@ from .cameras import camera_out
 router = APIRouter(prefix="/api/packs", tags=["packs"])
 
 
-@router.get("", summary="方案包列表", description="内置 + 已安装；同 id 时已安装覆盖内置。")
-def list_packs():
-    """内置 + 已安装的方案包（兼容 brief；规范化卡片见 PackCatalog.list）。"""
+@router.get("", summary="方案包列表", description="内置 + 已安装；同 id 时已安装覆盖内置。view=cards 返回规范化卡片。")
+def list_packs(view: str = "brief"):
+    """内置 + 已安装的方案包。
+
+    默认 brief（兼容现有 Web/CLI）；`view=cards` 返回规范化 PackCard，
+    含无效/不兼容包及其原因，供市场卡片使用。
+    """
+    if view == "cards":
+        return catalog.list()
     return installer.list_packs()
 
 
