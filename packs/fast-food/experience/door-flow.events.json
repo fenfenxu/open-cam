@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "at_sec": 1.1,
+      "title": "检测到 1 人进店",
+      "result": "记录进店客流 +1",
+      "intent": "observe"
+    },
+    {
+      "at_sec": 8.3,
+      "title": "检测到 1 人出店",
+      "result": "记录出店客流 +1",
+      "intent": "observe"
+    }
+  ]
+}

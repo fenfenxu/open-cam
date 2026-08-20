@@ -10,3 +10,14 @@
 - **闭店后入侵**（zone_intrusion + active_hours 22:00-07:00，店内）：只在闭店时段生效的全画面入侵告警。
 
 演示源可先跑；到摄像头页改成真实 RTSP/文件后再启动。规则页请按实际画面调整线段与区域：越线的两个端点顺序决定「进」的方向（沿第一点→第二点看，左→右为进）。
+
+## 体验资产
+
+`experience/` 下是四路场景的演示资产：原始画面（即 `cameras/*.mp4`，H.264/yuv420p，浏览器可直接播放）、叠加检测框与触发状态的结果视频、海报和事件时间线。画面中的人是纯白合成 sprite，与 `MockDetector` 的内容识别约定一致——用 `make start-mock` 即可让演示源真实触发上述规则；真实 YOLO 不保证识别合成图形，换成真实源后请重新校准区域与阈值。
+
+资产生成与校验（均需系统 ffmpeg，无网络依赖）：
+
+```bash
+uv run python scripts/gen_fastfood_previews.py   # 重新生成全部资产（幂等覆盖）
+uv run python scripts/check_pack_experience.py   # 校验四包文案与 fast-food 资产/重放合同
+```

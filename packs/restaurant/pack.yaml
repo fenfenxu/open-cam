@@ -1,7 +1,25 @@
+format_version: 2
 id: restaurant
 name: 餐饮门店
-version: 1.0.0
+version: 1.1.0
 vertical: 餐饮
 description: 面向餐饮门店：后厨区域入侵、用餐区客流统计、明火区域人员检测。
 author: open-cam
 min_opencam_version: 0.2.0
+presentation:
+  tagline: 盯住后厨与明火区域，掌握用餐区人流
+  outcomes:
+    - title: 后厨区域有人进入时提醒
+      description: 有人进入划定的后厨区域即产生告警，便于及时核实人员出入。
+    - title: 明火区域人员靠近提醒
+      description: 灶台附近划定的明火区域检测到人员时产生告警，提醒复核操作安全。
+    - title: 用餐区人数过载提醒
+      description: 画面内人数达到 20 人时提醒，辅助判断高峰聚集与接待压力。
+  requirements:
+    - 一台已接入 open-cam 的摄像头；本包全部规则将应用到该摄像头
+    - 建议 720p 及以上，画面稳定、主要目标不被大面积遮挡
+  limitations:
+    - 仅识别人形目标，不能识别身份、人脸或是否穿工服
+    - 规则区域默认值基于示例构图，必须按实际摄像头画面重新校准
+    - 遮挡严重、逆光或夜间低画质场景检出率会下降
+    - 本包暂未提供演示视频，详情以文字与规则说明为主

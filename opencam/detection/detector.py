@@ -1,7 +1,8 @@
 """目标检测与跟踪。
 
 - YoloDetector：ultralytics YOLO + ByteTrack，懒加载模型（首次实例化才加载/下载权重）。
-- MockDetector：内置 mock，返回合成检测框与稳定 track id，用于无模型环境与 CI 验证链路。
+- MockDetector：内容驱动的内置 mock，把画面中的白色人形立牌（方案包演示/试跑源
+  使用的合成 sprite）识别为 person 并维持稳定 track id，用于无模型环境与 CI 验证链路。
 
 通过环境变量 OPENCAM_DETECTOR=mock 或配置 detector=mock 切换。
 """
@@ -95,34 +96,101 @@ class YoloDetector:
 
 
 class MockDetector:
-    """合成检测器：在画面中部给一个缓慢水平移动的 person 框。
+    """内容驱动的合成检测器：把画面中的"白色人形立牌"识别为 person。
 
-    track id 恒为 1，便于 loitering / zone_intrusion 规则验证。
-    画面宽度未知时按 640 估算运动范围。
+    内置方案包的演示/试跑源用纯白竖直人形 sprite 渲染（真实 YOLO 不保证识别
+    合成图形，见 test_pipeline_e2e.py 的说明）。本检测器用亮度阈值 + 竖直长宽比
+    识别这些 sprite，并用最近邻匹配维持稳定 track id，使 mock 模式下的规则链路
+    由真实画面内容驱动。画面中没有合成人形时不返回任何检测。
     """
 
+    # sprite 识别参数：纯白填充、竖直长宽比、尺寸占画面比例限制
+    _GRAY_MIN = 220
+    _ASPECT_MIN, _ASPECT_MAX = 1.3, 5.0
+    _H_MIN_RATIO, _H_MAX_RATIO = 0.08, 0.75
+    _W_MIN_RATIO = 0.02
+    _FILL_MIN = 0.5
+    _MAX_MISSES = 5
+
     def __init__(self, **_: object):
-        self._tick = 0
+        self._tracks: dict[int, tuple[float, float]] = {}  # id -> bottom_center
+        self._misses: dict[int, int] = {}
+        self._next_id = 1
 
     def detect(self, frame: np.ndarray) -> list[Detection]:
-        self._tick += 1
-        h, w = frame.shape[:2] if frame is not None else (480, 640)
-        # 在宽度的 10%~90% 之间往返移动
-        period = 40
-        phase = (self._tick % period) / period
-        ratio = phase * 2 if phase <= 0.5 else 2 - phase * 2
-        cx = w * (0.1 + 0.8 * ratio)
-        bw, bh = w * 0.12, h * 0.4
-        cy = h * 0.7
-        return [
-            Detection(
-                bbox=(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2),
-                confidence=0.9,
-                class_id=0,
-                class_name="person",
-                track_id=1,
-            )
-        ]
+        if frame is None:
+            return []
+        boxes = self._find_sprites(frame)
+        return self._assign_tracks(boxes, frame.shape[:2])
+
+    @classmethod
+    def _find_sprites(cls, frame: np.ndarray) -> list[tuple[float, float, float, float]]:
+        """找出画面中所有人形立牌的包围框（按 x 排序保证确定性）。"""
+        import cv2  # 懒加载：保持模块 import 轻量
+
+        h, w = frame.shape[:2]
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mask = (gray >= cls._GRAY_MIN).astype(np.uint8) * 255
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        boxes: list[tuple[float, float, float, float]] = []
+        for contour in contours:
+            x, y, bw, bh = cv2.boundingRect(contour)
+            if not (cls._H_MIN_RATIO * h <= bh <= cls._H_MAX_RATIO * h):
+                continue
+            if bw < cls._W_MIN_RATIO * w:
+                continue
+            if not (cls._ASPECT_MIN <= bh / bw <= cls._ASPECT_MAX):
+                continue
+            if cv2.contourArea(contour) < cls._FILL_MIN * bw * bh:
+                continue
+            boxes.append((float(x), float(y), float(x + bw), float(y + bh)))
+        boxes.sort(key=lambda b: b[0])
+        return boxes
+
+    def _assign_tracks(self, boxes: list[tuple[float, float, float, float]],
+                       shape: tuple[int, int]) -> list[Detection]:
+        """按 bottom_center 最近邻贪心配对，维持跨帧稳定 track id。"""
+        h, w = shape
+        max_dist_sq = (0.2 * (w * w + h * h) ** 0.5) ** 2
+        centers = [((b[0] + b[2]) / 2.0, b[3]) for b in boxes]
+        candidates = sorted(
+            ((cx - tx) ** 2 + (cy - ty) ** 2, tid, i)
+            for i, (cx, cy) in enumerate(centers)
+            for tid, (tx, ty) in self._tracks.items()
+        )
+        assigned: dict[int, int] = {}  # box index -> track id
+        used_tracks: set[int] = set()
+        for dist_sq, tid, i in candidates:
+            if dist_sq > max_dist_sq:
+                break
+            if i in assigned or tid in used_tracks:
+                continue
+            assigned[i] = tid
+            used_tracks.add(tid)
+
+        detections: list[Detection] = []
+        for i, box in enumerate(boxes):
+            tid = assigned.get(i)
+            if tid is None:
+                tid = self._next_id
+                self._next_id += 1
+            self._tracks[tid] = centers[i]
+            self._misses[tid] = 0
+            detections.append(Detection(
+                bbox=box, confidence=0.9, class_id=0,
+                class_name="person", track_id=tid,
+            ))
+
+        # 未配对的旧 track 记 miss，连续多帧消失后回收
+        for tid in list(self._tracks):
+            if tid in used_tracks or tid in assigned.values():
+                continue
+            self._misses[tid] += 1
+            if self._misses[tid] > self._MAX_MISSES:
+                del self._tracks[tid]
+                del self._misses[tid]
+        return detections
 
 
 def build_detector():
