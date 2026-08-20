@@ -8,7 +8,7 @@ open-cam 当前是本地单机应用。模型资产没有租户归属，数据�
 
 - **模型资产（ModelAsset）**：用户可见、可搜索、可描述的逻辑模型对象。它回答“这是什么模型、从哪里来、能做什么”。
 - **模型版本（ModelVersion）**：一次具体训练、上传或方案交付的产物，包含权重路径、sha256 哈希、框架、运行时、输入尺寸、指标和部署状态。版本不可原地改写，更新只能新增版本。
-- **模型关联（ModelBinding）**：模型资产与规则、摄像头、分析方案或解决方案标识之间的关系。关联来源可以是手工或 AI 推荐；推荐关系必须保留置信度和理由。
+- **模型关联（ModelBinding）**：模型资产与规则、摄像头、分析方案、推理阶段或解决方案标识之间的关系。关联来源可以是手工或 AI 推荐；推荐关系必须保留置信度和理由，并先处于待审核状态。
 - **来源类型（origin_type）**：系统内置 `builtin`、用户上传 `uploaded`、用户训练 `trained`（含二次训练），只表达产生方式。
 - **交付方式（distribution_type）**：仅本机 `private`、用户发布 `published`、随解决方案交付 `solution`。一个训练模型可以后续被发布，也可以被打包进解决方案，因此不能把这些属性压成单一枚举。
 - **模型类型**：目标检测、分类、分割、姿态、OCR、视觉大模型。来源、交付方式和模型能力是三条独立维度。
@@ -26,7 +26,7 @@ Camera → AnalysisProfile → PipelineStage → ModelVersion → Rule
 
 规则级模型关联只作为兼容关系或局部覆盖，不作为长期主模型关系。
 
-当前 API 已支持 `rule` / `camera` 关联，并预留 `analysis_profile` / `solution_pack` 关联。当前关联只记录管理关系，不自动改变运行中的 Pipeline；运行时模型解析属于下一阶段。
+当前 API 支持 `rule` / `camera` / `analysis_profile` / `pipeline_stage` / `solution_pack` 关联。方案包可以通过 `analysis_profiles` 声明方案、阶段和能力契约；应用方案时会创建方案对象并绑定到摄像头。当前关联只记录管理关系，不自动改变运行中的 Pipeline；运行时模型解析属于下一阶段。
 
 ## 训练模型
 
@@ -42,11 +42,11 @@ Camera → AnalysisProfile → PipelineStage → ModelVersion → Rule
 手工关联和 AI 推荐关联使用同一个模型关联实体：
 
 - 手工关联：`relation_source=manual`；
-- AI 推荐：`relation_source=ai_recommended`，必须保存 `confidence` 和 `reason`；
-- AI 推荐不能覆盖已有手工关联，也不能因为推荐存在就直接上线模型。
+- AI 推荐：`relation_source=ai_recommended`，必须保存 `confidence` 和 `reason`，初始 `relation_status=pending`；
+- 通过 `/api/model-bindings/{id}/confirm` 或 `/reject` 审核推荐。AI 推荐不能覆盖已有手工关联，也不能因为推荐存在就直接上线模型。
 
 ## 实施状态
 
 模型资产正式化（计划 Stage 1）已完成：来源/交付拆分（`origin_type` + `distribution_type`）、能力标签与输入输出契约、版本哈希/框架/运行时均已落地；内置模型登记、训练登记、模型上传和方案安装都会生成可追溯资产；资产列表支持按来源、交付方式、模型类型、能力和描述搜索。原型的单一 `source_type` 列保留一个版本用于过渡（由新字段派生双写），下一版本删除。
 
-`AnalysisProfile`、`PipelineStage`、运行时模型解析和 AI 推荐属于后续阶段，当前关联只记录管理关系，不自动改变运行中的 Pipeline。
+Stage 2 已完成：`AnalysisProfile`、`PipelineStage`、`CameraBinding`、规则能力声明、方案包阶段声明，以及模型关联的待审核/确认/拒绝流程已落地。运行时模型解析仍属于下一阶段。

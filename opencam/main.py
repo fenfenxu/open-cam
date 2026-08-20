@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import account, cameras, events, notify, packs, people, rule_presets, rules, stats, system, trained_models, training, videos
+from .api import account, analysis_profiles, cameras, events, notify, packs, people, rule_presets, rules, stats, system, trained_models, training, videos
 from .config import migrate_legacy_data_dir, settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
@@ -122,6 +122,7 @@ _TAGS = [
     {"name": "account", "description": "市场平台账号（预留 stub，不强制登录）"},
     {"name": "training", "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"},
     {"name": "models", "description": "模型资产登记、来源分类、模型关联，以及训练版本部署与回滚"},
+    {"name": "analysis-profiles", "description": "分析方案、能力阶段与摄像头绑定"},
 ]
 
 app = FastAPI(
@@ -180,6 +181,9 @@ app.include_router(packs.deployments_router)
 app.include_router(account.router)
 app.include_router(training.router)
 app.include_router(trained_models.router)
+app.include_router(trained_models.bindings_router)
+app.include_router(analysis_profiles.router)
+app.include_router(analysis_profiles.camera_router)
 
 
 @app.get("/health", tags=["system"], summary="健康检查")

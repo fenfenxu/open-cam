@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..config import settings
+from ..model_assets import register_pack_profiles
 from ..models import (
     CAMERA_RUNNING,
     CAMERA_STOPPED,
@@ -30,7 +31,9 @@ from ..models import (
     ApplyPlanOut,
     ApplyPlanRuleOut,
     ApplyPlanVideoOut,
+    AnalysisProfile,
     Camera,
+    CameraBinding,
     DEPLOY_ACTIVE,
     DEPLOY_CONFIGURING,
     DEPLOY_DEGRADED,
@@ -45,6 +48,7 @@ from ..models import (
     PackDeploymentResourceOut,
     Rule,
     Video,
+    default_rule_capabilities,
 )
 from .apply import probe_resolution, scale_params
 from .catalog import compute_fingerprint
@@ -114,6 +118,9 @@ class PackDeploymentService:
         if expected_fingerprint is not None and expected_fingerprint != fingerprint:
             raise DeploymentError(
                 409, "方案包内容已变化，请重新查看变更计划后再确认")
+
+        # 内置包也必须先把方案/阶段登记为可复用领域对象；安装流程已幂等完成这一步。
+        register_pack_profiles(session, pack.base_dir, pack.manifest.id)
 
         if pack.manifest.cameras is not None:
             if camera_id is not None:
@@ -319,6 +326,8 @@ def _apply_new(pack: Pack, session: Session, fingerprint: str) -> ApplyResult:
             mappings.append((cam.id, DEPLOY_KIND_CAMERA, camera.id,
                              DEPLOY_OWNERSHIP_CREATED))
 
+            _bind_pack_profile(session, camera.id, pack.manifest.id)
+
             for tpl in pack.rules:
                 if tpl.camera != cam.id:
                     continue
@@ -327,6 +336,8 @@ def _apply_new(pack: Pack, session: Session, fingerprint: str) -> ApplyResult:
                     name=tpl.name,
                     type=tpl.type,
                     params=scale_params(tpl.params, width, height),
+                    capabilities=tpl.capabilities or default_rule_capabilities(
+                        tpl.type, tpl.params),
                     enabled=False,
                     cooldown=tpl.cooldown,
                 )
@@ -392,6 +403,7 @@ def _apply_legacy(pack: Pack, session: Session, camera_id: int,
             ownership=DEPLOY_OWNERSHIP_BOUND,
             configured=False,
         ))
+        _bind_pack_profile(session, camera.id, pack.manifest.id)
 
         for tpl in pack.rules:
             rule = Rule(
@@ -399,6 +411,8 @@ def _apply_legacy(pack: Pack, session: Session, camera_id: int,
                 name=tpl.name,
                 type=tpl.type,
                 params=scale_params(tpl.params, width, height),
+                capabilities=tpl.capabilities or default_rule_capabilities(
+                    tpl.type, tpl.params),
                 enabled=False,
                 cooldown=tpl.cooldown,
             )
@@ -425,6 +439,32 @@ def _apply_legacy(pack: Pack, session: Session, camera_id: int,
     logger.info("方案包 %s 已绑定摄像头 %d 并创建部署 #%d：%d 条规则 (%dx%d)",
                 pack.manifest.id, camera_id, dep.id, len(created), width, height)
     return ApplyResult(cameras=[camera], rules=created, deployment=dep)
+
+
+def _bind_pack_profile(session: Session, camera_id: int, pack_id: str) -> None:
+    """若方案声明了分析方案，应用时把它绑定到对应摄像头。"""
+    profile = (session.query(AnalysisProfile)
+               .filter_by(solution_pack_id=pack_id, status="active")
+               .order_by(AnalysisProfile.id)
+               .first())
+    if profile is None:
+        return
+    binding = session.query(CameraBinding).filter_by(camera_id=camera_id).first()
+    now = time.time()
+    if binding is None:
+        session.add(CameraBinding(
+            camera_id=camera_id,
+            analysis_profile_id=profile.id,
+            profile_version=profile.version,
+            enabled=False,
+            created_at=now,
+            updated_at=now,
+        ))
+    else:
+        binding.analysis_profile_id = profile.id
+        binding.profile_version = profile.version
+        binding.enabled = False
+        binding.updated_at = now
 
 
 # ---------- deployment inspect ----------
