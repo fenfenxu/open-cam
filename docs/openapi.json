@@ -2861,6 +2861,177 @@
         }
       }
     },
+    "/api/packs/{pack_id}/trials": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "发起本机隔离试跑",
+        "description": "单场景实时试跑：全局最多一个主动会话，默认 60 秒 TTL。不写库、不存快照、不调 VLM/通知。",
+        "operationId": "start_trial_api_packs__pack_id__trials_post",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrialStartIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-trials/{trial_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "试跑状态",
+        "description": "规则状态、临时命中时间线、实际帧率与设备信息；已过期返回 410。",
+        "operationId": "get_trial_api_pack_trials__trial_id__get",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "停止试跑",
+        "description": "幂等：已停止/过期/出错的试跑同样返回 204。",
+        "operationId": "stop_trial_api_pack_trials__trial_id__delete",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-trials/{trial_id}/live.mjpg": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "试跑 MJPEG 实时画面",
+        "description": "约 8fps 推送叠加检测框/规则状态的画面；未运行 409，已过期 410。",
+        "operationId": "trial_live_mjpeg_api_pack_trials__trial_id__live_mjpg_get",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/account/status": {
       "get": {
         "tags": [
@@ -6915,6 +7086,267 @@
         },
         "type": "object",
         "title": "TrainRequest"
+      },
+      "TrialHitOut": {
+        "properties": {
+          "at_sec": {
+            "type": "number",
+            "title": "At Sec"
+          },
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "rule_name": {
+            "type": "string",
+            "title": "Rule Name"
+          },
+          "rule_type": {
+            "type": "string",
+            "title": "Rule Type"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at_sec",
+          "rule_id",
+          "rule_name",
+          "rule_type",
+          "confidence"
+        ],
+        "title": "TrialHitOut"
+      },
+      "TrialOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "scene_id": {
+            "type": "string",
+            "title": "Scene Id"
+          },
+          "scene_title": {
+            "type": "string",
+            "title": "Scene Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source_kind": {
+            "type": "string",
+            "title": "Source Kind"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "number",
+            "title": "Expires At"
+          },
+          "duration_sec": {
+            "type": "number",
+            "title": "Duration Sec"
+          },
+          "remaining_sec": {
+            "type": "number",
+            "title": "Remaining Sec"
+          },
+          "fps": {
+            "type": "number",
+            "title": "Fps",
+            "default": 0.0
+          },
+          "device": {
+            "type": "string",
+            "title": "Device",
+            "default": ""
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "default": 0
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "default": 0
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/TrialRuleStateOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/TrialHitOut"
+            },
+            "type": "array",
+            "title": "Hits"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "live_url": {
+            "type": "string",
+            "title": "Live Url",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pack_id",
+          "scene_id",
+          "scene_title",
+          "status",
+          "source_kind",
+          "started_at",
+          "expires_at",
+          "duration_sec",
+          "remaining_sec"
+        ],
+        "title": "TrialOut"
+      },
+      "TrialRuleStateOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "type_label": {
+            "type": "string",
+            "title": "Type Label"
+          },
+          "matched": {
+            "type": "boolean",
+            "title": "Matched",
+            "default": false
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits",
+            "default": 0
+          },
+          "last_hit_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Hit At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "type_label"
+        ],
+        "title": "TrialRuleStateOut"
+      },
+      "TrialSourceIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pack",
+              "video",
+              "camera"
+            ],
+            "title": "Kind",
+            "default": "pack"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          }
+        },
+        "type": "object",
+        "title": "TrialSourceIn"
+      },
+      "TrialStartIn": {
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Scene Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TrialSourceIn"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_id"
+        ],
+        "title": "TrialStartIn"
       },
       "ValidationError": {
         "properties": {

@@ -1,18 +1,21 @@
-"""方案包 API：列出 / 详情 / 资产 / 安装 / 应用 / 卸载。
+"""方案包 API：列出 / 详情 / 资产 / 安装 / 应用 / 卸载 / 隔离试跑。
 
 在线浏览为平台 stub，未配置时降级为内置包。
 详情与资产走 PackCatalog；列表保持 installer brief 以兼容现有 Web/CLI。
+试跑（trials）走 PackExperience 深模块：单会话、60 秒 TTL、无 DB/快照/VLM 副作用。
 """
 
 from __future__ import annotations
 
 import shutil
 import tempfile
+import time
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -21,10 +24,12 @@ from ..models import CameraOut, PackDetail, RuleOut
 from ..packs import installer
 from ..packs.apply import apply_pack
 from ..packs.catalog import catalog
+from ..packs.experience import TrialOut, pack_experience, TrialError
 from ..packs.manifest import PackError
 from .cameras import camera_out
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
+trials_router = APIRouter(prefix="/api/pack-trials", tags=["packs"])
 
 
 @router.get("", summary="方案包列表", description="内置 + 已安装；同 id 时已安装覆盖内置。")
@@ -151,3 +156,88 @@ def uninstall(pack_id: str):
         installer.uninstall(pack_id)
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+# ---- 隔离试跑（PackExperience）----
+
+
+class TrialSourceIn(BaseModel):
+    kind: Literal["pack", "video", "camera"] = "pack"
+    video_id: int | None = None
+    camera_id: int | None = None
+
+
+class TrialStartIn(BaseModel):
+    scene_id: str = Field(min_length=1)
+    source: TrialSourceIn = Field(default_factory=TrialSourceIn)
+    duration_sec: float | None = None  # 默认 60 秒，上限 60 秒
+
+
+@router.post("/{pack_id}/trials", response_model=TrialOut, status_code=201,
+             summary="发起本机隔离试跑",
+             description="单场景实时试跑：全局最多一个主动会话，默认 60 秒 TTL。"
+                         "不写库、不存快照、不调 VLM/通知。")
+def start_trial(pack_id: str, body: TrialStartIn):
+    try:
+        return pack_experience.start(
+            pack_id, body.scene_id,
+            source_kind=body.source.kind,
+            video_id=body.source.video_id,
+            camera_id=body.source.camera_id,
+            duration_sec=body.duration_sec)
+    except TrialError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@trials_router.get("/{trial_id}", response_model=TrialOut,
+                   summary="试跑状态",
+                   description="规则状态、临时命中时间线、实际帧率与设备信息；已过期返回 410。")
+def get_trial(trial_id: str):
+    try:
+        return pack_experience.inspect(trial_id)
+    except TrialError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+_TRIAL_MJPEG_BOUNDARY = "frame"
+_TRIAL_MJPEG_INTERVAL = 0.125
+
+
+def _iter_trial_mjpeg(trial_id: str):
+    """从试跑会话持续吐叠加后的 JPEG part；试跑结束或客户端断开则结束。"""
+    while True:
+        try:
+            session, _ = pack_experience.mjpeg_state(trial_id)
+        except TrialError:
+            return
+        payload = session.latest_jpeg()
+        if payload:
+            yield (
+                b"--" + _TRIAL_MJPEG_BOUNDARY.encode()
+                + b"\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                + str(len(payload)).encode()
+                + b"\r\n\r\n" + payload + b"\r\n"
+            )
+        time.sleep(_TRIAL_MJPEG_INTERVAL)
+
+
+@trials_router.get("/{trial_id}/live.mjpg", summary="试跑 MJPEG 实时画面",
+                   description="约 8fps 推送叠加检测框/规则状态的画面；未运行 409，已过期 410。")
+def trial_live_mjpeg(trial_id: str):
+    try:
+        pack_experience.mjpeg_state(trial_id)
+    except TrialError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    return StreamingResponse(
+        _iter_trial_mjpeg(trial_id),
+        media_type=f"multipart/x-mixed-replace; boundary={_TRIAL_MJPEG_BOUNDARY}",
+    )
+
+
+@trials_router.delete("/{trial_id}", status_code=204, summary="停止试跑",
+                      description="幂等：已停止/过期/出错的试跑同样返回 204。")
+def stop_trial(trial_id: str):
+    try:
+        pack_experience.stop(trial_id)
+    except TrialError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc

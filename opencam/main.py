@@ -24,6 +24,7 @@ from .devplaybook import CONSOLE_UNBUILT, dist_is_stale, startup_lines
 from .doctor import verify_startup
 from .models import CAMERA_RUNNING, Camera
 from .notify import notifier
+from .packs.experience import pack_experience
 from .pipeline import pipeline_manager, start_camera
 from .streams.manager import camera_manager
 
@@ -90,6 +91,7 @@ async def lifespan(app: FastAPI):
     notifier.start()
     _restore_cameras()
     yield
+    pack_experience.shutdown()
     pipeline_manager.stop_all()
     camera_manager.stop_all()
     vlm_reviewer.stop()
@@ -173,6 +175,7 @@ app.include_router(people.router)
 app.include_router(system.router)
 app.include_router(stats.router)
 app.include_router(packs.router)
+app.include_router(packs.trials_router)
 app.include_router(account.router)
 app.include_router(training.router)
 app.include_router(trained_models.router)
