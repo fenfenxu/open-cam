@@ -151,6 +151,13 @@ class Event(Base):
     intent: Mapped[str] = mapped_column(String(16), default=INTENT_ALERT)
     needs_action: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     repeat_count: Mapped[int] = mapped_column(Integer, default=1)
+    # 运行时留痕：事件产生时实际使用的方案阶段和不可变模型产物。
+    analysis_profile_version: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True)
+    pipeline_stage: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    model_version_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("model_versions.id", ondelete="SET NULL"), nullable=True)
+    artifact_digest: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 
 class EventAction(Base):
@@ -514,6 +521,9 @@ class CameraHealth(BaseModel):
     last_frame_age_sec: Optional[float]
     width: Optional[int]
     height: Optional[int]
+    # 分析运行时与采集 health 分开，摄像头流正常但模型不可用时仍能解释原因。
+    runtime_status: str = "not_configured"
+    runtime_reason: Optional[str] = None
 
 
 class CameraOut(BaseModel):
@@ -594,6 +604,16 @@ class PipelineStageOut(PipelineStageCreate):
     updated_at: float
 
     model_config = {"from_attributes": True}
+
+
+class PipelineStageUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    order_index: Optional[int] = Field(default=None, ge=0)
+    capabilities: Optional[list[str]] = None
+    input_contract: Optional[dict[str, Any]] = None
+    output_contract: Optional[dict[str, Any]] = None
+    model_slot_key: Optional[str] = Field(default=None, max_length=128)
+    model_version_id: Optional[int] = None
 
 
 class AnalysisProfileCreate(BaseModel):
@@ -685,6 +705,10 @@ class EventOut(BaseModel):
     intent: str = INTENT_ALERT
     needs_action: bool = True
     repeat_count: int = 1
+    analysis_profile_version: Optional[str] = None
+    pipeline_stage: Optional[str] = None
+    model_version_id: Optional[int] = None
+    artifact_digest: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

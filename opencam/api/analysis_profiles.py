@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..db import session_scope
+from ..pipeline import start_camera
 from ..models import (
     AnalysisProfile,
     AnalysisProfileCreate,
@@ -21,6 +22,7 @@ from ..models import (
     PipelineStage,
     PipelineStageCreate,
     PipelineStageOut,
+    PipelineStageUpdate,
 )
 
 router = APIRouter(prefix="/api/analysis-profiles", tags=["analysis-profiles"])
@@ -166,7 +168,12 @@ def update_profile(profile_id: int, body: AnalysisProfileUpdate,
     if body.metadata is not None:
         profile.metadata_json = body.metadata
     profile.updated_at = time.time()
+    running_camera_ids = [binding.camera_id for binding in session.query(CameraBinding)
+                          .filter_by(analysis_profile_id=profile.id).all()
+                          if _get_camera(binding.camera_id, session).status == "running"]
     session.commit()
+    for camera_id in running_camera_ids:
+        start_camera(camera_id)
     session.refresh(profile)
     return _profile_out(profile)
 
@@ -188,6 +195,36 @@ def create_stage(profile_id: int, body: PipelineStageCreate,
     session.commit()
     stage = session.query(PipelineStage).filter_by(
         profile_id=profile_id, key=body.key).one()
+    return _stage_out(stage)
+
+
+@router.patch("/{profile_id}/stages/{stage_id}", response_model=PipelineStageOut,
+              summary="更新分析阶段")
+def update_stage(profile_id: int, stage_id: int, body: PipelineStageUpdate,
+                 session: Session = Depends(session_scope)):
+    """更新阶段模型槽位/版本；摄像头下次运行循环前会重启加载新计划。"""
+    profile = _get_profile(profile_id, session)
+    stage = session.get(PipelineStage, stage_id)
+    if stage is None or stage.profile_id != profile.id:
+        raise HTTPException(404, "分析阶段不存在")
+    if body.model_version_id is not None:
+        from ..models import ModelVersion
+        if session.get(ModelVersion, body.model_version_id) is None:
+            raise HTTPException(404, "模型版本不存在")
+    for field in ("name", "order_index", "capabilities", "input_contract",
+                  "output_contract", "model_slot_key", "model_version_id"):
+        value = getattr(body, field)
+        if value is not None:
+            setattr(stage, field, value)
+    stage.updated_at = time.time()
+    camera_ids = [binding.camera_id for binding in session.query(CameraBinding)
+                  .filter_by(analysis_profile_id=profile.id).all()]
+    running_camera_ids = [camera_id for camera_id in camera_ids
+                          if _get_camera(camera_id, session).status == "running"]
+    session.commit()
+    for camera_id in running_camera_ids:
+        start_camera(camera_id)
+    session.refresh(stage)
     return _stage_out(stage)
 
 
@@ -227,7 +264,11 @@ def bind_profile_camera(profile_id: int, body: ProfileCameraBindingCreate,
             updated_at=time.time(),
         )
         session.add(binding)
+    was_running = camera.status == "running"
     session.commit()
+    if was_running:
+        # 方案绑定是运行时输入；正在运行的摄像头必须重启以获取新快照。
+        start_camera(camera.id)
     session.refresh(binding)
     return _binding_out(binding, session)
 
@@ -260,7 +301,7 @@ def get_camera_profile(camera_id: int, session: Session = Depends(session_scope)
                     status_code=201, include_in_schema=False)
 def set_camera_profile(camera_id: int, body: CameraBindingCreate,
                        session: Session = Depends(session_scope)):
-    _get_camera(camera_id, session)
+    camera = _get_camera(camera_id, session)
     profile = _get_profile(body.analysis_profile_id, session)
     if profile.status == "archived":
         raise HTTPException(409, "归档方案不能绑定摄像头")
@@ -281,7 +322,10 @@ def set_camera_profile(camera_id: int, body: CameraBindingCreate,
         binding.profile_version = body.profile_version or profile.version
         binding.enabled = body.enabled
         binding.updated_at = now
+    was_running = camera.status == "running"
     session.commit()
+    if was_running:
+        start_camera(camera.id)
     session.refresh(binding)
     return _binding_out(binding, session)
 
@@ -289,9 +333,13 @@ def set_camera_profile(camera_id: int, body: CameraBindingCreate,
 @camera_router.delete("/{camera_id}/analysis-profile", status_code=204,
                       summary="解除摄像头分析方案")
 def delete_camera_profile(camera_id: int, session: Session = Depends(session_scope)):
-    _get_camera(camera_id, session)
+    camera = _get_camera(camera_id, session)
     binding = session.query(CameraBinding).filter_by(camera_id=camera_id).first()
     if binding is not None:
         session.delete(binding)
+        was_running = camera.status == "running"
         session.commit()
+        if was_running:
+            # 删除绑定后恢复旧版默认检测器，保持摄像头可用。
+            start_camera(camera.id)
     return Response(status_code=204)

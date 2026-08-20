@@ -193,10 +193,10 @@ class MockDetector:
         return detections
 
 
-def build_detector():
+def build_detector(model_path: Optional[str] = None):
     """按配置/环境变量构建检测器。OPENCAM_DETECTOR 环境变量优先。"""
     kind = os.environ.get("OPENCAM_DETECTOR", settings.detector).lower()
     if kind == "mock":
         logger.info("使用 MockDetector（OPENCAM_DETECTOR=mock）")
         return MockDetector()
-    return YoloDetector()
+    return YoloDetector(model_path=model_path)
