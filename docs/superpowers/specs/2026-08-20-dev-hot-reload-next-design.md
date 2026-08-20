@@ -8,7 +8,7 @@
 ## 已拍板
 
 - **前端开发工具改成 Next.js 16**（与 Multica `apps/web` 同一套）。放弃 Vite 作为控制台 bundler，从而直接使用 Next 自带的 Dev Overlay（左下角 `N` + Issues 胶囊、点开看 Console Error / 源码 / 堆栈）。不手写浮钮，不引入 `@visulima/vite-overlay`。
-- **开发拆成两个进程**：`make start`（FastAPI :8600）+ `make ui`（`next dev` :5173）。浏览器开 **5173**，和 Multica「Go :8080 + `next dev` :3000」同一模型。
+- **完整开发环境由 `make start` 统一启动**：FastAPI :8600 + `next dev` :5173。只启动后端用 `make backend`，浏览器开发态开 **5173**。
 - **普通后端 `.py`**：`make start` 默认 uvicorn `--reload --reload-dir opencam`。
 - **DDL 不跟文件监视走**：排除 `models.py` 与 `migrations/`；页面上确认后才触发一次进程替换，启动时 `ensure_schema` 执行迁移。
 - **API 失败要进 overlay**：控制台 `api()` 在非 2xx 时 `console.error`，对标 Multica `packages/core/logger.ts` 把 `<- 500 /api/...` 打到 `console.error`，由 Next Overlay 收集。
@@ -36,7 +36,7 @@ Vite 自带 overlay 只管编译 / HMR，不拦截 `console.error`，也没有 I
 ## 架构
 
 ```
-浏览器 5173 ──页面 / HMR / Dev Overlay──► next dev (make ui)
+浏览器 5173 ──页面 / HMR / Dev Overlay──► next dev (make start)
                  │
                  ├── NEXT_PUBLIC_API_URL → FastAPI :8600（撞名 REST：/cameras 等）
                  └── rewrite /api /docs /health /openapi.json → :8600
@@ -64,12 +64,12 @@ make start  uvicorn --reload --reload-dir opencam
 | 代理 | `next.config.ts` `rewrites()`：`/api/:path*`、`/docs`、`/redoc`、`/health`、`/openapi.json`、`/videos`、`/models` → `http://127.0.0.1:8600/...`（对标 Multica 把 `/api` rewrite 到 Go） |
 | 撞名路径 | `/cameras`、`/events`、`/rules`、`/training` 既是页面也是 REST。Next 文件路由占页面；`api.ts` 对这些路径用 `NEXT_PUBLIC_API_URL`（默认 `http://127.0.0.1:8600`）直连 FastAPI。FastAPI 开发态允许 `5173` CORS。 |
 
-`make ui` = `cd web && npm run dev`（`next dev --port 5173`）。  
-`make ui-build` = `next build`（及静态导出目录，FastAPI 改挂该目录，现 `web/dist` 若变更须同步 `opencam/main.py` 与 `tests/test_web.py`）。
+`make start` = 后端 + `next dev --port 5173`。
+`make serve` = `make ui-build` 后以无热更新的单端口后端运行。
 
 ### 后端热加载与 DDL
 
-已有 `make start` / `stop` / `restart` / `next`、`devplaybook.py`。补齐：
+已有 `make start` / `stop` / `restart`、`devplaybook.py`。补齐：
 
 1. `--reload-exclude`：`models.py`、`migrations/*`。改普通 `.py` 仍自动换进程。
 2. `GET /api/system/dev`：`reload_on`、`state`（`idle` \| `need_revision` \| `need_apply`）、`title`、`detail`、`steps`、`can_apply`。检测复用 `classify` + `current_revision != head`。

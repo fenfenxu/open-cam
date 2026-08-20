@@ -46,7 +46,7 @@ opencam/
 ├── models.py          SQLAlchemy ORM（Camera/Video/Rule/Event/EventAction/NotifyChannel）+ Pydantic schema + 状态常量
 ├── db.py              engine/session 管理（init_db 触发版本化迁移 / get_session）
 ├── doctor.py          升级质检与健康检查（启动自检 verify_startup + check_health）
-├── devplaybook.py     本地开发：改动分类 / make next / 启动横幅文案
+├── devplaybook.py     本地开发状态检查 / make dev-status / 启动横幅文案
 ├── migrations/        Alembic 版本化迁移：env.py + versions/ 版本脚本（规矩见「升级与数据安全」）
 ├── hardware.py        推理设备探测（cuda→mps→cpu）
 ├── pipeline.py        PipelineWorker/PipelineManager、start_camera/stop_camera
@@ -67,7 +67,7 @@ agent/monitor_agent.py 示例监控 Agent：轮询未确认事件 → LLM 定级
 packs/                 四个内置行业方案包（retail-chain/salon/restaurant/fast-food）
 skills/opencam/        Agent Skill（拷到 ~/.agents/skills/ 使用）
 scripts/export_openapi.py  导出 docs/openapi.json
-scripts/dev_next.py        make next：按 git 改动打印必做项
+scripts/dev_status.py      make dev-status：按 git 改动打印建议
 docs/                  openapi.json 快照、upgrade-safety.md（升级与数据安全设计）、fastfood-analytics.md（需求全景）、cli-go-migration.md、model-training.md
 rules/                 规则 yaml 示例
 data/                  旧版默认数据目录（现已默认用户数据目录；本地 ./data 存在时首次启动自动搬迁）
@@ -81,28 +81,28 @@ data/                  旧版默认数据目录（现已默认用户数据目录
 
 | 目的 | 命令 | 浏览器 |
 |------|------|--------|
-| 后端（默认热加载 `opencam/*.py`） | `make start` | `8600/docs` |
-| 无 YOLO 模型 | `make start-mock` | 同上 |
+| 完整开发环境（默认热加载） | `make start` | 前端 **5173**，后端 **8600/docs** |
+| 无 YOLO 模型的完整开发环境 | `make start-mock` | 同上 |
+| 只启动后端（高级/调试） | `make backend` | `8600/docs` |
 | 停 / 重启（端口被占先 stop，不要再开一个进程） | `make stop` / `make restart` | — |
-| 改前端热更新 | 另开 `make ui`（必须已 start；`next dev`） | **5173**（左下角 N 是 Next Overlay） |
-| 单端口控制台或 `tests/test_web.py` | 先 `make ui-build` 再 `make start` | **8600** |
+| 单端口运行（构建后端静态前端） | `make serve` | **8600** |
 
 关热加载：`RELOAD=0 make start`。`PORT=xxxx` 可改端口。启动成功后终端会打一块横幅（热加载 / DDL / 前端 / schema）。
 
-**改了什么 → 做什么（也可 `make next`）**
+**改了什么 → 做什么**
 
 | 改动 | 生效方式 |
 |------|----------|
-| `opencam/**/*.py`（不含表结构） | `make start` 默认 `--reload`，保存即换进程；未开 reload 则 `make restart` |
+| `opencam/**/*.py`（不含表结构） | `make start` 已启动后端 reload，保存即换进程；未开 reload 则 `make restart` |
 | `opencam/models.py` / DDL | **不会**因存盘而建列。`make revision m="说明"` → 人工 review → 控制台横幅确认重启（或 `make restart`）；启动时 `ensure_schema` 才跑迁移 |
 | 已有迁移脚本 | 控制台横幅「确认并重启」，或 `make restart` |
-| `web/src` | 有 `make ui` 则热更新（开 5173）；只有 start 吃 `web/out` → `make ui-build`（一般不用重启后端） |
+| `web/src` | `make start` 已启动 Next HMR（5173）；单端口运行用 `make serve` |
 | `opencam/api/`、`main.py` 路由 | 等 reload/restart 后 **`make openapi`** |
 | 测试 | `make test` |
 
 其余：`make install` / `install-dev` / `config`。CLI：`opencam cameras list`（开发时 `uv run opencam cameras list`）。
 
-启动失败要读报错里的命令：缺列会提示 `make revision`；端口占用提示 `make stop`；控制台 503 会说明 `make ui`（5173）或 `make ui-build`。运行期质检：`GET /api/system/health` 或 `opencam system doctor`。
+不确定改动如何生效时运行 `make dev-status`；它只是只读建议，不是启动命令。启动失败要读报错里的命令：缺列会提示 `make revision`；端口占用提示 `make stop`；控制台 503 会说明 `make start`（开发）或 `make serve`（单端口）。运行期质检：`GET /api/system/health` 或 `opencam system doctor`。
 
 配置：可选 `config.yaml`（参考 `config.example.yaml`，已在 .gitignore）；任意字段可用 `OPENCAM_` + 大写字段名环境变量覆盖。VLM 的 api_key 可在控制台「设置 → 大模型」填写（写入本机 `data_dir/vlm.json`），也可用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。不要把 key 提交进仓库。
 

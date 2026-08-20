@@ -29,7 +29,7 @@ def verify_startup() -> None:
     if problems:
         raise RuntimeError(
             "数据库启动自检未通过: " + "; ".join(problems)
-            + "。改动对照：make next"
+            + "。改动对照：make dev-status"
         )
 
 

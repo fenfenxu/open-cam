@@ -164,7 +164,14 @@ export function MarketplacePage() {
                     disabled={!cameras.length}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="选择摄像头" />
+                      <SelectValue>
+                        {(() => {
+                          const camera = cameras.find(
+                            (item) => String(item.id) === legacyCam[p.id],
+                          );
+                          return camera ? `应用到：[${camera.id}] ${camera.name}` : "选择摄像头";
+                        })()}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {cameras.map((c) => (

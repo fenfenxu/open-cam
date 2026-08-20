@@ -476,7 +476,14 @@ export function TrainingPage() {
                 <Label>摄像头</Label>
                 <Select value={cameraSrc} onValueChange={(v) => v && setCameraSrc(String(v))}>
                   <SelectTrigger className="w-56">
-                    <SelectValue />
+                    <SelectValue>
+                      {cameraSrc === NONE
+                        ? "—"
+                        : (() => {
+                            const camera = cameras.find((item) => String(item.id) === cameraSrc);
+                            return camera ? `[${camera.id}] ${camera.name}` : "选择摄像头";
+                          })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE}>—</SelectItem>
@@ -492,7 +499,11 @@ export function TrainingPage() {
                 <Label>或视频库</Label>
                 <Select value={videoSrc} onValueChange={(v) => v && setVideoSrc(String(v))}>
                   <SelectTrigger className="w-56">
-                    <SelectValue />
+                    <SelectValue>
+                      {videoSrc === NONE
+                        ? "—"
+                        : videos.find((item) => String(item.id) === videoSrc)?.filename || "选择视频"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE}>—</SelectItem>

@@ -432,6 +432,21 @@ export function EventsPage() {
   const event = detailQuery.data;
   const actionable = event?.needs_action !== false;
   const confirmedTasks = (tasksQuery.data ?? []).filter((t) => t.status === "confirmed");
+  const assigneeLabel =
+    assigneeId === ALL
+      ? "未指派"
+      : peopleQuery.data?.find((person) => String(person.id) === assigneeId)?.name || "选择员工";
+  const feedbackLabel =
+    confirmedTasks.find((task) => task.task_id === feedbackTask)
+      ? (() => {
+          const task = confirmedTasks.find((item) => item.task_id === feedbackTask)!;
+          return `${task.object} · ${task.property} (${task.task_id})`;
+        })()
+      : confirmedTasks.length > 0
+        ? "选择训练任务"
+        : tasksQuery.isError
+          ? "无法加载训练任务"
+          : "没有已确认的训练任务";
 
   return (
     <div className="space-y-4">
@@ -642,7 +657,7 @@ export function EventsPage() {
                   <Label htmlFor="d-assignee">负责人</Label>
                   <Select value={assigneeId} onValueChange={(v) => setAssigneeId(v ?? ALL)}>
                     <SelectTrigger id="d-assignee" className="max-w-xs">
-                      <SelectValue placeholder="选择员工" />
+                      <SelectValue>{assigneeLabel}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={ALL}>未指派</SelectItem>
@@ -739,7 +754,7 @@ export function EventsPage() {
               </p>
               <Select value={feedbackTask || ALL} onValueChange={(v) => setFeedbackTask(v === ALL ? "" : v ?? "")}>
                 <SelectTrigger className="w-full max-w-sm">
-                  <SelectValue />
+                  <SelectValue>{feedbackLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {confirmedTasks.length === 0 ? (

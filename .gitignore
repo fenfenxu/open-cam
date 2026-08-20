@@ -14,3 +14,9 @@ config.yaml
 opencam/_dev_reload.py
 web/.next/
 web/out/
+# 本地开发证书、环境变量与媒体服务器二进制
+auto.crt
+auto.key
+tools/mediamtx
+web/.env.development
+web/.env.production

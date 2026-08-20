@@ -362,7 +362,7 @@ export function CamerasPage() {
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      <SelectValue>{SOURCE_TYPE_NAMES[field.value] || "选择类型"}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="file">视频文件</SelectItem>

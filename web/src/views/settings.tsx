@@ -384,7 +384,9 @@ export function SettingsPage() {
               }}
             >
               <SelectTrigger className="w-full max-w-lg">
-                <SelectValue />
+                <SelectValue>
+                  {VLM_PRESETS.find((item) => item.id === preset)?.name || "自定义"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {VLM_PRESETS.map((p) => (
@@ -516,7 +518,14 @@ export function SettingsPage() {
           />
           <Select value={nCamera} onValueChange={(v) => v && setNCamera(String(v))}>
             <SelectTrigger className="w-44">
-              <SelectValue />
+              <SelectValue>
+                {nCamera === ALL
+                  ? "全部摄像头"
+                  : (() => {
+                      const camera = cameras.find((item) => String(item.id) === nCamera);
+                      return camera ? `[${camera.id}] ${camera.name}` : "选择摄像头";
+                    })()}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部摄像头</SelectItem>
@@ -529,7 +538,7 @@ export function SettingsPage() {
           </Select>
           <Select value={nRule} onValueChange={(v) => v && setNRule(String(v))}>
             <SelectTrigger className="w-36">
-              <SelectValue />
+              <SelectValue>{nRule === ALL ? "全部类型" : RULE_TYPE_NAMES[nRule] || "选择类型"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部类型</SelectItem>
@@ -620,7 +629,7 @@ export function SettingsPage() {
           />
           <Select value={pKind} onValueChange={(v) => v && setPKind(String(v))}>
             <SelectTrigger className="w-28">
-              <SelectValue />
+              <SelectValue>{PERSON_CHANNEL_KINDS[pKind] || "选择渠道"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(PERSON_CHANNEL_KINDS).map(([k, v]) => (
@@ -638,7 +647,14 @@ export function SettingsPage() {
           />
           <Select value={pCamera} onValueChange={(v) => v && setPCamera(String(v))}>
             <SelectTrigger className="w-44">
-              <SelectValue />
+              <SelectValue>
+                {pCamera === ALL
+                  ? "全部摄像头"
+                  : (() => {
+                      const camera = cameras.find((item) => String(item.id) === pCamera);
+                      return camera ? `[${camera.id}] ${camera.name}` : "选择摄像头";
+                    })()}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部摄像头</SelectItem>
@@ -651,7 +667,7 @@ export function SettingsPage() {
           </Select>
           <Select value={pRule} onValueChange={(v) => v && setPRule(String(v))}>
             <SelectTrigger className="w-36">
-              <SelectValue />
+              <SelectValue>{pRule === ALL ? "全部类型" : RULE_TYPE_NAMES[pRule] || "选择类型"}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>全部类型</SelectItem>

@@ -3,7 +3,19 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Monitor, Moon, Sun } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  Camera,
+  ClipboardCheck,
+  LayoutDashboard,
+  Monitor,
+  Moon,
+  Settings,
+  ShieldCheck,
+  Sun,
+  Store,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState, type ReactNode } from "react";
 import { DevBanner } from "@/components/app/dev-banner";
@@ -19,14 +31,27 @@ import type { DevStatus } from "@/lib/system";
 import { themeForSsr } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { to: "/", label: "仪表盘", end: true },
-  { to: "/cameras", label: "摄像头" },
-  { to: "/rules", label: "规则" },
-  { to: "/events", label: "事件" },
-  { to: "/training", label: "模型训练" },
-  { to: "/marketplace", label: "方案市场" },
-  { to: "/settings", label: "设置" },
+const NAV_GROUPS = [
+  {
+    label: "工作台",
+    items: [
+      { to: "/", label: "仪表盘", end: true, icon: LayoutDashboard },
+      { to: "/cameras", label: "摄像头", icon: Camera },
+      { to: "/events", label: "事件", icon: Activity },
+    ],
+  },
+  {
+    label: "策略与模型",
+    items: [
+      { to: "/rules", label: "规则", icon: ShieldCheck },
+      { to: "/training", label: "模型训练", icon: ClipboardCheck },
+      { to: "/marketplace", label: "方案市场", icon: Store },
+    ],
+  },
+  {
+    label: "系统",
+    items: [{ to: "/settings", label: "设置", icon: Settings }],
+  },
 ] as const;
 
 const THEMES = [
@@ -121,34 +146,48 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex min-h-svh bg-background text-foreground">
       <aside className="flex w-56 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
         <div className="px-4 py-4 text-base font-medium">open-cam</div>
-        <nav className="flex flex-1 flex-col gap-0.5 px-2">
-          {NAV.map((item) => {
-            const active = "end" in item && item.end
-              ? current === item.to
-              : current === item.to || current.startsWith(`${item.to}/`);
-            return (
-              <Link
-                key={item.to}
-                href={item.to}
-                className={cn(
-                  "rounded-md px-2 py-1.5 text-sm",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "hover:bg-sidebar-accent/70",
-                )}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-          <a
-            href="/docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent/70"
-          >
-            API 文档 ↗
-          </a>
+        <nav aria-label="主导航" className="flex flex-1 flex-col gap-5 px-2">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="space-y-1">
+              <p className="px-2 text-[11px] font-medium tracking-wide text-muted-foreground">
+                {group.label}
+              </p>
+              {group.items.map((item) => {
+                const active = "end" in item && item.end
+                  ? current === item.to
+                  : current === item.to || current.startsWith(`${item.to}/`);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.to}
+                    href={item.to}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
+                    )}
+                  >
+                    <Icon aria-hidden="true" className="size-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+          <div className="mt-auto border-t pt-3">
+            <a
+              href="/docs"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+            >
+              <BookOpen aria-hidden="true" className="size-4" />
+              API 文档
+              <span aria-hidden="true" className="ml-auto text-xs">↗</span>
+            </a>
+          </div>
         </nav>
         <div className="border-t px-4 py-3 text-xs text-muted-foreground">
           本地运行 · 数据不出本机

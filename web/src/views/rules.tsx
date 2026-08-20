@@ -318,7 +318,10 @@ export function RulesPage() {
                       }
                     >
                       <SelectTrigger id={`rf-${field.key}`}>
-                        <SelectValue />
+                        <SelectValue>
+                          {commonClasses.find((item) => item.id === fieldValue(values, field))?.name ||
+                            "选择类别"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {commonClasses.map((c) => (
@@ -336,7 +339,9 @@ export function RulesPage() {
                       }
                     >
                       <SelectTrigger id={`rf-${field.key}`}>
-                        <SelectValue />
+                        <SelectValue>
+                          {DIRECTION_NAMES[fieldValue(values, field) || "both"] || "选择方向"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {Object.entries(DIRECTION_NAMES).map(([v, n]) => (
@@ -383,7 +388,11 @@ export function RulesPage() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>
+                      {String(values.intent ?? "alert") === "observe"
+                        ? "观察（只记账，不进待办）"
+                        : "告警（可升格待办）"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="observe">观察（只记账，不进待办）</SelectItem>
@@ -405,7 +414,11 @@ export function RulesPage() {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue>
+                          {{ immediate: "立即", sustained: "持续", consecutive: "连续" }[
+                            String(values.escalate_mode ?? "immediate")
+                          ] || "选择升格方式"}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="immediate">立即</SelectItem>

@@ -4,7 +4,7 @@
 
 **Goal:** 控制台改用 Next.js 16（自带 Dev Overlay），普通 Python 热加载，DDL 经页面确认后才重启执行迁移。
 
-**Architecture:** `make ui` 跑 `next dev :5173`（HMR + 左下角 N Issues）。`make start` 跑 FastAPI `:8600`，`--reload-dir opencam` 并排除 `models.py` / `migrations/`。确认 DDL 时写入 `opencam/_dev_reload.py` 触发一次换进程，lifespan 的 `ensure_schema` 才改库。生产仍静态导出给 FastAPI 单端口，没有 Overlay。
+**Architecture:** `make start` 统一启动 FastAPI `:8600` 与 `next dev :5173`（HMR + 左下角 N Issues），并对后端使用 `--reload-dir opencam`、排除 `models.py` / `migrations/`。只启动后端用 `make backend`；单端口用 `make serve`。确认 DDL 时写入 `opencam/_dev_reload.py` 触发一次换进程，lifespan 的 `ensure_schema` 才改库。生产仍静态导出给 FastAPI 单端口，没有 Overlay。
 
 **Tech Stack:** Next.js 16、React 19、Tailwind v4、shadcn/Base UI、TanStack Query、FastAPI、uvicorn `--reload`、Alembic `ensure_schema`。
 
@@ -219,7 +219,7 @@ EOF
 - Modify: `opencam/main.py`（CORS，lifespan 之后、路由之前）
 - Modify: `Makefile`（`RELOAD_FLAGS` 加 exclude）
 - Modify: `.gitignore`
-- Modify: `scripts/dev_next.py`（把 `git_changed_files` 抽到 `devplaybook` 供 API 复用，或 API 直接 import `scripts` 不妥；把 git 列举搬进 `devplaybook.git_changed_files`）
+- Modify: `scripts/dev_status.py`（把 `git_changed_files` 抽到 `devplaybook` 供 API 复用，或 API 直接 import `scripts` 不妥；把 git 列举搬进 `devplaybook.git_changed_files`）
 - Test: `tests/test_system_api.py`
 - Modify: `docs/openapi.json`（本 task 末尾 export）
 
@@ -303,7 +303,7 @@ Expected: FAIL 404
 
 - [ ] **Step 3: 把 git 列举挪到 `devplaybook.git_changed_files`**
 
-从 `scripts/dev_next.py` 移入 `opencam/devplaybook.py`（`subprocess` + `Path`）。`dev_next.py` 改为 `from opencam.devplaybook import classify, format_next, git_changed_files`。
+从 `scripts/dev_status.py` 移入 `opencam/devplaybook.py`（`subprocess` + `Path`）。`dev_status.py` 改为 `from opencam.devplaybook import classify, format_status, git_changed_files`。
 
 - [ ] **Step 4: 实现 API**
 
@@ -441,7 +441,7 @@ Expected: 打印路径数增加 2（`/api/system/dev` GET+POST）
 - [ ] **Step 7: Commit**
 
 ```bash
-git add opencam/api/system.py opencam/main.py opencam/devplaybook.py scripts/dev_next.py Makefile .gitignore tests/test_system_api.py docs/openapi.json
+git add opencam/api/system.py opencam/main.py opencam/devplaybook.py scripts/dev_status.py Makefile .gitignore tests/test_system_api.py docs/openapi.json
 git commit -m "$(cat <<'EOF'
 feat: 开发态 DDL 确认 API 与 reload 排除迁移文件
 

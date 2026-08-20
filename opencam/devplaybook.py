@@ -1,6 +1,6 @@
-"""本地开发：改了什么 → 下一步；启动横幅文案。
+"""本地开发状态检查与启动横幅文案。
 
-给 make next 与 lifespan 共用。不 import 检测/torch，CLI 以外的轻量提示也可以用。
+给 make dev-status 与 lifespan 共用。不 import 检测/torch，CLI 以外的轻量提示也可以用。
 """
 
 from __future__ import annotations
@@ -52,8 +52,8 @@ _HINTS: dict[str, Hint] = {
         "backend",
         "改了后端 Python",
         (
-            "make start 默认 --reload，保存 opencam/*.py 会自动换进程",
-            "未开热加载或改不动：make restart；端口被占先 make stop",
+            "make start 的后端 reload 会自动换进程",
+            "只启动后端可用 make backend；端口被占先 make stop",
         ),
     ),
     "openapi": Hint(
@@ -65,8 +65,8 @@ _HINTS: dict[str, Hint] = {
         "frontend",
         "改了前端",
         (
-            "热更新：另开 make ui，浏览器打开 http://127.0.0.1:5173",
-            "单端口控制台：make ui-build（一般不用重启后端）",
+            "make start 已启动前端 HMR，浏览器打开 http://127.0.0.1:5173",
+            "单端口控制台：make serve（构建后运行在 8600）",
         ),
     ),
     "tests": Hint(
@@ -78,14 +78,14 @@ _HINTS: dict[str, Hint] = {
 
 _KIND_ORDER = ("ddl", "migration", "backend", "openapi", "frontend", "tests")
 
-EMPTY_NEXT = (
-    "工作区无改动。启动：make start（无 YOLO 模型用 make start-mock）。"
-    "改前端另开 make ui（浏览器 5173）。改完代码后 make next。"
+EMPTY_STATUS = (
+    "工作区无改动。启动完整开发环境：make start（无 YOLO 模型用 make start-mock）。"
+    "只启动后端用 make backend；单端口运行用 make serve。"
 )
 
 CONSOLE_UNBUILT = (
-    "控制台未构建。改前端请另开 make ui（浏览器 5173）；"
-    "单端口访问请先 make ui-build。"
+    "控制台未构建。开发环境用 make start（浏览器 5173）；"
+    "单端口访问请先 make serve。"
 )
 
 
@@ -110,10 +110,10 @@ def classify(paths: Iterable[str]) -> list[Hint]:
     return [_HINTS[kind] for kind in _KIND_ORDER if kind in kinds]
 
 
-def format_next(hints: list[Hint]) -> str:
+def format_status(hints: list[Hint]) -> str:
     if not hints:
-        return EMPTY_NEXT
-    lines = ["改动后必做："]
+        return EMPTY_STATUS
+    lines = ["当前改动建议："]
     for hint in hints:
         lines.append(f"[{hint.kind}] {hint.title}")
         for step in hint.steps:
@@ -154,14 +154,14 @@ def startup_lines(
         '  DDL:    改 models.py 不会建列 → make revision → review → 控制台横幅确认（或 make restart）'
     )
     if dist_ok and dist_stale:
-        lines.append("  前端:   web/out 比源码旧。热更新请 make ui（5173）；或 make ui-build")
+        lines.append("  前端:   web/out 比源码旧。开发环境请 make start（5173）；或 make serve")
     elif dist_ok:
-        lines.append("  前端:   本端口控制台可用。热更新请另开 make ui（浏览器 5173）")
+        lines.append("  前端:   本端口控制台可用。热更新请 make start（浏览器 5173）")
     else:
-        lines.append("  前端:   未构建 out。另开 make ui（5173）或先 make ui-build")
+        lines.append("  前端:   未构建 out。开发环境请 make start（5173）或单端口 make serve")
     lines.append(f"  检测器: {detector}")
     lines.append(f"  schema: {schema_rev} (head {schema_head})")
-    lines.append("  下一步: make next")
+    lines.append("  检查:   不确定改动如何生效时运行 make dev-status")
     return lines
 
 

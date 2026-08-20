@@ -7,7 +7,7 @@ from pathlib import Path
 from opencam.devplaybook import (
     classify,
     dist_is_stale,
-    format_next,
+    format_status,
     startup_lines,
     dev_status,
     write_reload_sentinel,
@@ -19,7 +19,7 @@ def _kinds(paths: list[str]) -> list[str]:
 
 
 def test_models_py_requires_revision_then_restart():
-    text = format_next(classify(["opencam/models.py"]))
+    text = format_status(classify(["opencam/models.py"]))
     assert "make revision" in text
     assert "make restart" in text
     assert "ddl" in _kinds(["opencam/models.py"])
@@ -29,7 +29,7 @@ def test_api_change_requires_openapi():
     kinds = _kinds(["opencam/api/cameras.py"])
     assert "backend" in kinds
     assert "openapi" in kinds
-    assert "make openapi" in format_next(classify(["opencam/api/cameras.py"]))
+    assert "make openapi" in format_status(classify(["opencam/api/cameras.py"]))
 
 
 def test_pipeline_is_backend_not_openapi():
@@ -38,14 +38,14 @@ def test_pipeline_is_backend_not_openapi():
 
 
 def test_web_src_is_frontend():
-    text = format_next(classify(["web/src/pages/Foo.tsx"]))
-    assert "另开 make ui" in text
-    assert "make ui-build" in text
+    text = format_status(classify(["web/src/pages/Foo.tsx"]))
+    assert "make start" in text
+    assert "make serve" in text
     assert "5173" in text
 
 
 def test_empty_workspace_tells_how_to_start():
-    text = format_next([])
+    text = format_status([])
     assert "make start" in text
     assert "make start-mock" in text
 
@@ -80,7 +80,7 @@ def test_startup_banner_mentions_reload_and_ddl():
         schema_head="0007",
     ))
     assert "127.0.0.1:8600" in text
-    assert "另开 make ui" in text
+    assert "make start" in text
     assert "make revision" in text
     assert "热加载" in text
     assert "mock" in text

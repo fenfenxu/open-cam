@@ -50,7 +50,7 @@ def _restore_cameras() -> None:
 
 
 def _log_startup_banner() -> None:
-    """给终端里的 Agent / 开发者一块固定扫读区：热加载、DDL、前端下一步。"""
+    """给终端里的 Agent / 开发者一块固定扫读区：热加载、DDL、前端状态。"""
     from . import migrations
 
     session = get_session()
