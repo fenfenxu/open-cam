@@ -64,6 +64,17 @@ def default_intent(rule_type: str) -> str:
     return INTENT_OBSERVE if rule_type == "line_crossing" else INTENT_ALERT
 
 
+def default_rule_capabilities(rule_type: str, params: Optional[dict[str, Any]] = None) -> list[str]:
+    """把旧规则配置映射成能力声明，避免规则继续依赖模型文件路径。"""
+    params = params or {}
+    classes = params.get("classes") or ([params.get("class")] if params.get("class") else [])
+    classes = [str(item).strip() for item in classes if str(item).strip()]
+    if not classes:
+        classes = ["person"]
+    suffix = "track" if rule_type == "line_crossing" else "box"
+    return list(dict.fromkeys(f"{item}.{suffix}" for item in classes))
+
+
 class Camera(Base):
     __tablename__ = "cameras"
 
@@ -98,6 +109,8 @@ class Rule(Base):
     type: Mapped[str] = mapped_column(String(32))
     # 规则参数，JSON：多边形点位、类别、阈值、驻留秒数等
     params: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # 规则需要的分析能力；规则不再直接保存权重路径或模型文件名。
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # 同一规则两次触发的最小间隔（秒），去抖
     cooldown: Mapped[float] = mapped_column(Float, default=30.0)
@@ -264,7 +277,79 @@ MODEL_KINDS = (
 MODEL_RELATION_MANUAL = "manual"
 MODEL_RELATION_AI_RECOMMENDED = "ai_recommended"
 MODEL_RELATION_SOURCES = (MODEL_RELATION_MANUAL, MODEL_RELATION_AI_RECOMMENDED)
-MODEL_BINDING_TARGETS = ("rule", "camera", "analysis_profile", "solution_pack")
+MODEL_BINDING_PENDING = "pending"
+MODEL_BINDING_CONFIRMED = "confirmed"
+MODEL_BINDING_REJECTED = "rejected"
+MODEL_BINDING_STATUSES = (
+    MODEL_BINDING_PENDING,
+    MODEL_BINDING_CONFIRMED,
+    MODEL_BINDING_REJECTED,
+)
+MODEL_BINDING_TARGETS = (
+    "rule", "camera", "analysis_profile", "pipeline_stage", "solution_pack"
+)
+
+
+class AnalysisProfile(Base):
+    """一个可绑定到摄像头的分析方案。"""
+
+    __tablename__ = "analysis_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # key 是方案包/导入格式中的稳定标识；name 可由用户编辑。
+    key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[str] = mapped_column(String(64), default="1")
+    input_contract: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False)
+    frame_rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    latency_budget_ms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    solution_pack_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PipelineStage(Base):
+    """分析方案中的一个推理阶段和它所需的能力契约。"""
+
+    __tablename__ = "pipeline_stages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    profile_id: Mapped[int] = mapped_column(
+        ForeignKey("analysis_profiles.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(128))
+    name: Mapped[str] = mapped_column(String(128))
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    capabilities: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    input_contract: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False)
+    output_contract: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False)
+    model_slot_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    model_version_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("model_versions.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class CameraBinding(Base):
+    """摄像头当前绑定的分析方案；同一摄像头最多一个活动绑定。"""
+
+    __tablename__ = "camera_bindings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    camera_id: Mapped[int] = mapped_column(
+        ForeignKey("cameras.id", ondelete="CASCADE"), unique=True, index=True)
+    analysis_profile_id: Mapped[int] = mapped_column(
+        ForeignKey("analysis_profiles.id", ondelete="RESTRICT"), index=True)
+    profile_version: Mapped[str] = mapped_column(String(64), default="1")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
 
 class ModelAsset(Base):
@@ -319,6 +404,9 @@ class ModelBinding(Base):
     target_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # manual / ai_recommended；推荐关系必须保留置信度和理由。
     relation_source: Mapped[str] = mapped_column(String(24), default=MODEL_RELATION_MANUAL)
+    # 手工关系创建即确认；AI 推荐必须先 pending，确认/拒绝均留痕。
+    relation_status: Mapped[str] = mapped_column(
+        String(16), default=MODEL_BINDING_CONFIRMED, index=True)
     confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -472,6 +560,8 @@ class RuleCreate(BaseModel):
     type: str = Field(
         pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
     params: dict[str, Any] = Field(default_factory=dict)
+    # 能力标签，如 person.box / person.track / fire.box；空值时由规则类型推导。
+    capabilities: list[str] = Field(default_factory=list)
     enabled: bool = True
     cooldown: float = 30.0
     intent: Optional[str] = Field(default=None, pattern="^(observe|alert)$")
@@ -481,6 +571,91 @@ class RuleCreate(BaseModel):
 class RuleOut(RuleCreate):
     id: int
     camera_id: int
+
+    model_config = {"from_attributes": True}
+
+
+class PipelineStageCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=128)
+    name: Optional[str] = None
+    order_index: int = Field(default=0, ge=0)
+    capabilities: list[str] = Field(default_factory=list)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
+    model_slot_key: Optional[str] = Field(default=None, max_length=128)
+    model_version_id: Optional[int] = None
+
+
+class PipelineStageOut(PipelineStageCreate):
+    id: int
+    profile_id: int
+    name: str
+    created_at: float
+    updated_at: float
+
+    model_config = {"from_attributes": True}
+
+
+class AnalysisProfileCreate(BaseModel):
+    key: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    version: str = Field(default="1", min_length=1, max_length=64)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    frame_rate: Optional[float] = Field(default=None, gt=0)
+    latency_budget_ms: Optional[float] = Field(default=None, gt=0)
+    status: str = Field(default="active", pattern="^(draft|active|archived)$")
+    solution_pack_id: Optional[str] = Field(default=None, max_length=128)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    stages: list[PipelineStageCreate] = Field(default_factory=list)
+
+
+class AnalysisProfileUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    description: Optional[str] = None
+    version: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    input_contract: Optional[dict[str, Any]] = None
+    frame_rate: Optional[float] = Field(default=None, gt=0)
+    latency_budget_ms: Optional[float] = Field(default=None, gt=0)
+    status: Optional[str] = Field(default=None, pattern="^(draft|active|archived)$")
+    metadata: Optional[dict[str, Any]] = None
+
+
+class AnalysisProfileOut(BaseModel):
+    id: int
+    key: str
+    name: str
+    description: str
+    version: str
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    frame_rate: Optional[float]
+    latency_budget_ms: Optional[float]
+    status: str
+    solution_pack_id: Optional[str]
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, validation_alias="metadata_json")
+    stages: list[PipelineStageOut] = Field(default_factory=list)
+    created_at: float
+    updated_at: float
+
+    model_config = {"from_attributes": True}
+
+
+class CameraBindingCreate(BaseModel):
+    analysis_profile_id: int
+    profile_version: Optional[str] = Field(default=None, max_length=64)
+    enabled: bool = True
+
+
+class CameraBindingOut(BaseModel):
+    id: int
+    camera_id: int
+    analysis_profile_id: int
+    profile_version: str
+    enabled: bool
+    created_at: float
+    updated_at: float
+    analysis_profile: Optional[AnalysisProfileOut] = None
 
     model_config = {"from_attributes": True}
 
@@ -701,6 +876,28 @@ class PackRuleDetailOut(BaseModel):
     cooldown: float
     intent: str
     summary: str
+    capabilities: list[str] = Field(default_factory=list)
+
+
+class PackPipelineStageOut(BaseModel):
+    key: str
+    name: str
+    order_index: int = 0
+    capabilities: list[str] = Field(default_factory=list)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
+    model_slot_key: str | None = None
+
+
+class PackAnalysisProfileOut(BaseModel):
+    key: str
+    name: str
+    description: str = ""
+    version: str = "1"
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    frame_rate: float | None = None
+    latency_budget_ms: float | None = None
+    stages: list[PackPipelineStageOut] = Field(default_factory=list)
 
 
 class PackSceneEventOut(BaseModel):
@@ -775,6 +972,7 @@ class PackDetail(BaseModel):
     presentation: PackPresentationOut
     cameras: list[PackCameraDetailOut]
     rules: list[PackRuleDetailOut]
+    analysis_profiles: list[PackAnalysisProfileOut] = Field(default_factory=list)
     experience: PackExperienceOut
     application: PackApplicationOut
     privacy: PackPrivacyOut = Field(default_factory=PackPrivacyOut)
@@ -906,10 +1104,12 @@ class ModelAssetOut(BaseModel):
 
 class ModelBindingCreate(BaseModel):
     target_type: str = Field(
-        pattern="^(rule|camera|analysis_profile|solution_pack)$")
+        pattern="^(rule|camera|analysis_profile|pipeline_stage|solution_pack)$")
     target_id: Optional[int] = None
     target_key: Optional[str] = Field(default=None, max_length=128)
     relation_source: str = Field(default="manual", pattern="^(manual|ai_recommended)$")
+    relation_status: Optional[str] = Field(
+        default=None, pattern="^(pending|confirmed|rejected)$")
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
     reason: Optional[str] = None
     enabled: bool = True
@@ -922,6 +1122,7 @@ class ModelBindingOut(BaseModel):
     target_id: Optional[int]
     target_key: Optional[str]
     relation_source: str
+    relation_status: str
     confidence: Optional[float]
     reason: Optional[str]
     enabled: bool

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .models import (
+    AnalysisProfile,
     MODEL_DISTRIBUTION_PRIVATE,
     MODEL_DISTRIBUTION_SOLUTION,
     MODEL_KIND_DETECTION,
@@ -23,6 +24,7 @@ from .models import (
     MODEL_REGISTERED,
     ModelAsset,
     ModelVersion,
+    PipelineStage,
     legacy_source_type,
 )
 
@@ -197,5 +199,60 @@ def register_pack_models(session: Session, pack_dir: Path, pack_id: str,
             )
             session.add(version)
         created.append(asset)
+    session.commit()
+    return created
+
+
+def register_pack_profiles(session: Session, pack_dir: Path, pack_id: str,
+                           ) -> list[AnalysisProfile]:
+    """登记方案包声明的分析方案和能力阶段，按包内 profile key 幂等。"""
+    from .packs.manifest import load_manifest  # 延迟 import 避免循环
+
+    manifest = load_manifest(pack_dir)
+    declared = manifest.analysis_profiles or []
+    if not declared:
+        return []
+    created: list[AnalysisProfile] = []
+    for entry in declared:
+        profile_key = entry.key
+        existing = (session.query(AnalysisProfile)
+                    .filter_by(solution_pack_id=pack_id, key=profile_key)
+                    .first())
+        if existing is not None:
+            continue
+        # key 在本机是稳定引用；发生跨包冲突时保留原包 key 并加包前缀。
+        if session.query(AnalysisProfile).filter_by(key=profile_key).first() is not None:
+            profile_key = f"{pack_id}:{entry.key}"
+        now = time.time()
+        profile = AnalysisProfile(
+            key=profile_key,
+            name=entry.name,
+            description=entry.description,
+            version=entry.version,
+            input_contract=dict(entry.input_contract),
+            frame_rate=entry.frame_rate,
+            latency_budget_ms=entry.latency_budget_ms,
+            status="active",
+            solution_pack_id=pack_id,
+            metadata_json={"pack_profile_key": entry.key},
+            created_at=now,
+            updated_at=now,
+        )
+        session.add(profile)
+        session.flush()
+        for stage in entry.stages:
+            session.add(PipelineStage(
+                profile_id=profile.id,
+                key=stage.key,
+                name=stage.name or stage.key,
+                order_index=stage.order_index,
+                capabilities=list(stage.capabilities),
+                input_contract=dict(stage.input_contract),
+                output_contract=dict(stage.output_contract),
+                model_slot_key=stage.model_slot_key,
+                created_at=now,
+                updated_at=now,
+            ))
+        created.append(profile)
     session.commit()
     return created

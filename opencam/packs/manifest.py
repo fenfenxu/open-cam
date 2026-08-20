@@ -93,6 +93,31 @@ class PackModel(BaseModel):
     runtime: str = ""
 
 
+class PackPipelineStage(BaseModel):
+    """方案包声明的一个能力阶段。"""
+
+    key: str = Field(pattern=r"^[a-z0-9][a-z0-9_.-]*$")
+    name: str = ""
+    order_index: int = Field(default=0, ge=0)
+    capabilities: list[str] = Field(default_factory=list)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
+    model_slot_key: str | None = None
+
+
+class PackAnalysisProfile(BaseModel):
+    """方案包声明的分析方案及推理阶段。"""
+
+    key: str = Field(pattern=r"^[a-z0-9][a-z0-9_.-]*$")
+    name: str
+    description: str = ""
+    version: str = "1"
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    frame_rate: float | None = Field(default=None, gt=0)
+    latency_budget_ms: float | None = Field(default=None, gt=0)
+    stages: list[PackPipelineStage] = Field(default_factory=list)
+
+
 class PackManifest(BaseModel):
     """pack.yaml 的 schema。format_version=2 时启用 presentation/experience。"""
 
@@ -108,6 +133,22 @@ class PackManifest(BaseModel):
     presentation: PackPresentation | None = None
     experience: PackExperience | None = None
     models: list[PackModel] | None = None
+    analysis_profiles: list[PackAnalysisProfile] | None = None
+    # 接受早期草案中的 profiles/analysis 写法，规范化到 analysis_profiles。
+    profiles: list[PackAnalysisProfile] | None = None
+    analysis: list[PackAnalysisProfile] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_profiles(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or value.get("analysis_profiles") is not None:
+            return value
+        data = dict(value)
+        for alias in ("profiles", "analysis"):
+            if data.get(alias) is not None:
+                data["analysis_profiles"] = data[alias]
+                break
+        return data
 
     @field_validator("format_version")
     @classmethod
@@ -173,6 +214,7 @@ class RuleTemplate(BaseModel):
                   "zone_count", "line_crossing"]
     cooldown: float = 30.0
     params: dict[str, Any] = Field(default_factory=dict)
+    capabilities: list[str] = Field(default_factory=list)
     camera: str | None = None
 
 

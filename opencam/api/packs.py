@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session_scope
-from ..model_assets import register_pack_models
+from ..model_assets import register_pack_models, register_pack_profiles
 from ..models import (
     ApplyPlanOut,
     CameraOut,
@@ -78,6 +78,8 @@ def install(body: InstallRequest, session: Session = Depends(session_scope)):
         # 随包声明的模型登记为可追溯资产（幂等，不覆盖用户编辑）
         register_pack_models(session, installer.installed_packs_dir() / brief["id"],
                              brief["id"])
+        register_pack_profiles(session, installer.installed_packs_dir() / brief["id"],
+                               brief["id"])
         return brief
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -99,6 +101,8 @@ def install_upload(file: UploadFile, session: Session = Depends(session_scope)):
             register_pack_models(session,
                                  installer.installed_packs_dir() / brief["id"],
                                  brief["id"])
+            register_pack_profiles(
+                session, installer.installed_packs_dir() / brief["id"], brief["id"])
             return brief
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc

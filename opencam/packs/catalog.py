@@ -20,16 +20,19 @@ from ..models import (
     INTENT_OBSERVE,
     RULE_TYPE_NAMES,
     PackApplicationOut,
+    PackAnalysisProfileOut,
     PackCameraDetailOut,
     PackCard,
     PackDetail,
     PackExperienceOut,
+    PackPipelineStageOut,
     PackOutcomeOut,
     PackPresentationOut,
     PackRuleDetailOut,
     PackSceneEventOut,
     PackSceneOut,
     default_intent,
+    default_rule_capabilities,
 )
 from .installer import builtin_packs_dir, installed_packs_dir
 from .manifest import (
@@ -284,6 +287,8 @@ def _build_available(
             cooldown=tpl.cooldown,
             intent=intent,
             summary=summary,
+            capabilities=tpl.capabilities or default_rule_capabilities(
+                tpl.type, tpl.params),
         ))
         if cam_id:
             rules_by_camera.setdefault(cam_id, []).append(rid)
@@ -383,6 +388,28 @@ def _build_available(
         limitations=limitations,
     )
 
+    analysis_profiles = [
+        PackAnalysisProfileOut(
+            key=profile.key,
+            name=profile.name,
+            description=profile.description,
+            version=profile.version,
+            input_contract=dict(profile.input_contract),
+            frame_rate=profile.frame_rate,
+            latency_budget_ms=profile.latency_budget_ms,
+            stages=[PackPipelineStageOut(
+                key=stage.key,
+                name=stage.name or stage.key,
+                order_index=stage.order_index,
+                capabilities=list(stage.capabilities),
+                input_contract=dict(stage.input_contract),
+                output_contract=dict(stage.output_contract),
+                model_slot_key=stage.model_slot_key,
+            ) for stage in profile.stages],
+        )
+        for profile in (manifest.analysis_profiles or [])
+    ]
+
     detail = PackDetail(
         id=manifest.id,
         name=manifest.name,
@@ -397,6 +424,7 @@ def _build_available(
         presentation=presentation_out,
         cameras=camera_outs,
         rules=rule_outs,
+        analysis_profiles=analysis_profiles,
         experience=PackExperienceOut(scenes=scenes),
         application=application,
         readme_html=readme_html,
@@ -527,6 +555,7 @@ def _unavailable(
         presentation=presentation,
         cameras=[],
         rules=[],
+        analysis_profiles=[],
         experience=PackExperienceOut(),
         application=application,
         min_opencam_version=min_opencam_version,

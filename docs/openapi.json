@@ -2703,13 +2703,66 @@
         }
       }
     },
+    "/api/packs/{pack_id}/apply-plan": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "应用前变更计划",
+        "description": "计算将创建/绑定的摄像头、规则与视频；返回内容指纹供确认时回传。",
+        "operationId": "apply_plan_api_packs__pack_id__apply_plan_post",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyPlanOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/packs/{pack_id}/apply": {
       "post": {
         "tags": [
           "packs"
         ],
         "summary": "应用方案包",
-        "description": "新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。",
+        "description": "新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。可选 expected_fingerprint：不一致返回 409。",
         "operationId": "apply_api_packs__pack_id__apply_post",
         "parameters": [
           {
@@ -2867,6 +2920,282 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/{pack_id}/trials": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "发起本机隔离试跑",
+        "description": "单场景实时试跑：全局最多一个主动会话，默认 60 秒 TTL。不写库、不存快照、不调 VLM/通知。",
+        "operationId": "start_trial_api_packs__pack_id__trials_post",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrialStartIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-trials/{trial_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "试跑状态",
+        "description": "规则状态、临时命中时间线、实际帧率与设备信息；已过期返回 410。",
+        "operationId": "get_trial_api_pack_trials__trial_id__get",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "停止试跑",
+        "description": "幂等：已停止/过期/出错的试跑同样返回 204。",
+        "operationId": "stop_trial_api_pack_trials__trial_id__delete",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-trials/{trial_id}/live.mjpg": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "试跑 MJPEG 实时画面",
+        "description": "约 8fps 推送叠加检测框/规则状态的画面；未运行 409，已过期 410。",
+        "operationId": "trial_live_mjpeg_api_pack_trials__trial_id__live_mjpg_get",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-deployments/{deployment_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "部署详情",
+        "description": "资源映射与激活清单；资源缺失时 status=degraded。",
+        "operationId": "get_deployment_api_pack_deployments__deployment_id__get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackDeploymentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-deployments/{deployment_id}/resources/{resource_id}": {
+      "patch": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "标记资源配置完成",
+        "description": "校准完成后标记 configured；规则资源会同时启用。全部规则配置完成且至少一路摄像头运行后进入 active。",
+        "operationId": "patch_deployment_resource_api_pack_deployments__deployment_id__resources__resource_id__patch",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PackDeploymentResourcePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackDeploymentOut"
+                }
               }
             }
           },
@@ -4282,41 +4611,60 @@
         }
       }
     },
-    "/health": {
+    "/api/model-bindings": {
       "get": {
         "tags": [
-          "system"
+          "models"
         ],
-        "summary": "健康检查",
-        "operationId": "health_health_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/pack-trials/{trial_id}/live.mjpg": {
-      "get": {
-        "tags": [
-          "packs"
-        ],
-        "summary": "试跑 MJPEG 实时画面",
-        "description": "约 8fps 推送叠加检测框/规则状态的画面；未运行 409，已过期 410。",
-        "operationId": "trial_live_mjpeg_api_pack_trials__trial_id__live_mjpg_get",
+        "summary": "查看模型关联",
+        "operationId": "list_all_bindings_api_model_bindings_get",
         "parameters": [
           {
-            "name": "trial_id",
-            "in": "path",
-            "required": true,
+            "name": "target_type",
+            "in": "query",
+            "required": false,
             "schema": {
-              "type": "string",
-              "title": "Trial Id"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Type"
+            }
+          },
+          {
+            "name": "relation_source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relation Source"
+            }
+          },
+          {
+            "name": "relation_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relation Status"
             }
           }
         ],
@@ -4325,7 +4673,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelBindingOut"
+                  },
+                  "title": "Response List All Bindings Api Model Bindings Get"
+                }
               }
             }
           },
@@ -4342,22 +4696,21 @@
         }
       }
     },
-    "/api/pack-trials/{trial_id}": {
+    "/api/model-bindings/{binding_id}": {
       "get": {
         "tags": [
-          "packs"
+          "models"
         ],
-        "summary": "试跑状态",
-        "description": "规则状态、临时命中时间线、实际帧率与设备信息；已过期返回 410。",
-        "operationId": "get_trial_api_pack_trials__trial_id__get",
+        "summary": "查看模型关联详情",
+        "operationId": "get_binding_api_model_bindings__binding_id__get",
         "parameters": [
           {
-            "name": "trial_id",
+            "name": "binding_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Trial Id"
+              "type": "integer",
+              "title": "Binding Id"
             }
           }
         ],
@@ -4367,7 +4720,669 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TrialOut"
+                  "$ref": "#/components/schemas/ModelBindingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "models"
+        ],
+        "summary": "更新模型关联审核状态",
+        "operationId": "update_binding_api_model_bindings__binding_id__patch",
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Binding Id"
+            }
+          },
+          {
+            "name": "relation_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Relation Status"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/model-bindings/{binding_id}/confirm": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "确认模型推荐关联",
+        "operationId": "confirm_binding_api_model_bindings__binding_id__confirm_post",
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingReview",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/model-bindings/{binding_id}/reject": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "拒绝模型推荐关联",
+        "operationId": "reject_binding_api_model_bindings__binding_id__reject_post",
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Binding Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingReview",
+                "default": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelBindingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis-profiles": {
+      "get": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "分析方案列表",
+        "operationId": "list_profiles_api_analysis_profiles_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "solution_pack_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Solution Pack Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AnalysisProfileOut"
+                  },
+                  "title": "Response List Profiles Api Analysis Profiles Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "创建分析方案",
+        "operationId": "create_profile_api_analysis_profiles_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisProfileCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis-profiles/{profile_id}": {
+      "get": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "分析方案详情",
+        "operationId": "get_profile_api_analysis_profiles__profile_id__get",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "更新分析方案",
+        "operationId": "update_profile_api_analysis_profiles__profile_id__patch",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisProfileUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisProfileOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis-profiles/{profile_id}/stages": {
+      "get": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "分析方案阶段列表",
+        "operationId": "list_stages_api_analysis_profiles__profile_id__stages_get",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineStageOut"
+                  },
+                  "title": "Response List Stages Api Analysis Profiles  Profile Id  Stages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "添加分析阶段",
+        "operationId": "create_stage_api_analysis_profiles__profile_id__stages_post",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineStageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineStageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis-profiles/{profile_id}/camera-bindings": {
+      "get": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "方案绑定的摄像头",
+        "operationId": "profile_camera_bindings_api_analysis_profiles__profile_id__camera_bindings_get",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CameraBindingOut"
+                  },
+                  "title": "Response Profile Camera Bindings Api Analysis Profiles  Profile Id  Camera Bindings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "将方案绑定到摄像头",
+        "operationId": "bind_profile_camera_api_analysis_profiles__profile_id__camera_bindings_post",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileCameraBindingCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraBindingOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cameras/{camera_id}/analysis-profile": {
+      "get": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "查看摄像头分析方案",
+        "operationId": "get_camera_profile_api_cameras__camera_id__analysis_profile_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CameraBindingOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Camera Profile Api Cameras  Camera Id  Analysis Profile Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "绑定或替换摄像头分析方案",
+        "operationId": "set_camera_profile_api_cameras__camera_id__analysis_profile_put",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CameraBindingCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraBindingOut"
                 }
               }
             }
@@ -4386,19 +5401,18 @@
       },
       "delete": {
         "tags": [
-          "packs"
+          "analysis-profiles"
         ],
-        "summary": "停止试跑",
-        "description": "幂等：已停止/过期/出错的试跑同样返回 204。",
-        "operationId": "stop_trial_api_pack_trials__trial_id__delete",
+        "summary": "解除摄像头分析方案",
+        "operationId": "delete_camera_profile_api_cameras__camera_id__analysis_profile_delete",
         "parameters": [
           {
-            "name": "trial_id",
+            "name": "camera_id",
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "title": "Trial Id"
+              "type": "integer",
+              "title": "Camera Id"
             }
           }
         ],
@@ -4419,53 +5433,19 @@
         }
       }
     },
-    "/api/packs/{pack_id}/trials": {
-      "post": {
+    "/health": {
+      "get": {
         "tags": [
-          "packs"
+          "system"
         ],
-        "summary": "发起本机隔离试跑",
-        "description": "单场景实时试跑：全局最多一个主动会话，默认 60 秒 TTL。不写库、不存快照、不调 VLM/通知。",
-        "operationId": "start_trial_api_packs__pack_id__trials_post",
-        "parameters": [
-          {
-            "name": "pack_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Pack Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TrialStartIn"
-              }
-            }
-          }
-        },
+        "summary": "健康检查",
+        "operationId": "health_health_get",
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TrialOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": {}
               }
             }
           }
@@ -4475,6 +5455,452 @@
   },
   "components": {
     "schemas": {
+      "AnalysisProfileCreate": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "default": "1"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "frame_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Rate"
+          },
+          "latency_budget_ms": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Budget Ms"
+          },
+          "status": {
+            "type": "string",
+            "pattern": "^(draft|active|archived)$",
+            "title": "Status",
+            "default": "active"
+          },
+          "solution_pack_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solution Pack Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineStageCreate"
+            },
+            "type": "array",
+            "title": "Stages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "AnalysisProfileCreate"
+      },
+      "AnalysisProfileOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "frame_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Rate"
+          },
+          "latency_budget_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Budget Ms"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "solution_pack_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Solution Pack Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/PipelineStageOut"
+            },
+            "type": "array",
+            "title": "Stages"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "description",
+          "version",
+          "frame_rate",
+          "latency_budget_ms",
+          "status",
+          "solution_pack_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AnalysisProfileOut"
+      },
+      "AnalysisProfileUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "input_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Contract"
+          },
+          "frame_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Rate"
+          },
+          "latency_budget_ms": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Budget Ms"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(draft|active|archived)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "title": "AnalysisProfileUpdate"
+      },
+      "ApplyPlanCameraOut": {
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "title": "Slot Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "source_hint": {
+            "type": "string",
+            "title": "Source Hint",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot_id",
+          "name",
+          "action"
+        ],
+        "title": "ApplyPlanCameraOut"
+      },
+      "ApplyPlanOut": {
+        "properties": {
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "pack_version": {
+            "type": "string",
+            "title": "Pack Version"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/ApplyPlanCameraOut"
+            },
+            "type": "array",
+            "title": "Cameras"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ApplyPlanRuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "videos": {
+            "items": {
+              "$ref": "#/components/schemas/ApplyPlanVideoOut"
+            },
+            "type": "array",
+            "title": "Videos"
+          },
+          "will_not": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Will Not"
+          },
+          "next_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Next Steps"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pack_id",
+          "pack_version",
+          "fingerprint",
+          "mode"
+        ],
+        "title": "ApplyPlanOut"
+      },
+      "ApplyPlanRuleOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "camera_slot_id": {
+            "type": "string",
+            "title": "Camera Slot Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "create"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "camera_slot_id"
+        ],
+        "title": "ApplyPlanRuleOut"
+      },
+      "ApplyPlanVideoOut": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "camera_slot_id": {
+            "type": "string",
+            "title": "Camera Slot Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "copy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "camera_slot_id"
+        ],
+        "title": "ApplyPlanVideoOut"
+      },
       "ApplyRequest": {
         "properties": {
           "camera_id": {
@@ -4487,6 +5913,17 @@
               }
             ],
             "title": "Camera Id"
+          },
+          "expected_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Fingerprint"
           }
         },
         "type": "object",
@@ -4553,6 +5990,34 @@
           "ok"
         ],
         "title": "BatchResultItem"
+      },
+      "BindingReview": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "title": "BindingReview"
       },
       "Body_install_upload_api_packs_install_upload_post": {
         "properties": {
@@ -4683,6 +6148,89 @@
           "file"
         ],
         "title": "Body_upload_video_api_videos_post"
+      },
+      "CameraBindingCreate": {
+        "properties": {
+          "analysis_profile_id": {
+            "type": "integer",
+            "title": "Analysis Profile Id"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis_profile_id"
+        ],
+        "title": "CameraBindingCreate"
+      },
+      "CameraBindingOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "camera_id": {
+            "type": "integer",
+            "title": "Camera Id"
+          },
+          "analysis_profile_id": {
+            "type": "integer",
+            "title": "Analysis Profile Id"
+          },
+          "profile_version": {
+            "type": "string",
+            "title": "Profile Version"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          },
+          "analysis_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisProfileOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "camera_id",
+          "analysis_profile_id",
+          "profile_version",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CameraBindingOut"
       },
       "CameraCreate": {
         "properties": {
@@ -5995,7 +7543,7 @@
         "properties": {
           "target_type": {
             "type": "string",
-            "pattern": "^(rule|camera|analysis_profile|solution_pack)$",
+            "pattern": "^(rule|camera|analysis_profile|pipeline_stage|solution_pack)$",
             "title": "Target Type"
           },
           "target_id": {
@@ -6026,6 +7574,18 @@
             "pattern": "^(manual|ai_recommended)$",
             "title": "Relation Source",
             "default": "manual"
+          },
+          "relation_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(pending|confirmed|rejected)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation Status"
           },
           "confidence": {
             "anyOf": [
@@ -6103,6 +7663,10 @@
             "type": "string",
             "title": "Relation Source"
           },
+          "relation_status": {
+            "type": "string",
+            "title": "Relation Status"
+          },
           "confidence": {
             "anyOf": [
               {
@@ -6142,6 +7706,7 @@
           "target_id",
           "target_key",
           "relation_source",
+          "relation_status",
           "confidence",
           "reason",
           "enabled",
@@ -6414,6 +7979,68 @@
         "type": "object",
         "title": "NotifyChannelUpdate"
       },
+      "PackAnalysisProfileOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": "1"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "frame_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frame Rate"
+          },
+          "latency_budget_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Budget Ms"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/PackPipelineStageOut"
+            },
+            "type": "array",
+            "title": "Stages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "PackAnalysisProfileOut"
+      },
       "PackApplicationOut": {
         "properties": {
           "mode": {
@@ -6464,6 +8091,17 @@
             },
             "type": "array",
             "title": "Rules"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
           }
         },
         "type": "object",
@@ -6518,6 +8156,127 @@
           "name"
         ],
         "title": "PackCameraDetailOut"
+      },
+      "PackDeploymentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "pack_version": {
+            "type": "string",
+            "title": "Pack Version"
+          },
+          "pack_digest": {
+            "type": "string",
+            "title": "Pack Digest"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/PackDeploymentResourceOut"
+            },
+            "type": "array",
+            "title": "Resources"
+          },
+          "activation_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Activation Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pack_id",
+          "pack_version",
+          "pack_digest",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PackDeploymentOut"
+      },
+      "PackDeploymentResourceOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "camera_slot_id": {
+            "type": "string",
+            "title": "Camera Slot Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "resource_id": {
+            "type": "integer",
+            "title": "Resource Id"
+          },
+          "ownership": {
+            "type": "string",
+            "title": "Ownership"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "missing": {
+            "type": "boolean",
+            "title": "Missing",
+            "default": false
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "camera_slot_id",
+          "kind",
+          "resource_id",
+          "ownership",
+          "configured"
+        ],
+        "title": "PackDeploymentResourceOut"
+      },
+      "PackDeploymentResourcePatch": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "PackDeploymentResourcePatch"
       },
       "PackDetail": {
         "properties": {
@@ -6586,6 +8345,13 @@
             },
             "type": "array",
             "title": "Rules"
+          },
+          "analysis_profiles": {
+            "items": {
+              "$ref": "#/components/schemas/PackAnalysisProfileOut"
+            },
+            "type": "array",
+            "title": "Analysis Profiles"
           },
           "experience": {
             "$ref": "#/components/schemas/PackExperienceOut"
@@ -6659,6 +8425,57 @@
           "title"
         ],
         "title": "PackOutcomeOut"
+      },
+      "PackPipelineStageOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "order_index": {
+            "type": "integer",
+            "title": "Order Index",
+            "default": 0
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Contract"
+          },
+          "model_slot_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Slot Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "PackPipelineStageOut"
       },
       "PackPresentationOut": {
         "properties": {
@@ -6759,6 +8576,13 @@
           "summary": {
             "type": "string",
             "title": "Summary"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
           }
         },
         "type": "object",
@@ -7077,6 +8901,193 @@
         "type": "object",
         "title": "PersonUpdate"
       },
+      "PipelineStageCreate": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "order_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order Index",
+            "default": 0
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Contract"
+          },
+          "model_slot_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Slot Key"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "title": "PipelineStageCreate"
+      },
+      "PipelineStageOut": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "order_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order Index",
+            "default": 0
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Contract"
+          },
+          "model_slot_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Slot Key"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "profile_id": {
+            "type": "integer",
+            "title": "Profile Id"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "id",
+          "profile_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PipelineStageOut"
+      },
+      "ProfileCameraBindingCreate": {
+        "properties": {
+          "camera_id": {
+            "type": "integer",
+            "title": "Camera Id"
+          },
+          "profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Version"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "camera_id"
+        ],
+        "title": "ProfileCameraBindingCreate"
+      },
       "RegionBody": {
         "properties": {
           "region": {
@@ -7354,6 +9365,13 @@
             "type": "object",
             "title": "Params"
           },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
           "enabled": {
             "type": "boolean",
             "title": "Enabled",
@@ -7410,6 +9428,13 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Params"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
           },
           "enabled": {
             "type": "boolean",
@@ -7484,6 +9509,267 @@
         },
         "type": "object",
         "title": "TrainRequest"
+      },
+      "TrialHitOut": {
+        "properties": {
+          "at_sec": {
+            "type": "number",
+            "title": "At Sec"
+          },
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "rule_name": {
+            "type": "string",
+            "title": "Rule Name"
+          },
+          "rule_type": {
+            "type": "string",
+            "title": "Rule Type"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at_sec",
+          "rule_id",
+          "rule_name",
+          "rule_type",
+          "confidence"
+        ],
+        "title": "TrialHitOut"
+      },
+      "TrialOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "scene_id": {
+            "type": "string",
+            "title": "Scene Id"
+          },
+          "scene_title": {
+            "type": "string",
+            "title": "Scene Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source_kind": {
+            "type": "string",
+            "title": "Source Kind"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "number",
+            "title": "Expires At"
+          },
+          "duration_sec": {
+            "type": "number",
+            "title": "Duration Sec"
+          },
+          "remaining_sec": {
+            "type": "number",
+            "title": "Remaining Sec"
+          },
+          "fps": {
+            "type": "number",
+            "title": "Fps",
+            "default": 0.0
+          },
+          "device": {
+            "type": "string",
+            "title": "Device",
+            "default": ""
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "default": 0
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "default": 0
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/TrialRuleStateOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/TrialHitOut"
+            },
+            "type": "array",
+            "title": "Hits"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "live_url": {
+            "type": "string",
+            "title": "Live Url",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pack_id",
+          "scene_id",
+          "scene_title",
+          "status",
+          "source_kind",
+          "started_at",
+          "expires_at",
+          "duration_sec",
+          "remaining_sec"
+        ],
+        "title": "TrialOut"
+      },
+      "TrialRuleStateOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "type_label": {
+            "type": "string",
+            "title": "Type Label"
+          },
+          "matched": {
+            "type": "boolean",
+            "title": "Matched",
+            "default": false
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits",
+            "default": 0
+          },
+          "last_hit_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Hit At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "type_label"
+        ],
+        "title": "TrialRuleStateOut"
+      },
+      "TrialSourceIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pack",
+              "video",
+              "camera"
+            ],
+            "title": "Kind",
+            "default": "pack"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          }
+        },
+        "type": "object",
+        "title": "TrialSourceIn"
+      },
+      "TrialStartIn": {
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Scene Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TrialSourceIn"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_id"
+        ],
+        "title": "TrialStartIn"
       },
       "UploadResult": {
         "properties": {
@@ -7662,267 +9948,6 @@
         },
         "type": "object",
         "title": "VlmSettingsUpdate"
-      },
-      "TrialOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "pack_id": {
-            "type": "string",
-            "title": "Pack Id"
-          },
-          "scene_id": {
-            "type": "string",
-            "title": "Scene Id"
-          },
-          "scene_title": {
-            "type": "string",
-            "title": "Scene Title"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "source_kind": {
-            "type": "string",
-            "title": "Source Kind"
-          },
-          "started_at": {
-            "type": "number",
-            "title": "Started At"
-          },
-          "expires_at": {
-            "type": "number",
-            "title": "Expires At"
-          },
-          "duration_sec": {
-            "type": "number",
-            "title": "Duration Sec"
-          },
-          "remaining_sec": {
-            "type": "number",
-            "title": "Remaining Sec"
-          },
-          "fps": {
-            "type": "number",
-            "title": "Fps",
-            "default": 0.0
-          },
-          "device": {
-            "type": "string",
-            "title": "Device",
-            "default": ""
-          },
-          "width": {
-            "type": "integer",
-            "title": "Width",
-            "default": 0
-          },
-          "height": {
-            "type": "integer",
-            "title": "Height",
-            "default": 0
-          },
-          "rules": {
-            "items": {
-              "$ref": "#/components/schemas/TrialRuleStateOut"
-            },
-            "type": "array",
-            "title": "Rules"
-          },
-          "hits": {
-            "items": {
-              "$ref": "#/components/schemas/TrialHitOut"
-            },
-            "type": "array",
-            "title": "Hits"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "live_url": {
-            "type": "string",
-            "title": "Live Url",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "pack_id",
-          "scene_id",
-          "scene_title",
-          "status",
-          "source_kind",
-          "started_at",
-          "expires_at",
-          "duration_sec",
-          "remaining_sec"
-        ],
-        "title": "TrialOut"
-      },
-      "TrialStartIn": {
-        "properties": {
-          "scene_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Scene Id"
-          },
-          "source": {
-            "$ref": "#/components/schemas/TrialSourceIn"
-          },
-          "duration_sec": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration Sec"
-          }
-        },
-        "type": "object",
-        "required": [
-          "scene_id"
-        ],
-        "title": "TrialStartIn"
-      },
-      "TrialHitOut": {
-        "properties": {
-          "at_sec": {
-            "type": "number",
-            "title": "At Sec"
-          },
-          "rule_id": {
-            "type": "string",
-            "title": "Rule Id"
-          },
-          "rule_name": {
-            "type": "string",
-            "title": "Rule Name"
-          },
-          "rule_type": {
-            "type": "string",
-            "title": "Rule Type"
-          },
-          "confidence": {
-            "type": "number",
-            "title": "Confidence"
-          },
-          "detail": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "required": [
-          "at_sec",
-          "rule_id",
-          "rule_name",
-          "rule_type",
-          "confidence"
-        ],
-        "title": "TrialHitOut"
-      },
-      "TrialSourceIn": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "pack",
-              "video",
-              "camera"
-            ],
-            "title": "Kind",
-            "default": "pack"
-          },
-          "video_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Id"
-          },
-          "camera_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Camera Id"
-          }
-        },
-        "type": "object",
-        "title": "TrialSourceIn"
-      },
-      "TrialRuleStateOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type"
-          },
-          "type_label": {
-            "type": "string",
-            "title": "Type Label"
-          },
-          "matched": {
-            "type": "boolean",
-            "title": "Matched",
-            "default": false
-          },
-          "hits": {
-            "type": "integer",
-            "title": "Hits",
-            "default": 0
-          },
-          "last_hit_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Hit At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "type",
-          "type_label"
-        ],
-        "title": "TrialRuleStateOut"
       }
     }
   },
@@ -7974,6 +9999,10 @@
     {
       "name": "models",
       "description": "模型资产登记、来源分类、模型关联，以及训练版本部署与回滚"
+    },
+    {
+      "name": "analysis-profiles",
+      "description": "分析方案、能力阶段与摄像头绑定"
     }
   ]
 }

@@ -18,9 +18,13 @@ from ..config import settings
 from ..db import session_scope
 from ..model_assets import register_uploaded_asset
 from ..models import (
+    MODEL_BINDING_CONFIRMED,
+    MODEL_BINDING_PENDING,
+    MODEL_BINDING_REJECTED,
     MODEL_DISTRIBUTION_PRIVATE,
     MODEL_ORIGIN_TRAINED,
     Camera,
+    AnalysisProfile,
     ModelAsset,
     ModelAssetCreate,
     ModelAssetOut,
@@ -30,6 +34,7 @@ from ..models import (
     ModelBindingOut,
     ModelVersion,
     ModelVersionOut,
+    PipelineStage,
     Rule,
     legacy_source_type,
 )
@@ -45,6 +50,7 @@ from ..training.registry import (
 from ..training.storage import load_definition, task_exists
 
 router = APIRouter(prefix="/api/models", tags=["models"])
+bindings_router = APIRouter(prefix="/api/model-bindings", tags=["models"])
 
 
 class RegisterModel(BaseModel):
@@ -90,6 +96,11 @@ class DeployResult(BaseModel):
     model: ModelVersionOut
 
 
+class BindingReview(BaseModel):
+    reason: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
 def _raise(exc: RegistryError) -> None:
     detail: Any = str(exc)
     if exc.payload:
@@ -105,15 +116,21 @@ def _get_asset_or_404(asset_id: int, session: Session) -> ModelAsset:
 
 
 def _validate_binding_target(body: ModelBindingCreate, session: Session) -> None:
-    uses_id = body.target_type in {"rule", "camera"}
-    if uses_id and body.target_id is None:
-        raise HTTPException(400, f"{body.target_type} 关联必须提供 target_id")
+    uses_id = body.target_type in {"rule", "camera", "analysis_profile", "pipeline_stage"}
+    if uses_id and body.target_id is None and not body.target_key:
+        raise HTTPException(400, f"{body.target_type} 关联必须提供 target_id 或 target_key")
     if not uses_id and not body.target_key:
         raise HTTPException(400, f"{body.target_type} 关联必须提供 target_key")
     if body.target_type == "rule" and session.get(Rule, body.target_id) is None:
         raise HTTPException(404, "规则不存在")
     if body.target_type == "camera" and session.get(Camera, body.target_id) is None:
         raise HTTPException(404, "摄像头不存在")
+    if body.target_type == "analysis_profile" and body.target_id is not None \
+            and session.get(AnalysisProfile, body.target_id) is None:
+        raise HTTPException(404, "分析方案不存在")
+    if body.target_type == "pipeline_stage" and body.target_id is not None \
+            and session.get(PipelineStage, body.target_id) is None:
+        raise HTTPException(404, "分析阶段不存在")
 
 
 @router.get("/assets", response_model=list[ModelAssetOut], summary="模型资产列表")
@@ -276,7 +293,8 @@ def create_binding(asset_id: int, body: ModelBindingCreate,
         target_id=body.target_id,
         target_key=body.target_key,
     )
-    if duplicate_query.first() is not None:
+    if duplicate_query.filter(
+            ModelBinding.relation_status != MODEL_BINDING_REJECTED).first() is not None:
         raise HTTPException(409, "该模型与目标已经存在关联")
     binding = ModelBinding(
         model_asset_id=asset_id,
@@ -284,9 +302,16 @@ def create_binding(asset_id: int, body: ModelBindingCreate,
         target_id=body.target_id,
         target_key=body.target_key,
         relation_source=body.relation_source,
+        relation_status=(
+            body.relation_status
+            or (MODEL_BINDING_PENDING
+                if body.relation_source == "ai_recommended"
+                else MODEL_BINDING_CONFIRMED)
+        ),
         confidence=body.confidence,
         reason=body.reason,
-        enabled=body.enabled,
+        enabled=(body.enabled and body.relation_source != "ai_recommended"
+                 and body.relation_status != MODEL_BINDING_REJECTED),
     )
     session.add(binding)
     session.commit()
@@ -304,6 +329,85 @@ def delete_binding(asset_id: int, binding_id: int,
     session.delete(binding)
     session.commit()
     return Response(status_code=204)
+
+
+@bindings_router.get("", response_model=list[ModelBindingOut], summary="查看模型关联")
+def list_all_bindings(
+    target_type: Optional[str] = Query(None),
+    relation_source: Optional[str] = Query(None),
+    relation_status: Optional[str] = Query(None),
+    session: Session = Depends(session_scope),
+):
+    query = session.query(ModelBinding).order_by(ModelBinding.id)
+    if target_type:
+        query = query.filter_by(target_type=target_type)
+    if relation_source:
+        query = query.filter_by(relation_source=relation_source)
+    if relation_status:
+        query = query.filter_by(relation_status=relation_status)
+    return query.all()
+
+
+def _get_binding(binding_id: int, session: Session) -> ModelBinding:
+    binding = session.get(ModelBinding, binding_id)
+    if binding is None:
+        raise HTTPException(404, "模型关联不存在")
+    return binding
+
+
+def _review_binding(binding: ModelBinding, *, confirmed: bool,
+                    body: BindingReview, session: Session) -> ModelBinding:
+    binding.relation_status = (
+        MODEL_BINDING_CONFIRMED if confirmed else MODEL_BINDING_REJECTED)
+    binding.enabled = bool(confirmed if body.enabled is None else body.enabled)
+    if not confirmed:
+        binding.enabled = False
+    if body.reason is not None:
+        binding.reason = body.reason
+    session.commit()
+    session.refresh(binding)
+    return binding
+
+
+@bindings_router.get("/{binding_id}", response_model=ModelBindingOut,
+                     summary="查看模型关联详情")
+def get_binding(binding_id: int, session: Session = Depends(session_scope)):
+    return _get_binding(binding_id, session)
+
+
+@bindings_router.post("/{binding_id}/confirm", response_model=ModelBindingOut,
+                      summary="确认模型推荐关联")
+def confirm_binding(binding_id: int, body: BindingReview = BindingReview(),
+                    session: Session = Depends(session_scope)):
+    return _review_binding(_get_binding(binding_id, session), confirmed=True,
+                           body=body, session=session)
+
+
+@bindings_router.post("/{binding_id}/reject", response_model=ModelBindingOut,
+                      summary="拒绝模型推荐关联")
+def reject_binding(binding_id: int, body: BindingReview = BindingReview(),
+                   session: Session = Depends(session_scope)):
+    return _review_binding(_get_binding(binding_id, session), confirmed=False,
+                           body=body, session=session)
+
+
+@bindings_router.patch("/{binding_id}", response_model=ModelBindingOut,
+                       summary="更新模型关联审核状态")
+def update_binding(binding_id: int, body: BindingReview,
+                   relation_status: Optional[str] = Query(None),
+                   session: Session = Depends(session_scope)):
+    binding = _get_binding(binding_id, session)
+    if relation_status == MODEL_BINDING_CONFIRMED:
+        return _review_binding(binding, confirmed=True, body=body, session=session)
+    if relation_status == MODEL_BINDING_REJECTED:
+        return _review_binding(binding, confirmed=False, body=body, session=session)
+    if body.reason is not None:
+        binding.reason = body.reason
+    if body.enabled is not None:
+        binding.enabled = body.enabled
+    session.commit()
+    session.refresh(binding)
+    return binding
 
 
 @router.post("", response_model=ModelVersionOut, summary="登记模型版本",

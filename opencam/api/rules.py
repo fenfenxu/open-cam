@@ -7,7 +7,15 @@ from sqlalchemy.orm import Session
 
 from ..db import session_scope
 from ..detection.escalate import validate_escalate_payload
-from ..models import RULE_TYPE_NAMES, Camera, Rule, RuleCreate, RuleOut, default_intent
+from ..models import (
+    RULE_TYPE_NAMES,
+    Camera,
+    Rule,
+    RuleCreate,
+    RuleOut,
+    default_intent,
+    default_rule_capabilities,
+)
 
 router = APIRouter(prefix="/api/cameras/{camera_id}/rules", tags=["rules"])
 
@@ -31,8 +39,10 @@ def create_rule(camera_id: int, body: RuleCreate,
     if session.get(Camera, camera_id) is None:
         raise HTTPException(404, "摄像头不存在")
     escalate = _validated_escalate(body)
+    capabilities = body.capabilities or default_rule_capabilities(body.type, body.params)
     rule = Rule(camera_id=camera_id, name=body.name or RULE_TYPE_NAMES[body.type],
                 type=body.type, params=body.params,
+                capabilities=capabilities,
                 enabled=body.enabled, cooldown=body.cooldown,
                 intent=body.intent or default_intent(body.type),
                 escalate=escalate)
@@ -51,6 +61,7 @@ def update_rule(camera_id: int, rule_id: int, body: RuleCreate,
     rule.name = body.name or RULE_TYPE_NAMES[body.type]
     rule.type = body.type
     rule.params = body.params
+    rule.capabilities = body.capabilities or default_rule_capabilities(body.type, body.params)
     rule.enabled = body.enabled
     rule.cooldown = body.cooldown
     rule.intent = body.intent or default_intent(body.type)
