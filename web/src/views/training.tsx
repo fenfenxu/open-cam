@@ -398,7 +398,7 @@ export function TrainingPage() {
             {vlmQuery.data && !vlmQuery.data.configured ? (
               <p className="text-sm text-destructive">
                 还没配置大模型。
-                <Link className="underline" href="/settings">
+                <Link prefetch={false} className="underline" href="/settings">
                   去设置页填写接口和 API Key
                 </Link>
                 ，否则系统无法真正理解你写的需求。

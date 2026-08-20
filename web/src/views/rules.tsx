@@ -217,7 +217,7 @@ export function RulesPage() {
       ) : cameras.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           请先添加摄像头。到
-          <Link className="mx-1 underline" href="/cameras">
+          <Link prefetch={false} className="mx-1 underline" href="/cameras">
             摄像头
           </Link>
           页新建一路。

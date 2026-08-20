@@ -568,7 +568,7 @@ export function EventsPage() {
 
             <dl className="space-y-2">
               <Kv label="摄像头">
-                <Link className="underline" href={`/cameras/${event.camera_id}`}>
+                <Link prefetch={false} className="underline" href={`/cameras/${event.camera_id}`}>
                   {cameraLabel(event)}
                 </Link>
               </Kv>

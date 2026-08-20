@@ -69,7 +69,7 @@ export function CameraDetailPage() {
   return (
     <div className="space-y-4">
       <p className="text-sm">
-        <Link className="underline" href="/cameras">
+        <Link prefetch={false} className="underline" href="/cameras">
           ← 摄像头列表
         </Link>
       </p>
@@ -84,7 +84,7 @@ export function CameraDetailPage() {
           cam ? (
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{cam.status}</Badge>
-              <Button variant="outline" render={<Link href={`/rules?camera=${cam.id}`} />}>
+              <Button variant="outline" render={<Link prefetch={false} href={`/rules?camera=${cam.id}`} />}>
                 配置规则
               </Button>
               <Button

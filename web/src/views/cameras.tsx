@@ -203,10 +203,10 @@ export function CamerasPage() {
           const running = cam.status === "running";
           return (
             <div className="flex flex-wrap gap-1">
-              <Button size="xs" variant="outline" render={<Link href={`/cameras/${cam.id}`} />}>
+              <Button size="xs" variant="outline" render={<Link prefetch={false} href={`/cameras/${cam.id}`} />}>
                 查看
               </Button>
-              <Button size="xs" variant="outline" render={<Link href={`/rules?camera=${cam.id}`} />}>
+              <Button size="xs" variant="outline" render={<Link prefetch={false} href={`/rules?camera=${cam.id}`} />}>
                 规则
               </Button>
               <Button

@@ -59,6 +59,7 @@ function CameraCard({ camera }: { camera: Camera }) {
   return (
     <Link
       href={`/cameras/${camera.id}`}
+      prefetch={false}
       className="block space-y-3 rounded-lg border p-3 transition-colors hover:bg-muted/40"
     >
       <header className="flex items-center justify-between gap-2">
@@ -110,7 +111,7 @@ export function DashboardPage() {
       {camerasQuery.isSuccess && cameras.length === 0 && (
         <p className="text-sm text-muted-foreground">
           还没有摄像头，去
-          <Link className="underline" href="/cameras">
+          <Link prefetch={false} className="underline" href="/cameras">
             「摄像头」
           </Link>
           页添加一路。
