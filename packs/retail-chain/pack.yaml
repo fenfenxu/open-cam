@@ -1,7 +1,25 @@
+format_version: 2
 id: retail-chain
 name: 连锁零售门店
-version: 1.0.0
+version: 1.1.0
 vertical: 连锁零售
 description: 面向连锁零售门店的安防与运营告警：门口客流聚集、收银台徘徊、闭店时段区域入侵。
 author: open-cam
 min_opencam_version: 0.2.0
+presentation:
+  tagline: 门口聚集、收银台徘徊与闭店入侵的统一告警
+  outcomes:
+    - title: 门口客流聚集提醒
+      description: 门口画面内人数达到 10 人时提醒，辅助判断进店高峰与疏导时机。
+    - title: 收银台长时间徘徊提醒
+      description: 同一人员在收银台区域内停留超过 2 分钟时产生告警，提醒关注异常逗留。
+    - title: 闭店时段区域入侵告警
+      description: 闭店后启用该规则，画面内出现人员即产生告警。
+  requirements:
+    - 一台已接入 open-cam 的摄像头；本包全部规则将应用到该摄像头
+    - 建议 720p 及以上，收银台与门口区域在画面内清晰可见
+  limitations:
+    - 仅识别人形目标，不能识别身份、人脸或是否为本店员工
+    - 徘徊判断依赖稳定跟踪，目标被长时间遮挡会重新计时
+    - 闭店时段规则默认覆盖全画面，需在闭店后手动启用、按实际画面校准
+    - 本包暂未提供演示视频，详情以文字与规则说明为主

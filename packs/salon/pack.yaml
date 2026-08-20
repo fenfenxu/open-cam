@@ -1,7 +1,23 @@
+format_version: 2
 id: salon
 name: 美容美发门店
-version: 1.0.0
+version: 1.1.0
 vertical: 美容美发
 description: 面向美容美发门店：工位占用提醒、等候区客人长时间等待提醒。
 author: open-cam
 min_opencam_version: 0.2.0
+presentation:
+  tagline: 工位占用一目了然，久等客人不再被忽略
+  outcomes:
+    - title: 工位区域占用感知
+      description: 有人进入划定的工位区域时产生提示，辅助判断工位忙闲状态。
+    - title: 等候区长时间等待提醒
+      description: 同一客人在等候区停留超过 10 分钟时产生告警，提醒及时接待。
+  requirements:
+    - 一台已接入 open-cam 的摄像头；本包全部规则将应用到该摄像头
+    - 建议 720p 及以上，工位与等候区在画面内不被大面积遮挡
+  limitations:
+    - 仅识别人形目标，不能识别身份、人脸或是否为到店客人
+    - 等待计时依赖稳定跟踪，目标被长时间遮挡会重新计时
+    - 区域默认值基于示例构图，必须按实际摄像头画面重新校准
+    - 本包暂未提供演示视频，详情以文字与规则说明为主

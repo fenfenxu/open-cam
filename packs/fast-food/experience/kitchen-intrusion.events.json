@@ -1,0 +1,10 @@
+{
+  "events": [
+    {
+      "at_sec": 5.3,
+      "title": "有人进入后厨区域",
+      "result": "打开待办：后厨闯入",
+      "intent": "alert"
+    }
+  ]
+}

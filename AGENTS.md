@@ -167,4 +167,4 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 
 - 新增规则类型：改 `models.py` 的 `RuleCreate` pattern、`RULE_TYPE_NAMES`、`detection/rules.py` 的 evaluate 分支、`api/rule_presets.py` 预设元数据，并补 `tests/test_rules*.py` 单测。
 - 新增 API 端点：在 `opencam/api/` 对应模块加路由，router 在 `main.py` 已挂载；同步补测试与 `docs/openapi.json`。
-- 方案包格式（`packs/` 示例）：`pack.yaml`（id/name/version/vertical/...）+ `rules/*.yaml`（多边形/线用 0-1 相对坐标，apply 时按摄像头分辨率换算）+ 可选 `prompts/*.txt`。
+- 方案包格式（`packs/` 示例）：`pack.yaml`（id/name/version/vertical/... + presentation 产品文案 + 可选 cameras/experience）+ `rules/*.yaml`（多边形/线用 0-1 相对坐标，apply 时按摄像头分辨率换算）+ 可选 `prompts/*.txt`；fast-food 的 `experience/` 演示资产由 `scripts/gen_fastfood_previews.py` 生成、`scripts/check_pack_experience.py` 校验。演示/试跑源用纯白竖直人形 sprite 渲染，`MockDetector` 按亮度+竖直长宽比识别它们（内容驱动，无 sprite 时不产出检测）。

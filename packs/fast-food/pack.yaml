@@ -1,20 +1,88 @@
+format_version: 2
 id: fast-food
 name: 快餐店
-version: 1.0.0
+version: 1.1.0
 vertical: 餐饮-快餐
 description: 面向快餐门店：门口进出客流统计、点餐区排队超员、闭店后入侵、后厨闯入告警。
 author: open-cam
 min_opencam_version: 0.2.0
+presentation:
+  tagline: 看清门口客流、点餐排队与闭店后的安全问题
+  cover: experience/cover.jpg
+  outcomes:
+    - title: 掌握进出店客流
+      description: 人员穿越门口计数线时区分进店与出店方向，沉淀可按时段回看的客流记录。
+    - title: 及时发现排队拥堵
+      description: 点餐区内人数达到 5 人时打开待办，提醒加开点餐通道或现场疏导。
+    - title: 后厨区域有人进入时提醒
+      description: 有人进入划定的后厨区域即打开待办，便于值班人员及时核实。
+    - title: 闭店时段入侵告警
+      description: 22:00-07:00 之间店内画面出现人员时打开待办，白天营业时不打扰。
+  requirements:
+    - 4 路摄像头：门口、点餐区、后厨、店内，建议 720p 及以上、画面稳定
+    - 门口机位需完整覆盖进出通道，计数线两侧不被遮挡
+    - 应用后创建的是停止态摄像头与演示源，需替换为真实画面、校准区域后逐路启用
+  limitations:
+    - 仅识别人形目标，不能识别身份、人脸或是否穿工服
+    - “后厨闯入”表示有人进入设定区域，无法区分员工与外来人员
+    - 遮挡严重、逆光或夜间低画质场景检出率会下降
+    - 区域、计数线与阈值为默认值，需按实际画面校准后才适合正式启用
 cameras:
   - id: door
     name: 门口
     source: cameras/door.mp4
+    purpose: 统计进出店客流的方向与数量
+    placement: 正对或斜对门口，画面完整覆盖进出通道与计数线两侧
+    poster: experience/door-flow.jpg
   - id: counter
     name: 点餐
     source: cameras/counter.mp4
+    purpose: 监测点餐区排队人数，超员时提醒
+    placement: 覆盖点餐柜台前排队区域，区域内人体不被柜台或立柱大面积遮挡
+    poster: experience/queue-count.jpg
   - id: kitchen
     name: 后厨
     source: cameras/kitchen.mp4
+    purpose: 有人进入后厨区域时提醒核实
+    placement: 覆盖后厨入口与操作区，划定区域应落在画面内且边界清晰
+    poster: experience/kitchen-intrusion.jpg
   - id: hall
     name: 店内
     source: cameras/hall.mp4
+    purpose: 闭店时段（22:00-07:00）店内入侵告警
+    placement: 俯瞰店内主要营业区域，尽量覆盖门窗等可能进入的位置
+    poster: experience/after-hours.jpg
+experience:
+  scenes:
+    - id: door-flow
+      camera: door
+      title: 门口进出客流
+      input_preview: cameras/door.mp4
+      result_preview: experience/door-flow-result.mp4
+      poster: experience/door-flow.jpg
+      events: experience/door-flow.events.json
+      trial_source: cameras/door.mp4
+    - id: queue-count
+      camera: counter
+      title: 点餐区排队超员
+      input_preview: cameras/counter.mp4
+      result_preview: experience/queue-count-result.mp4
+      poster: experience/queue-count.jpg
+      events: experience/queue-count.events.json
+      trial_source: cameras/counter.mp4
+    - id: kitchen-intrusion
+      camera: kitchen
+      title: 后厨闯入
+      input_preview: cameras/kitchen.mp4
+      result_preview: experience/kitchen-intrusion-result.mp4
+      poster: experience/kitchen-intrusion.jpg
+      events: experience/kitchen-intrusion.events.json
+      trial_source: cameras/kitchen.mp4
+    - id: after-hours
+      camera: hall
+      title: 闭店后入侵
+      input_preview: cameras/hall.mp4
+      result_preview: experience/after-hours-result.mp4
+      poster: experience/after-hours.jpg
+      events: experience/after-hours.events.json
+      trial_source: cameras/hall.mp4
