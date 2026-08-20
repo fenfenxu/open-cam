@@ -151,6 +151,96 @@ def test_v0008_db_upgrades_to_pack_deployments(tmp_path):
     assert migrations.verify_schema(engine) == []
     assert migrations.current_revision(engine) == migrations.head_revision()
 
+_V0008_MODEL_TABLES = """
+CREATE TABLE model_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(128) NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    source_type VARCHAR(24) NOT NULL,
+    model_kind VARCHAR(32) NOT NULL,
+    task_key VARCHAR(128),
+    solution_pack_id VARCHAR(128),
+    training_task_id VARCHAR(64),
+    metadata JSON NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'active',
+    created_at FLOAT NOT NULL,
+    updated_at FLOAT NOT NULL
+);
+CREATE TABLE model_bindings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_asset_id INTEGER NOT NULL,
+    target_type VARCHAR(24) NOT NULL,
+    target_id INTEGER,
+    target_key VARCHAR(128),
+    relation_source VARCHAR(24) NOT NULL DEFAULT 'manual',
+    confidence FLOAT,
+    reason TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at FLOAT NOT NULL
+);
+CREATE TABLE model_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id VARCHAR(64) NOT NULL,
+    model_asset_id INTEGER,
+    slot_key VARCHAR(128) NOT NULL,
+    artifact_path TEXT NOT NULL,
+    metrics JSON NOT NULL,
+    created_at FLOAT NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'registered'
+);
+"""
+
+
+def test_v0008_model_assets_backfill_origin_distribution_and_hash(tmp_path):
+    """0008 原型库升级：source_type 回填为 origin/distribution，版本补算 sha256。"""
+    import opencam.db as oc_db
+
+    db = tmp_path / "opencam.db"
+    url = _url(db)
+    init_db(url, backup_dir=tmp_path / "backups")
+    if oc_db._engine is not None:
+        oc_db._engine.dispose()
+
+    artifact = tmp_path / "old-best.pt"
+    artifact.write_bytes(b"legacy-weights")
+
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        "DROP TABLE IF EXISTS model_assets;"
+        "DROP TABLE IF EXISTS model_bindings;"
+        "DROP TABLE IF EXISTS model_versions;" + _V0008_MODEL_TABLES)
+    conn.execute(
+        "INSERT INTO model_assets (name, description, source_type, model_kind,"
+        " task_key, metadata, status, created_at, updated_at)"
+        " VALUES ('自训模型', '垃圾桶满溢', 'trained', 'classification',"
+        " '垃圾桶:满溢状态', '{}', 'active', 1, 1)")
+    conn.execute(
+        "INSERT INTO model_assets (name, description, source_type, model_kind,"
+        " metadata, status, created_at, updated_at)"
+        " VALUES ('方案模型', '', 'solution', 'object_detection',"
+        " '{}', 'active', 1, 1)")
+    conn.execute(
+        "INSERT INTO model_versions (task_id, slot_key, artifact_path, metrics,"
+        " created_at, status) VALUES ('t1', '垃圾桶:满溢状态', ?, '{}', 1, 'live')",
+        (str(artifact),))
+    conn.execute("UPDATE alembic_version SET version_num = '0008'")
+    conn.commit()
+    conn.close()
+
+    init_db(url, backup_dir=tmp_path / "backups")
+    engine = _engine(db)
+    assert migrations.verify_schema(engine) == []
+    assert migrations.current_revision(engine) == migrations.head_revision()
+    with engine.connect() as conn:
+        rows = dict(conn.execute(
+            text("SELECT name, origin_type || '/' || distribution_type "
+                 "FROM model_assets")).fetchall())
+        assert rows["自训模型"] == "trained/private"
+        assert rows["方案模型"] == "builtin/solution"
+        digest = conn.execute(
+            text("SELECT artifact_hash FROM model_versions")).scalar()
+    import hashlib
+    assert digest == hashlib.sha256(b"legacy-weights").hexdigest()
 
 # ---------- 跨版本升级：备份与回滚（用临时迁移目录模拟一个新版本） ----------
 

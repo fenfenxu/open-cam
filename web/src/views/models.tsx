@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BrainCircuit, Plus } from "lucide-react";
+import { BrainCircuit, Pencil, Plus, Search, Upload } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
@@ -19,56 +19,152 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import {
+  MODEL_DISTRIBUTION_TYPES,
   MODEL_KINDS,
-  MODEL_SOURCE_TYPES,
+  MODEL_ORIGIN_TYPES,
+  modelDistributionLabel,
   modelKindLabel,
-  modelSourceLabel,
+  modelOriginLabel,
   type ModelAsset,
+  type ModelDistributionType,
   type ModelKind,
-  type ModelSourceType,
+  type ModelOriginType,
 } from "@/lib/models";
 
 function errorMessage(error: unknown): string {
   return error instanceof ApiError || error instanceof Error ? error.message : "请求失败";
 }
 
+function parseCapabilities(text: string): string[] {
+  return text.split(/[,，]/).map((item) => item.trim()).filter(Boolean);
+}
+
 export function ModelsPage() {
   const queryClient = useQueryClient();
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [sourceType, setSourceType] = useState<ModelSourceType>("uploaded");
+  const [originType, setOriginType] = useState<ModelOriginType>("uploaded");
+  const [distributionType, setDistributionType] = useState<ModelDistributionType>("private");
   const [modelKind, setModelKind] = useState<ModelKind>("object_detection");
+  const [capabilities, setCapabilities] = useState("");
   const [taskKey, setTaskKey] = useState("");
   const [solutionPackId, setSolutionPackId] = useState("");
 
+  const [filterOrigin, setFilterOrigin] = useState("all");
+  const [filterDistribution, setFilterDistribution] = useState("all");
+  const [filterKind, setFilterKind] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadDescription, setUploadDescription] = useState("");
+
+  const listParams = new URLSearchParams();
+  if (filterOrigin !== "all") listParams.set("origin_type", filterOrigin);
+  if (filterDistribution !== "all") listParams.set("distribution_type", filterDistribution);
+  if (filterKind !== "all") listParams.set("model_kind", filterKind);
+  if (search.trim()) listParams.set("q", search.trim());
+  const listUrl = `/api/models/assets${listParams.size ? `?${listParams}` : ""}`;
+
   const assetsQuery = useQuery({
-    queryKey: ["model-assets"],
-    queryFn: () => api<ModelAsset[]>("/api/models/assets"),
+    queryKey: ["model-assets", listUrl],
+    queryFn: () => api<ModelAsset[]>(listUrl),
   });
 
-  const createAsset = useMutation({
-    mutationFn: () => api<ModelAsset>("/api/models/assets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  const resetForm = () => {
+    setEditingId(null);
+    setName("");
+    setDescription("");
+    setOriginType("uploaded");
+    setDistributionType("private");
+    setModelKind("object_detection");
+    setCapabilities("");
+    setTaskKey("");
+    setSolutionPackId("");
+  };
+
+  const saveAsset = useMutation({
+    mutationFn: () => {
+      const payload = {
         name: name.trim(),
         description: description.trim(),
-        source_type: sourceType,
+        origin_type: originType,
+        distribution_type: distributionType,
         model_kind: modelKind,
+        capabilities: parseCapabilities(capabilities),
         task_key: taskKey.trim() || null,
         solution_pack_id: solutionPackId.trim() || null,
-      }),
-    }),
+      };
+      if (editingId !== null) {
+        return api<ModelAsset>(`/api/models/assets/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      return api<ModelAsset>("/api/models/assets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    },
     onSuccess: async () => {
-      toast.success("模型资产已登记");
-      setName("");
-      setDescription("");
-      setTaskKey("");
-      setSolutionPackId("");
+      toast.success(editingId !== null ? "模型资产已更新" : "模型资产已登记");
+      resetForm();
       await queryClient.invalidateQueries({ queryKey: ["model-assets"] });
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
+
+  const uploadAsset = useMutation({
+    mutationFn: () => {
+      const form = new FormData();
+      form.append("file", uploadFile!);
+      form.append("name", uploadName.trim());
+      form.append("description", uploadDescription.trim());
+      form.append("model_kind", modelKind);
+      form.append("capabilities", capabilities);
+      return api<{ asset: ModelAsset }>("/api/models/assets/upload", {
+        method: "POST",
+        body: form,
+      });
+    },
+    onSuccess: async () => {
+      toast.success("模型已上传并登记");
+      setUploadFile(null);
+      setUploadName("");
+      setUploadDescription("");
+      await queryClient.invalidateQueries({ queryKey: ["model-assets"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const toggleStatus = useMutation({
+    mutationFn: (asset: ModelAsset) =>
+      api<ModelAsset>(`/api/models/assets/${asset.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: asset.status === "archived" ? "active" : "archived" }),
+      }),
+    onSuccess: async (asset) => {
+      toast.success(asset.status === "archived" ? "模型已归档" : "模型已恢复");
+      await queryClient.invalidateQueries({ queryKey: ["model-assets"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const startEdit = (asset: ModelAsset) => {
+    setEditingId(asset.id);
+    setName(asset.name);
+    setDescription(asset.description);
+    setOriginType(asset.origin_type);
+    setDistributionType(asset.distribution_type);
+    setModelKind(asset.model_kind);
+    setCapabilities(asset.capabilities.join(", "));
+    setTaskKey(asset.task_key ?? "");
+    setSolutionPackId(asset.solution_pack_id ?? "");
+  };
 
   const assets = assetsQuery.data ?? [];
 
@@ -76,13 +172,13 @@ export function ModelsPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         title="模型管理"
-        description="登记模型名称、描述、来源和能力。模型资产与规则关联独立管理。"
+        description="登记模型名称、描述、来源、交付方式和能力。模型资产与规则关联独立管理。"
       />
 
       <section className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <Plus className="size-4" />
-          <h2 className="font-medium">登记模型资产</h2>
+          <h2 className="font-medium">{editingId !== null ? "编辑模型资产" : "登记模型资产"}</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
@@ -91,11 +187,16 @@ export function ModelsPage() {
           </div>
           <div className="space-y-2">
             <Label>模型来源</Label>
-            <Select value={sourceType} onValueChange={(value) => value && setSourceType(value as ModelSourceType)}>
-              <SelectTrigger>
-                <SelectValue>{modelSourceLabel(sourceType)}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>{MODEL_SOURCE_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+            <Select value={originType} onValueChange={(value) => value && setOriginType(value as ModelOriginType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{MODEL_ORIGIN_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>交付方式</Label>
+            <Select value={distributionType} onValueChange={(value) => value && setDistributionType(value as ModelDistributionType)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{MODEL_DISTRIBUTION_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
@@ -108,6 +209,10 @@ export function ModelsPage() {
             </Select>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="model-capabilities">能力标签（逗号分隔，可选）</Label>
+            <Input id="model-capabilities" value={capabilities} onChange={(event) => setCapabilities(event.target.value)} placeholder="例如：person_detection, person.box" />
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="model-task-key">能力标识（可选）</Label>
             <Input id="model-task-key" value={taskKey} onChange={(event) => setTaskKey(event.target.value)} placeholder="例如：person_detection" />
           </div>
@@ -115,23 +220,90 @@ export function ModelsPage() {
             <Label htmlFor="model-description">模型描述</Label>
             <Textarea id="model-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="描述适用场景、识别目标、限制条件等，后续可用于 AI 推荐关联。" />
           </div>
-          {sourceType === "solution" ? (
+          {distributionType === "solution" ? (
             <div className="space-y-2">
               <Label htmlFor="solution-pack-id">方案标识（可选）</Label>
               <Input id="solution-pack-id" value={solutionPackId} onChange={(event) => setSolutionPackId(event.target.value)} placeholder="例如：fast-food" />
             </div>
           ) : null}
         </div>
-        <div className="mt-4 flex justify-end">
-          <Button disabled={!name.trim() || createAsset.isPending} onClick={() => createAsset.mutate()}>
+        <div className="mt-4 flex justify-end gap-2">
+          {editingId !== null ? (
+            <Button variant="outline" onClick={resetForm}>取消编辑</Button>
+          ) : null}
+          <Button disabled={!name.trim() || saveAsset.isPending} onClick={() => saveAsset.mutate()}>
             <BrainCircuit />
-            登记模型
+            {editingId !== null ? "保存修改" : "登记模型"}
           </Button>
         </div>
       </section>
 
       <section className="rounded-xl border bg-card p-5 shadow-sm">
-        <h2 className="mb-4 font-medium">已登记模型（{assets.length}）</h2>
+        <div className="mb-4 flex items-center gap-2">
+          <Upload className="size-4" />
+          <h2 className="font-medium">上传模型产物</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="upload-file">权重文件</Label>
+            <Input
+              id="upload-file"
+              type="file"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                setUploadFile(file);
+                if (file && !uploadName) setUploadName(file.name.replace(/\.[^.]+$/, ""));
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="upload-name">模型名称</Label>
+            <Input id="upload-name" value={uploadName} onChange={(event) => setUploadName(event.target.value)} placeholder="例如：安全帽检测模型" />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="upload-description">模型描述（可选）</Label>
+            <Input id="upload-description" value={uploadDescription} onChange={(event) => setUploadDescription(event.target.value)} placeholder="上传后自动生成带哈希的模型版本" />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button disabled={!uploadFile || !uploadName.trim() || uploadAsset.isPending} onClick={() => uploadAsset.mutate()}>
+            <Upload />
+            上传并登记
+          </Button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border bg-card p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <h2 className="font-medium">已登记模型（{assets.length}）</h2>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Select value={filterOrigin} onValueChange={(value) => value && setFilterOrigin(value)}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部来源</SelectItem>
+                {MODEL_ORIGIN_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterDistribution} onValueChange={(value) => value && setFilterDistribution(value)}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部交付</SelectItem>
+                {MODEL_DISTRIBUTION_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterKind} onValueChange={(value) => value && setFilterKind(value)}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部类型</SelectItem>
+                {MODEL_KINDS.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input className="w-48 pl-8" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索名称或描述" />
+            </div>
+          </div>
+        </div>
         {assets.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">还没有模型资产。</p>
         ) : (
@@ -142,15 +314,27 @@ export function ModelsPage() {
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-medium">{asset.name}</h3>
-                      <Badge variant="secondary">{modelSourceLabel(asset.source_type)}</Badge>
+                      <Badge variant="secondary">{modelOriginLabel(asset.origin_type)}</Badge>
+                      <Badge variant="secondary">{modelDistributionLabel(asset.distribution_type)}</Badge>
                       <Badge variant="outline">{modelKindLabel(asset.model_kind)}</Badge>
+                      {asset.status === "archived" ? <Badge variant="outline">已归档</Badge> : null}
                     </div>
                     <p className="text-sm text-muted-foreground">{asset.description || "暂无描述"}</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">#{asset.id}</span>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => startEdit(asset)}>
+                      <Pencil />
+                      编辑
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => toggleStatus.mutate(asset)}>
+                      {asset.status === "archived" ? "恢复" : "归档"}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">#{asset.id}</span>
+                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                  {asset.task_key ? <span>能力：{asset.task_key}</span> : null}
+                  {asset.capabilities.length > 0 ? <span>能力：{asset.capabilities.join("、")}</span> : null}
+                  {asset.task_key ? <span>能力标识：{asset.task_key}</span> : null}
                   {asset.solution_pack_id ? <span>方案：{asset.solution_pack_id}</span> : null}
                   {asset.training_task_id ? <span>训练任务：{asset.training_task_id}</span> : null}
                 </div>

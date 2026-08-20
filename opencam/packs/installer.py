@@ -139,6 +139,7 @@ def install(source: str) -> dict:
         root = _find_pack_root(stage)
         manifest = load_manifest(root)
         load_rule_templates(root)  # 提前校验，装进来就是好的
+        _validate_model_files(root, manifest)
         dest = installed_packs_dir() / manifest.id
         if dest.exists():
             shutil.rmtree(dest)
@@ -159,6 +160,22 @@ def uninstall(pack_id: str) -> None:
 
 
 # ---- 内部 ----
+
+def _validate_model_files(root: Path, manifest: PackManifest) -> None:
+    """随包模型声明的权重文件必须在包内存在，装进来就能登记出版本。"""
+    pack_root = root.resolve()
+    for entry in manifest.models or []:
+        if not entry.file:
+            continue
+        artifact = (root / entry.file).resolve()
+        try:
+            artifact.relative_to(pack_root)
+        except ValueError as exc:
+            raise PackError(
+                f"模型 {entry.id} 的权重路径越出包目录: {entry.file}") from exc
+        if not artifact.is_file():
+            raise PackError(f"模型 {entry.id} 的权重文件不存在: {entry.file}")
+
 
 def _download(url: str, dest: Path) -> None:
     try:

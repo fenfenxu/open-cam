@@ -1,17 +1,25 @@
-"""训练模型版本 API：登记、列表、部署前 A/B 对比、部署与回滚。"""
+"""训练模型版本 API：登记、列表、部署前 A/B 对比、部署与回滚。
+
+同一路由下也承载模型资产管理：资产 CRUD / 上传 / 关联。
+"""
 
 from __future__ import annotations
 
 import time
+from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import session_scope
+from ..model_assets import register_uploaded_asset
 from ..models import (
+    MODEL_DISTRIBUTION_PRIVATE,
+    MODEL_ORIGIN_TRAINED,
     Camera,
     ModelAsset,
     ModelAssetCreate,
@@ -23,6 +31,7 @@ from ..models import (
     ModelVersion,
     ModelVersionOut,
     Rule,
+    legacy_source_type,
 )
 from ..training.registry import (
     RegistryError,
@@ -48,11 +57,17 @@ class RegisterModel(BaseModel):
         None, description="已有模型资产 id；不传则按训练任务自动创建“自己训练出来的模型”资产")
     name: Optional[str] = Field(None, min_length=1, max_length=128)
     description: Optional[str] = None
-    source_type: str = Field(
-        "trained", pattern="^(builtin|published|solution|uploaded|trained)$")
+    origin_type: str = Field(
+        MODEL_ORIGIN_TRAINED, pattern="^(builtin|uploaded|trained)$")
+    distribution_type: str = Field(
+        MODEL_DISTRIBUTION_PRIVATE, pattern="^(private|published|solution)$")
     model_kind: str = Field(
         "classification",
         pattern="^(object_detection|classification|segmentation|pose|ocr|vlm)$")
+    capabilities: list[str] = Field(default_factory=list)
+    framework: Optional[str] = Field("yolov8", description="训练/导出框架")
+    runtime: Optional[str] = Field("ultralytics", description="推理运行时")
+    input_size: Optional[int] = Field(None, description="推理输入边长，如 640")
 
 
 class DeployBody(BaseModel):
@@ -103,16 +118,26 @@ def _validate_binding_target(body: ModelBindingCreate, session: Session) -> None
 
 @router.get("/assets", response_model=list[ModelAssetOut], summary="模型资产列表")
 def list_assets(
-    source_type: Optional[str] = Query(None),
+    origin_type: Optional[str] = Query(None, description="产生方式：builtin/uploaded/trained"),
+    distribution_type: Optional[str] = Query(None, description="交付方式：private/published/solution"),
     model_kind: Optional[str] = Query(None),
+    capability: Optional[str] = Query(None, description="按能力标签过滤"),
+    status: Optional[str] = Query(None, description="active/archived；缺省返回全部"),
     q: Optional[str] = Query(None, description="按名称或描述搜索"),
     session: Session = Depends(session_scope),
 ):
     query = session.query(ModelAsset).order_by(ModelAsset.updated_at.desc(), ModelAsset.id.desc())
-    if source_type:
-        query = query.filter(ModelAsset.source_type == source_type)
+    if origin_type:
+        query = query.filter(ModelAsset.origin_type == origin_type)
+    if distribution_type:
+        query = query.filter(ModelAsset.distribution_type == distribution_type)
     if model_kind:
         query = query.filter(ModelAsset.model_kind == model_kind)
+    if capability:
+        # SQLite 的 JSON 数组按文本匹配，能力标签是完整 token，误命中可忽略
+        query = query.filter(ModelAsset.capabilities.contains(f'"{capability}"'))
+    if status:
+        query = query.filter(ModelAsset.status == status)
     if q:
         query = query.filter(or_(ModelAsset.name.contains(q), ModelAsset.description.contains(q)))
     return query.all()
@@ -120,18 +145,23 @@ def list_assets(
 
 @router.post("/assets", response_model=ModelAssetOut, status_code=201,
              summary="创建模型资产",
-             description="登记模型名称、描述、来源类型和模型能力；不等于部署到运行时。")
+             description="登记模型名称、描述、来源、交付方式和能力；不等于部署到运行时。")
 def create_asset(body: ModelAssetCreate, session: Session = Depends(session_scope)):
     now = time.time()
     asset = ModelAsset(
         name=body.name,
         description=body.description,
-        source_type=body.source_type,
+        origin_type=body.origin_type,
+        distribution_type=body.distribution_type,
         model_kind=body.model_kind,
+        capabilities=body.capabilities,
+        input_contract=body.input_contract,
+        output_contract=body.output_contract,
         task_key=body.task_key,
         solution_pack_id=body.solution_pack_id,
         training_task_id=body.training_task_id,
         metadata_json=body.metadata,
+        source_type=legacy_source_type(body.origin_type, body.distribution_type),
         created_at=now,
         updated_at=now,
     )
@@ -139,6 +169,60 @@ def create_asset(body: ModelAssetCreate, session: Session = Depends(session_scop
     session.commit()
     session.refresh(asset)
     return asset
+
+
+class UploadResult(BaseModel):
+    asset: ModelAssetOut
+    version: ModelVersionOut
+
+
+@router.post("/assets/upload", response_model=UploadResult, status_code=201,
+             summary="上传模型产物",
+             description="上传权重文件并登记为可追溯资产 + 首个版本（含 sha256）。")
+def upload_asset(
+    file: UploadFile = File(...),
+    name: str = Form(min_length=1, max_length=128),
+    description: str = Form(""),
+    model_kind: str = Form(
+        "object_detection",
+        pattern="^(object_detection|classification|segmentation|pose|ocr|vlm)$"),
+    distribution_type: str = Form(
+        MODEL_DISTRIBUTION_PRIVATE, pattern="^(private|published|solution)$"),
+    capabilities: str = Form("", description="逗号分隔的能力标签"),
+    task_key: Optional[str] = Form(None),
+    framework: Optional[str] = Form(None),
+    runtime: Optional[str] = Form(None),
+    input_size: Optional[int] = Form(None),
+    session: Session = Depends(session_scope),
+):
+    filename = Path(file.filename or "").name
+    if not filename:
+        raise HTTPException(400, "缺少文件名")
+    dest_dir = settings.data_dir / "models" / "uploads"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in filename)
+    dest = dest_dir / f"{int(time.time())}-{safe_name}"
+    with open(dest, "wb") as out:
+        while chunk := file.file.read(1024 * 1024):
+            out.write(chunk)
+    capability_list = [c.strip() for c in capabilities.split(",") if c.strip()]
+    asset, version = register_uploaded_asset(
+        session,
+        file_path=dest,
+        name=name,
+        description=description,
+        model_kind=model_kind,
+        distribution_type=distribution_type,
+        capabilities=capability_list,
+        task_key=task_key or None,
+        framework=framework,
+        runtime=runtime,
+        input_size=input_size,
+    )
+    return UploadResult(
+        asset=ModelAssetOut.model_validate(asset),
+        version=ModelVersionOut.model_validate(version),
+    )
 
 
 @router.get("/assets/{asset_id}", response_model=ModelAssetOut, summary="模型资产详情")
@@ -151,7 +235,8 @@ def update_asset(asset_id: int, body: ModelAssetUpdate,
                  session: Session = Depends(session_scope)):
     asset = _get_asset_or_404(asset_id, session)
     for field in (
-        "name", "description", "source_type", "model_kind", "task_key",
+        "name", "description", "origin_type", "distribution_type", "model_kind",
+        "capabilities", "input_contract", "output_contract", "task_key",
         "solution_pack_id", "training_task_id", "status",
     ):
         value = getattr(body, field)
@@ -159,6 +244,9 @@ def update_asset(asset_id: int, body: ModelAssetUpdate,
             setattr(asset, field, value)
     if body.metadata is not None:
         asset.metadata_json = body.metadata
+    if body.origin_type is not None or body.distribution_type is not None:
+        asset.source_type = legacy_source_type(
+            asset.origin_type, asset.distribution_type)
     asset.updated_at = time.time()
     session.commit()
     session.refresh(asset)
@@ -233,11 +321,14 @@ def register(body: RegisterModel, session: Session = Depends(session_scope)):
             asset = ModelAsset(
                 name=body.name or slot_key,
                 description=body.description or str(definition.get("goal") or ""),
-                source_type=body.source_type,
+                origin_type=body.origin_type,
+                distribution_type=body.distribution_type,
                 model_kind=body.model_kind,
+                capabilities=body.capabilities,
                 task_key=slot_key,
                 training_task_id=body.task_id,
                 metadata_json={"classes": definition.get("classes") or []},
+                source_type=legacy_source_type(body.origin_type, body.distribution_type),
                 created_at=time.time(),
                 updated_at=time.time(),
             )
@@ -247,7 +338,9 @@ def register(body: RegisterModel, session: Session = Depends(session_scope)):
         return register_version(
             session, body.task_id,
             metrics=body.metrics, artifact_path=body.artifact_path,
-            model_asset_id=asset_id)
+            model_asset_id=asset_id,
+            framework=body.framework, runtime=body.runtime,
+            input_size=body.input_size)
     except RegistryError as exc:
         _raise(exc)
 
