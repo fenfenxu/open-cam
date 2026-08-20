@@ -161,6 +161,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Link
                     key={item.to}
                     href={item.to}
+                    prefetch={false}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",

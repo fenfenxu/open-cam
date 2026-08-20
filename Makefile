@@ -33,7 +33,7 @@ help: ## 显示可用命令
 	@echo "开发辅助：不确定改动如何生效时运行 make dev-status"
 	@echo "  后端 .py     自动 reload（不含 models.py / migrations）"
 	@echo "  models.py    make revision m=\"说明\" → review 脚本 → 控制台横幅确认重启（或 make restart）"
-	@echo "  web/src      make start 已启动 HMR；单端口运行则 make serve"
+	@echo "  web/src      make start/restart 会先构建 web/out，再启动 5173 HMR；单端口运行同样生效"
 	@echo "  API 路由     make restart（或等 reload）后 make openapi"
 	@echo "  端口被占     make stop 后再 start，不要再开多个进程"
 	@echo ""
@@ -47,6 +47,7 @@ install-dev: install ## 安装项目 + 开发依赖（pytest）
 	$(UV) pip install -e . --group dev
 
 start: ## 启动完整开发环境（FastAPI 8600 + Next.js 5173）
+	@$(MAKE) ui-build
 	PORT=$(PORT) UI_PORT=$(UI_PORT) RELOAD=$(RELOAD) OPENCAM_RELOAD=$(RELOAD) $(UV) run python scripts/dev_start.py
 
 start-mock: ## 启动完整开发环境，但使用 mock detector
@@ -91,7 +92,7 @@ ui:
 	cd web && npm run dev
 
 ui-build:
-	cd web && npm ci && npm run build
+	cd web && npm run build
 
 serve: ## 构建前端后以单端口 8600 运行（无 HMR）
 	@$(MAKE) ui-build
