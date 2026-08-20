@@ -309,6 +309,53 @@ class ModelVersion(Base):
     status: Mapped[str] = mapped_column(String(16), default=MODEL_REGISTERED, index=True)
 
 
+# 方案部署状态：configuring 待校准上线 / active 已启用 / degraded 资源缺失
+DEPLOYMENT_CONFIGURING = "configuring"
+DEPLOYMENT_ACTIVE = "active"
+DEPLOYMENT_DEGRADED = "degraded"
+DEPLOYMENT_STATUSES = (DEPLOYMENT_CONFIGURING, DEPLOYMENT_ACTIVE, DEPLOYMENT_DEGRADED)
+
+# 部署资源归属：created 应用时新建 / bound 绑定已有摄像头
+DEPLOY_OWNERSHIP_CREATED = "created"
+DEPLOY_OWNERSHIP_BOUND = "bound"
+
+DEPLOY_RESOURCE_KINDS = ("camera", "rule", "video")
+
+
+class PackDeployment(Base):
+    """一次方案包应用的部署记录：跨会话继续“换源、校准、启用”的事实来源。"""
+
+    __tablename__ = "pack_deployments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pack_id: Mapped[str] = mapped_column(String(128), index=True)
+    pack_version: Mapped[str] = mapped_column(String(32))
+    # 应用时的包内容指纹；版本升级/回滚只记录事实，本期不做自动升级
+    pack_digest: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), default=DEPLOYMENT_CONFIGURING)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PackDeploymentResource(Base):
+    """部署与 Camera/Rule/Video 的归属映射；不靠名称推断归属，不级联删除。"""
+
+    __tablename__ = "pack_deployment_resources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    deployment_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_deployments.id"), index=True)
+    # 包内机位 id（旧格式包为 default）
+    camera_slot_id: Mapped[str] = mapped_column(String(64), default="default")
+    # camera / rule / video
+    kind: Mapped[str] = mapped_column(String(16))
+    # 目标表主键；故意不建外键：目标被删时部署应可判定为 degraded
+    resource_id: Mapped[int] = mapped_column(Integer)
+    ownership: Mapped[str] = mapped_column(String(16), default=DEPLOY_OWNERSHIP_CREATED)
+    # 该校准项是否已完成（换源/校准/启用确认）
+    configured: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 # ---------- Pydantic schema ----------
 
 class CameraCreate(BaseModel):
@@ -689,6 +736,64 @@ class PackDetail(BaseModel):
     readme_html: str = ""
     min_opencam_version: str = "0.1.0"
     format_version: int = 1
+
+
+class ApplyPlanCameraOut(BaseModel):
+    """变更计划里一路摄像头：新建或绑定已有。"""
+
+    slot_id: str
+    name: str
+    purpose: str = ""
+    camera_id: int | None = None  # 旧包绑定的已有摄像头
+    video_filename: str | None = None  # 将复制到视频库的文件名
+    rule_ids: list[str] = Field(default_factory=list)
+
+
+class ApplyPlanRuleOut(BaseModel):
+    id: str
+    name: str
+    type: str
+    type_label: str
+    slot_id: str
+    summary: str = ""
+
+
+class ApplyPlanOut(BaseModel):
+    """应用前变更计划：只描述将发生的变更，不产生任何写入。"""
+
+    pack_id: str
+    pack_version: str
+    fingerprint: str
+    mode: str  # create_cameras | existing_camera
+    cameras: list[ApplyPlanCameraOut] = Field(default_factory=list)
+    rules: list[ApplyPlanRuleOut] = Field(default_factory=list)
+    videos: list[str] = Field(default_factory=list)  # 将复制的源文件名
+    auto_start: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+
+
+class PackDeploymentResourceOut(BaseModel):
+    id: int
+    camera_slot_id: str
+    kind: str
+    resource_id: int
+    ownership: str
+    configured: bool
+    exists: bool = True  # 目标资源当前是否还在（缺失则部署 degraded）
+
+    model_config = {"from_attributes": True}
+
+
+class PackDeploymentOut(BaseModel):
+    id: int
+    pack_id: str
+    pack_version: str
+    pack_digest: str
+    status: str  # configuring | active | degraded
+    created_at: float
+    updated_at: float
+    resources: list[PackDeploymentResourceOut] = Field(default_factory=list)
 
 
 class ModelAssetCreate(BaseModel):

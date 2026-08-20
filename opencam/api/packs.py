@@ -20,16 +20,25 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session_scope
-from ..models import CameraOut, PackDetail, RuleOut
+from ..models import ApplyPlanOut, CameraOut, PackDeploymentOut, PackDetail, RuleOut
 from ..packs import installer
-from ..packs.apply import apply_pack
+from ..packs import deployment as pack_deployment
+from ..packs.apply import apply_pack  # noqa: F401 — 兼容再导出（旧调用方）
 from ..packs.catalog import catalog
+from ..packs.deployment import (
+    DiskSpaceError,
+    FingerprintMismatchError,
+    PackNotFoundError as DeploymentNotFoundError,
+    ResourceStateError,
+    TargetError,
+)
 from ..packs.experience import TrialOut, pack_experience, TrialError
 from ..packs.manifest import PackError
 from .cameras import camera_out
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
 trials_router = APIRouter(prefix="/api/pack-trials", tags=["packs"])
+deployments_router = APIRouter(prefix="/api/pack-deployments", tags=["packs"])
 
 
 @router.get("", summary="方案包列表", description="内置 + 已安装；同 id 时已安装覆盖内置。view=cards 返回规范化卡片。")
@@ -88,25 +97,52 @@ def install_upload(file: UploadFile):
 
 class ApplyRequest(BaseModel):
     camera_id: int | None = None
+    # Web 新流程必传：确认时回传变更计划里的包内容指纹；旧 CLI/HTTP 可省略
+    expected_fingerprint: str | None = None
 
 
 class PackApplyOut(BaseModel):
     cameras: list[CameraOut]
     rules: list[RuleOut]
+    deployment: PackDeploymentOut | None = None
+
+
+@router.post("/{pack_id}/apply-plan", response_model=ApplyPlanOut,
+             summary="应用前变更计划",
+             description="只读计算将创建/影响的摄像头、规则与视频资产，附包内容指纹；"
+                         "确认后把指纹回传给 apply。")
+def apply_plan(pack_id: str, body: ApplyRequest,
+               session: Session = Depends(session_scope)):
+    try:
+        return pack_deployment.plan(pack_id, session, camera_id=body.camera_id)
+    except DeploymentNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except TargetError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PackError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/{pack_id}/apply", response_model=PackApplyOut, status_code=201,
              summary="应用方案包",
-             description="新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。")
+             description="新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。"
+                         "传 expected_fingerprint 时内容变化返回 409。")
 def apply(pack_id: str, body: ApplyRequest,
           session: Session = Depends(session_scope)):
     try:
-        result = apply_pack(pack_id, session, camera_id=body.camera_id)
+        outcome = pack_deployment.apply(
+            pack_id, session, camera_id=body.camera_id,
+            expected_fingerprint=body.expected_fingerprint)
+    except FingerprintMismatchError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except DiskSpaceError as exc:
+        raise HTTPException(507, str(exc)) from exc
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
     return PackApplyOut(
-        cameras=[camera_out(c) for c in result.cameras],
-        rules=[RuleOut.model_validate(r) for r in result.rules],
+        cameras=[camera_out(c) for c in outcome.cameras],
+        rules=[RuleOut.model_validate(r) for r in outcome.rules],
+        deployment=pack_deployment.get_deployment(session, outcome.deployment.id),
     )
 
 
@@ -247,3 +283,38 @@ def stop_trial(trial_id: str):
         pack_experience.stop(trial_id)
     except TrialError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
+
+
+# ---- 部署追踪（PackDeployment）----
+
+
+@deployments_router.get("/{deployment_id}", response_model=PackDeploymentOut,
+                        summary="部署详情",
+                        description="部署记录与资源映射；资源缺失时状态实时修正为 degraded。")
+def get_deployment(deployment_id: int,
+                   session: Session = Depends(session_scope)):
+    try:
+        return pack_deployment.get_deployment(session, deployment_id)
+    except DeploymentNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+class ResourceConfigureIn(BaseModel):
+    configured: bool
+
+
+@deployments_router.patch("/{deployment_id}/resources/{resource_id}",
+                          response_model=PackDeploymentOut,
+                          summary="更新资源校准状态",
+                          description="标记单项校准完成；规则资源在完成校准时启用，"
+                                      "取消校准时禁用。资源缺失返回 409。")
+def configure_resource(deployment_id: int, resource_id: int,
+                       body: ResourceConfigureIn,
+                       session: Session = Depends(session_scope)):
+    try:
+        return pack_deployment.set_resource_configured(
+            session, deployment_id, resource_id, body.configured)
+    except DeploymentNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ResourceStateError as exc:
+        raise HTTPException(409, str(exc)) from exc

@@ -124,6 +124,48 @@ def test_v0004_db_missing_model_versions_is_upgraded(tmp_path):
     assert migrations.current_revision(engine) == migrations.head_revision()
 
 
+def test_v0008_db_upgraded_with_pack_deployments(tmp_path):
+    """0008 存量库升到 head：幂等补建 pack_deployments 两表，质检通过。
+
+    模拟部分结构已被旧库补齐的场景：先手工建一张表，版本脚本必须幂等跳过。
+    """
+    import opencam.db as oc_db
+
+    db = tmp_path / "opencam.db"
+    url = _url(db)
+    init_db(url, backup_dir=tmp_path / "backups")
+    if oc_db._engine is not None:
+        oc_db._engine.dispose()
+
+    conn = sqlite3.connect(db)
+    conn.execute("DROP TABLE IF EXISTS pack_deployment_resources")
+    conn.execute("DROP TABLE IF EXISTS pack_deployments")
+    # 预建一张表（列结构与 0009 一致），模拟存量库已被补过部分结构
+    conn.execute(
+        "CREATE TABLE pack_deployments (id INTEGER PRIMARY KEY, "
+        "pack_id VARCHAR(128) NOT NULL, pack_version VARCHAR(32) NOT NULL, "
+        "pack_digest VARCHAR(64) NOT NULL, status VARCHAR(16) NOT NULL "
+        "DEFAULT 'configuring', created_at FLOAT NOT NULL, "
+        "updated_at FLOAT NOT NULL)")
+    conn.execute("INSERT INTO pack_deployments (pack_id, pack_version, "
+                 "pack_digest, status, created_at, updated_at) "
+                 "VALUES ('fast-food', '1.0.0', 'abc', 'configuring', 1.0, 1.0)")
+    conn.execute("UPDATE alembic_version SET version_num = '0008'")
+    conn.commit()
+    conn.close()
+
+    init_db(url, backup_dir=tmp_path / "backups")
+    engine = _engine(db)
+    tables = set(inspect(engine).get_table_names())
+    assert {"pack_deployments", "pack_deployment_resources"} <= tables
+    assert migrations.verify_schema(engine) == []
+    assert migrations.current_revision(engine) == migrations.head_revision()
+    with engine.connect() as conn:
+        # 已有数据在幂等升级后保留
+        assert conn.execute(
+            text("SELECT pack_id FROM pack_deployments")).scalar() == "fast-food"
+
+
 # ---------- 跨版本升级：备份与回滚（用临时迁移目录模拟一个新版本） ----------
 
 _FAKE_ENV = """from alembic import context

@@ -2703,13 +2703,66 @@
         }
       }
     },
+    "/api/packs/{pack_id}/apply-plan": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "应用前变更计划",
+        "description": "只读计算将创建/影响的摄像头、规则与视频资产，附包内容指纹；确认后把指纹回传给 apply。",
+        "operationId": "apply_plan_api_packs__pack_id__apply_plan_post",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyPlanOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/packs/{pack_id}/apply": {
       "post": {
         "tags": [
           "packs"
         ],
         "summary": "应用方案包",
-        "description": "新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。",
+        "description": "新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。传 expected_fingerprint 时内容变化返回 409。",
         "operationId": "apply_api_packs__pack_id__apply_post",
         "parameters": [
           {
@@ -3038,6 +3091,111 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-deployments/{deployment_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "部署详情",
+        "description": "部署记录与资源映射；资源缺失时状态实时修正为 degraded。",
+        "operationId": "get_deployment_api_pack_deployments__deployment_id__get",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deployment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackDeploymentOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-deployments/{deployment_id}/resources/{resource_id}": {
+      "patch": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "更新资源校准状态",
+        "description": "标记单项校准完成；规则资源在完成校准时启用，取消校准时禁用。资源缺失返回 409。",
+        "operationId": "configure_resource_api_pack_deployments__deployment_id__resources__resource_id__patch",
+        "parameters": [
+          {
+            "name": "deployment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Deployment Id"
+            }
+          },
+          {
+            "name": "resource_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Resource Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceConfigureIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackDeploymentOut"
+                }
               }
             }
           },
@@ -4377,6 +4535,166 @@
   },
   "components": {
     "schemas": {
+      "ApplyPlanCameraOut": {
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "title": "Slot Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "default": ""
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "video_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Filename"
+          },
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rule Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "slot_id",
+          "name"
+        ],
+        "title": "ApplyPlanCameraOut",
+        "description": "变更计划里一路摄像头：新建或绑定已有。"
+      },
+      "ApplyPlanOut": {
+        "properties": {
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "pack_version": {
+            "type": "string",
+            "title": "Pack Version"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/ApplyPlanCameraOut"
+            },
+            "type": "array",
+            "title": "Cameras"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ApplyPlanRuleOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "videos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Videos"
+          },
+          "auto_start": {
+            "type": "boolean",
+            "title": "Auto Start",
+            "default": false
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "next_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Next Steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pack_id",
+          "pack_version",
+          "fingerprint",
+          "mode"
+        ],
+        "title": "ApplyPlanOut",
+        "description": "应用前变更计划：只描述将发生的变更，不产生任何写入。"
+      },
+      "ApplyPlanRuleOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "type_label": {
+            "type": "string",
+            "title": "Type Label"
+          },
+          "slot_id": {
+            "type": "string",
+            "title": "Slot Id"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "type_label",
+          "slot_id"
+        ],
+        "title": "ApplyPlanRuleOut"
+      },
       "ApplyRequest": {
         "properties": {
           "camera_id": {
@@ -4389,6 +4707,17 @@
               }
             ],
             "title": "Camera Id"
+          },
+          "expected_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Fingerprint"
           }
         },
         "type": "object",
@@ -6139,6 +6468,16 @@
             },
             "type": "array",
             "title": "Rules"
+          },
+          "deployment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackDeploymentOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -6193,6 +6532,99 @@
           "name"
         ],
         "title": "PackCameraDetailOut"
+      },
+      "PackDeploymentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "pack_version": {
+            "type": "string",
+            "title": "Pack Version"
+          },
+          "pack_digest": {
+            "type": "string",
+            "title": "Pack Digest"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/PackDeploymentResourceOut"
+            },
+            "type": "array",
+            "title": "Resources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pack_id",
+          "pack_version",
+          "pack_digest",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PackDeploymentOut"
+      },
+      "PackDeploymentResourceOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "camera_slot_id": {
+            "type": "string",
+            "title": "Camera Slot Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "resource_id": {
+            "type": "integer",
+            "title": "Resource Id"
+          },
+          "ownership": {
+            "type": "string",
+            "title": "Ownership"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "exists": {
+            "type": "boolean",
+            "title": "Exists",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "camera_slot_id",
+          "kind",
+          "resource_id",
+          "ownership",
+          "configured"
+        ],
+        "title": "PackDeploymentResourceOut"
       },
       "PackDetail": {
         "properties": {
@@ -6859,6 +7291,19 @@
           "task_id"
         ],
         "title": "RegisterModel"
+      },
+      "ResourceConfigureIn": {
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          }
+        },
+        "type": "object",
+        "required": [
+          "configured"
+        ],
+        "title": "ResourceConfigureIn"
       },
       "ReviewAction": {
         "properties": {
