@@ -18,6 +18,7 @@ export const ACTION_NAMES: Record<string, string> = {
   star: "加关注",
   unstar: "取消关注",
   assign: "指派负责人",
+  verdict: "人工判定",
   status: "状态流转",
   note: "备注",
   ack: "确认",

@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, computed_field, model_validator
 from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .clip import clip_window
 from .db import Base
@@ -50,6 +50,11 @@ EVENT_STATUS_NAMES = {
 
 INTENT_OBSERVE = "observe"
 INTENT_ALERT = "alert"
+
+# 人工判定（与 vlm_verdict 并存，展示与结案以人的判定为准）
+VERDICT_CONFIRMED = "confirmed"
+VERDICT_FALSE_ALARM = "false_alarm"
+VERDICT_UNCLEAR = "unclear"
 
 
 def default_intent(rule_type: str) -> str:
@@ -128,6 +133,11 @@ class Event(Base):
     intent: Mapped[str] = mapped_column(String(16), default=INTENT_ALERT)
     needs_action: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     repeat_count: Mapped[int] = mapped_column(Integer, default=1)
+    # 人的判定：confirmed / false_alarm / unclear；与 vlm_verdict 并存
+    verdict: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # 负责人员工 id；assignee 字符串为其名字副本（兼容旧客户端）
+    assignee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("people.id"), nullable=True)
 
 
 class EventAction(Base):
@@ -154,6 +164,47 @@ class NotifyChannel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(64))
     webhook: Mapped[str] = mapped_column(Text)
+    camera_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rule_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Person(Base):
+    """员工：login_name 可空（本期不验证登录），不登录也能当负责人、收 IM。"""
+
+    __tablename__ = "people"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64))
+    login_name: Mapped[Optional[str]] = mapped_column(
+        String(64), unique=True, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+    channels: Mapped[list["PersonChannel"]] = relationship(
+        back_populates="person", cascade="all, delete-orphan")
+
+
+class PersonChannel(Base):
+    """员工个人 IM 渠道：飞书/钉钉/企微 webhook，发送仍是 HTTP POST JSON。"""
+
+    __tablename__ = "person_channels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # feishu / dingtalk / wecom
+    webhook: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    person: Mapped[Person] = relationship(back_populates="channels")
+
+
+class EventRouting(Base):
+    """事件路由：摄像头 × 规则类型 → 员工；camera_id/rule_type 空 = 通配。"""
+
+    __tablename__ = "event_routings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id"), index=True)
     camera_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     rule_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -292,6 +343,8 @@ class EventOut(BaseModel):
     intent: str = INTENT_ALERT
     needs_action: bool = True
     repeat_count: int = 1
+    verdict: Optional[str] = None
+    assignee_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -311,10 +364,17 @@ class EventOut(BaseModel):
 
 
 class EventUpdate(BaseModel):
-    """处置编辑：全部可选，只更新传入的字段。"""
-    status: Optional[str] = Field(default=None, pattern="^(open|acked|resolved|ignored)$")
+    """处置编辑：全部可选，只更新传入的字段。
+
+    assignee 自由文本已废弃：传入即 400，改用 assignee_id（员工 id）。
+    """
+    status: Optional[str] = Field(
+        default=None, pattern="^(open|acked|resolved|ignored|logged)$")
+    verdict: Optional[str] = Field(
+        default=None, pattern="^(confirmed|false_alarm|unclear)$")
     starred: Optional[bool] = None
     assignee: Optional[str] = None
+    assignee_id: Optional[int] = None
     note: Optional[str] = None
 
 
@@ -325,6 +385,77 @@ class EventActionOut(BaseModel):
     actor: str
     payload: dict[str, Any]
     ts: float
+
+    model_config = {"from_attributes": True}
+
+
+class PersonIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    # 可空：不登录的员工也能当负责人
+    login_name: Optional[str] = Field(default=None, max_length=64)
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    login_name: Optional[str] = Field(default=None, max_length=64)
+
+
+class PersonChannelIn(BaseModel):
+    kind: str = Field(pattern="^(feishu|dingtalk|wecom)$")
+    webhook: str = Field(min_length=1)
+    enabled: bool = True
+
+
+class PersonChannelUpdate(BaseModel):
+    kind: Optional[str] = Field(default=None, pattern="^(feishu|dingtalk|wecom)$")
+    webhook: Optional[str] = Field(default=None, min_length=1)
+    enabled: Optional[bool] = None
+
+
+class PersonChannelOut(BaseModel):
+    id: int
+    person_id: int
+    kind: str
+    webhook: str
+    enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PersonOut(BaseModel):
+    id: int
+    name: str
+    login_name: Optional[str]
+    created_at: float
+    channels: list[PersonChannelOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+class EventRoutingIn(BaseModel):
+    person_id: int
+    camera_id: Optional[int] = None
+    rule_type: Optional[str] = Field(
+        default=None,
+        pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
+    enabled: bool = True
+
+
+class EventRoutingUpdate(BaseModel):
+    person_id: Optional[int] = None
+    camera_id: Optional[int] = None
+    rule_type: Optional[str] = Field(
+        default=None,
+        pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
+    enabled: Optional[bool] = None
+
+
+class EventRoutingOut(BaseModel):
+    id: int
+    person_id: int
+    camera_id: Optional[int]
+    rule_type: Optional[str]
+    enabled: bool
 
     model_config = {"from_attributes": True}
 

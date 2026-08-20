@@ -13,8 +13,10 @@ from sqlalchemy.orm import Session
 from ..clip import clip_file_for_event, media_type_for, resolve_source_uri
 from ..config import resolve_snapshot_path
 from ..db import session_scope
-from ..models import (EVENT_ACKED, EVENT_OPEN, Camera, Event, EventAction,
-                      EventActionOut, EventOut, EventUpdate)
+from ..models import (EVENT_ACKED, EVENT_IGNORED, EVENT_LOGGED, EVENT_OPEN,
+                      EVENT_RESOLVED, VERDICT_CONFIRMED, VERDICT_FALSE_ALARM,
+                      Camera, Event, EventAction, EventActionOut, EventOut,
+                      EventUpdate, Person)
 from ..notify import notifier
 from ..training.feedback import FeedbackError, ingest_event_feedback
 
@@ -65,13 +67,15 @@ def _log_action(session: Session, event_id: int, action: str,
                             actor=actor, payload=payload))
 
 
-@router.get("", response_model=list[EventOut], summary="事件列表", description="支持 camera_id / rule_type / vlm_verdict / acked / status / starred / needs_action 过滤与 limit/offset 分页，按时间倒序。不传 needs_action 返回全部。")
+@router.get("", response_model=list[EventOut], summary="事件列表", description="支持 camera_id / rule_type / vlm_verdict / verdict / acked / status / starred / needs_action 过滤与 limit/offset 分页，按时间倒序。不传 needs_action 返回全部。")
 def list_events(
     camera_id: Optional[int] = Query(None, description="按摄像头过滤"),
     rule_type: Optional[str] = Query(
         None, description="按规则类型过滤，如 zone_intrusion / line_crossing"),
     vlm_verdict: Optional[str] = Query(
         None, description="按 VLM 判定过滤：confirmed / false_alarm / uncertain"),
+    verdict: Optional[str] = Query(
+        None, description="按人工判定过滤：confirmed / false_alarm / unclear"),
     acked: Optional[bool] = Query(None, description="按确认状态过滤"),
     status: Optional[str] = Query(
         None, description="按处置状态过滤：open / acked / resolved / ignored / logged"),
@@ -89,6 +93,8 @@ def list_events(
         q = q.filter(Event.type == rule_type)
     if vlm_verdict is not None:
         q = q.filter(Event.vlm_verdict == vlm_verdict)
+    if verdict is not None:
+        q = q.filter(Event.verdict == verdict)
     if acked is not None:
         q = q.filter(Event.acked == acked)
     if status is not None:
@@ -106,12 +112,52 @@ def get_event(event_id: int, session: Session = Depends(session_scope)):
     return _event_out(session, _get_event(session, event_id))
 
 
-@router.patch("/{event_id}", response_model=EventOut, summary="编辑处置信息", description="更新状态/星标/负责人/备注；每项实际变更记入处置时间线。status=acked 时同步 acked=true。")
+@router.patch("/{event_id}", response_model=EventOut, summary="编辑处置信息",
+              description="更新判定（verdict）/状态/星标/负责人/备注；每项实际变更记入处置时间线。"
+              "误报自动 ignored；结案需先判定属实；观察记录不可处置。")
 def update_event(event_id: int, body: EventUpdate,
                  session: Session = Depends(session_scope)):
     event = _get_event(session, event_id)
     data = body.model_dump(exclude_unset=True)
 
+    if not event.needs_action and (
+            {"status", "verdict", "assignee", "assignee_id"} & data.keys()):
+        raise HTTPException(400, "观察记录不可处置")
+    if "assignee" in data:
+        raise HTTPException(400, "负责人请改用 assignee_id（员工 id）指派")
+    if data.get("status") == EVENT_LOGGED:
+        raise HTTPException(400, "status 不能写回 logged")
+    final_verdict = data["verdict"] if "verdict" in data else event.verdict
+    if data.get("status") == EVENT_RESOLVED and final_verdict != VERDICT_CONFIRMED:
+        raise HTTPException(400, "属实后才能结案")
+
+    # 判定与处置分开：先 verdict（可能联动 status），再显式 status
+    if "verdict" in data and data["verdict"] != event.verdict:
+        verdict = data["verdict"]
+        _log_action(session, event.id, "verdict",
+                    {"from": event.verdict, "to": verdict})
+        event.verdict = verdict
+        if verdict == VERDICT_FALSE_ALARM and event.status != EVENT_IGNORED:
+            _log_action(session, event.id, "status",
+                        {"from": event.status, "to": EVENT_IGNORED})
+            event.status = EVENT_IGNORED
+            event.acked = True
+        elif verdict == VERDICT_CONFIRMED and event.status == EVENT_OPEN:
+            _log_action(session, event.id, "status",
+                        {"from": EVENT_OPEN, "to": EVENT_ACKED})
+            event.status = EVENT_ACKED
+            event.acked = True
+    if "assignee_id" in data and data["assignee_id"] != event.assignee_id:
+        person_id = data["assignee_id"]
+        person = None
+        if person_id is not None:
+            person = session.get(Person, person_id)
+            if person is None:
+                raise HTTPException(400, "员工不存在")
+        _log_action(session, event.id, "assign",
+                    {"from": event.assignee_id, "to": person_id})
+        event.assignee_id = person_id
+        event.assignee = person.name if person else None
     if "status" in data and data["status"] != event.status:
         _log_action(session, event.id, "status",
                     {"from": event.status, "to": data["status"]})
@@ -121,10 +167,6 @@ def update_event(event_id: int, body: EventUpdate,
         _log_action(session, event.id,
                     "star" if data["starred"] else "unstar", {})
         event.starred = data["starred"]
-    if "assignee" in data and data["assignee"] != event.assignee:
-        _log_action(session, event.id, "assign",
-                    {"from": event.assignee, "to": data["assignee"]})
-        event.assignee = data["assignee"]
     if "note" in data and data["note"] != event.note:
         _log_action(session, event.id, "note", {"text": data["note"]})
         event.note = data["note"]
@@ -154,9 +196,11 @@ def ack_event(event_id: int, session: Session = Depends(session_scope)):
     return _event_out(session, event)
 
 
-@router.post("/{event_id}/notify", summary="重发通知", description="把该事件重新推送到所有匹配的通知渠道，返回推送渠道数。")
+@router.post("/{event_id}/notify", summary="重发通知", description="把该待办重新推送到所有匹配的通知渠道，返回推送渠道数。观察记录不可推送。")
 def resend_notify(event_id: int, session: Session = Depends(session_scope)):
-    _get_event(session, event_id)
+    event = _get_event(session, event_id)
+    if not event.needs_action:
+        raise HTTPException(400, "观察记录不可推送通知")
     notifier.submit(event_id)
     return {"ok": True}
 

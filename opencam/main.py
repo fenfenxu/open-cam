@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .api import account, cameras, events, notify, packs, rule_presets, rules, stats, system, trained_models, training, videos
+from .api import account, cameras, events, notify, packs, people, rule_presets, rules, stats, system, trained_models, training, videos
 from .config import migrate_legacy_data_dir, settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
@@ -84,6 +84,7 @@ _TAGS = [
     {"name": "rules", "description": "检测规则配置与场景化预设"},
     {"name": "events", "description": "告警事件查询、快照与处置闭环（关注/指派/状态流转/通知）"},
     {"name": "notify", "description": "通知渠道：webhook 推送配置与测试（飞书/企业微信/钉钉机器人）"},
+    {"name": "people", "description": "员工、个人 IM 渠道与事件路由（摄像头 × 规则类型 → 员工）"},
     {"name": "packs", "description": "行业方案包：浏览、安装、应用与卸载"},
     {"name": "stats", "description": "事件聚合统计（分时段客流等）"},
     {"name": "system", "description": "本机算力与运行配置信息"},
@@ -131,6 +132,8 @@ app.include_router(rules.router)
 app.include_router(rule_presets.router)
 app.include_router(events.router)
 app.include_router(notify.router)
+app.include_router(people.router)
+app.include_router(people.routing_router)
 app.include_router(system.router)
 app.include_router(stats.router)
 app.include_router(packs.router)

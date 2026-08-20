@@ -18,6 +18,11 @@ import { api, ApiError } from "@/lib/api";
 import { jsonBody, type Camera } from "@/lib/cameras";
 import { RULE_TYPE_NAMES } from "@/lib/labels";
 import {
+  CHANNEL_KIND_NAMES,
+  type EventRouting,
+  type Person,
+} from "@/lib/people";
+import {
   VLM_PRESETS,
   matchVlmPreset,
   type AccountStatus,
@@ -44,6 +49,13 @@ export function SettingsPage() {
   const [nWebhook, setNWebhook] = useState("");
   const [nCamera, setNCamera] = useState(ALL);
   const [nRule, setNRule] = useState(ALL);
+  const [pName, setPName] = useState("");
+  const [pLogin, setPLogin] = useState("");
+  const [pKind, setPKind] = useState("feishu");
+  const [pWebhook, setPWebhook] = useState("");
+  const [rPerson, setRPerson] = useState("");
+  const [rCamera, setRCamera] = useState(ALL);
+  const [rRule, setRRule] = useState(ALL);
   const syncedVlm = useRef(false);
 
   const infoQuery = useQuery({
@@ -62,6 +74,14 @@ export function SettingsPage() {
     queryKey: ["notify-channels"],
     queryFn: () => api<NotifyChannel[]>("/api/notify-channels"),
   });
+  const peopleQuery = useQuery({
+    queryKey: ["people"],
+    queryFn: () => api<Person[]>("/api/people"),
+  });
+  const routingsQuery = useQuery({
+    queryKey: ["event-routings"],
+    queryFn: () => api<EventRouting[]>("/api/event-routings"),
+  });
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
     queryFn: () => api<Camera[]>("/cameras"),
@@ -69,6 +89,8 @@ export function SettingsPage() {
 
   const cameras = camerasQuery.data ?? [];
   const channels = channelsQuery.data ?? [];
+  const people = peopleQuery.data ?? [];
+  const routings = routingsQuery.data ?? [];
   const vlm = vlmQuery.data;
 
   useEffect(() => {
@@ -83,6 +105,12 @@ export function SettingsPage() {
   useEffect(() => {
     if (channelsQuery.isError) toast.error(errorMessage(channelsQuery.error));
   }, [channelsQuery.isError, channelsQuery.error]);
+  useEffect(() => {
+    if (peopleQuery.isError) toast.error(errorMessage(peopleQuery.error));
+  }, [peopleQuery.isError, peopleQuery.error]);
+  useEffect(() => {
+    if (routingsQuery.isError) toast.error(errorMessage(routingsQuery.error));
+  }, [routingsQuery.isError, routingsQuery.error]);
 
   useEffect(() => {
     if (!vlm || syncedVlm.current) return;
@@ -167,6 +195,90 @@ export function SettingsPage() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
+  const addPerson = useMutation({
+    mutationFn: async () => {
+      const created = await api<Person>(
+        "/api/people",
+        jsonBody("POST", {
+          name: pName.trim(),
+          login_name: pLogin.trim() || null,
+        }),
+      );
+      // 渠道类型和 webhook 都填了才建档个人渠道
+      if (pKind && pWebhook.trim()) {
+        await api(
+          `/api/people/${created.id}/channels`,
+          jsonBody("POST", { kind: pKind, webhook: pWebhook.trim() }),
+        );
+      }
+    },
+    onSuccess: async () => {
+      toast.success("已添加");
+      setPName("");
+      setPLogin("");
+      setPWebhook("");
+      await queryClient.invalidateQueries({ queryKey: ["people"] });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const deletePerson = useMutation({
+    mutationFn: (id: number) => api(`/api/people/${id}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      toast.success("已删除");
+      await queryClient.invalidateQueries({ queryKey: ["people"] });
+      await queryClient.invalidateQueries({ queryKey: ["event-routings"] });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const testPersonChannel = useMutation({
+    mutationFn: ({ personId, channelId }: { personId: number; channelId: number }) =>
+      api<{ ok: boolean; error?: string }>(
+        `/api/people/${personId}/channels/${channelId}/test`,
+        { method: "POST" },
+      ),
+    onSuccess: (r) => {
+      if (r.ok) toast.success("测试推送成功");
+      else toast.error(`推送失败：${r.error}`);
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const addRouting = useMutation({
+    mutationFn: () =>
+      api(
+        "/api/event-routings",
+        jsonBody("POST", {
+          person_id: Number(rPerson),
+          camera_id: rCamera === ALL ? null : Number(rCamera),
+          rule_type: rRule === ALL ? null : rRule,
+        }),
+      ),
+    onSuccess: async () => {
+      toast.success("已添加");
+      setRCamera(ALL);
+      setRRule(ALL);
+      await queryClient.invalidateQueries({ queryKey: ["event-routings"] });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const deleteRouting = useMutation({
+    mutationFn: (id: number) => api(`/api/event-routings/${id}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      toast.success("已删除");
+      await queryClient.invalidateQueries({ queryKey: ["event-routings"] });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const toggleRouting = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      api(`/api/event-routings/${id}`, jsonBody("PATCH", { enabled })),
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
   function camName(id: number | null) {
     if (id == null) return "全部摄像头";
     const c = cameras.find((x) => x.id === id);
@@ -221,6 +333,114 @@ export function SettingsPage() {
       },
     ],
     [cameras, deleteChannel, testChannel, toggleChannel],
+  );
+
+  function personName(id: number) {
+    const p = people.find((x) => x.id === id);
+    return p ? p.name : `#${id}`;
+  }
+
+  const peopleColumns = useMemo<DataTableColumn<Person>[]>(
+    () => [
+      { accessorKey: "name", header: "姓名" },
+      {
+        accessorKey: "login_name",
+        header: "登录名",
+        cell: ({ row }) => row.original.login_name || "—",
+      },
+      {
+        id: "channels",
+        header: "个人渠道",
+        cell: ({ row }) =>
+          row.original.channels.length === 0 ? (
+            "—"
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {row.original.channels.map((ch) => (
+                <span key={ch.id} className="block max-w-xs truncate font-mono text-xs">
+                  {CHANNEL_KIND_NAMES[ch.kind] || ch.kind} · {ch.webhook}
+                </span>
+              ))}
+            </div>
+          ),
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1">
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={row.original.channels.length === 0}
+              title={row.original.channels.length === 0 ? "该员工还没有个人渠道" : undefined}
+              onClick={() =>
+                testPersonChannel.mutate({
+                  personId: row.original.id,
+                  channelId: row.original.channels[0].id,
+                })
+              }
+            >
+              测试
+            </Button>
+            <Button
+              size="xs"
+              variant="destructive"
+              onClick={() => deletePerson.mutate(row.original.id)}
+            >
+              删除
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [deletePerson, testPersonChannel],
+  );
+
+  const routingColumns = useMemo<DataTableColumn<EventRouting>[]>(
+    () => [
+      {
+        accessorKey: "person_id",
+        header: "员工",
+        cell: ({ row }) => personName(row.original.person_id),
+      },
+      {
+        accessorKey: "camera_id",
+        header: "摄像头",
+        cell: ({ row }) => camName(row.original.camera_id),
+      },
+      {
+        accessorKey: "rule_type",
+        header: "规则类型",
+        cell: ({ row }) => RULE_TYPE_NAMES[row.original.rule_type || ""] || "全部类型",
+      },
+      {
+        id: "enabled",
+        header: "启用",
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.original.enabled}
+            onCheckedChange={(checked) =>
+              toggleRouting.mutate({ id: row.original.id, enabled: checked === true })
+            }
+          />
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) => (
+          <Button
+            size="xs"
+            variant="destructive"
+            onClick={() => deleteRouting.mutate(row.original.id)}
+          >
+            删除
+          </Button>
+        ),
+      },
+    ],
+    [cameras, people, deleteRouting, toggleRouting],
   );
 
   const info = infoQuery.data;
@@ -469,6 +689,145 @@ export function SettingsPage() {
             </SelectContent>
           </Select>
           <Button type="submit" disabled={addChannel.isPending}>
+            添加
+          </Button>
+        </form>
+      </section>
+
+      <section className="space-y-3 rounded-lg border p-4">
+        <h2 className="text-lg font-medium">员工</h2>
+        <p className="text-sm text-muted-foreground">
+          事件指派和按人通知都面向这里的员工；个人渠道用于把待办直接推给本人。
+        </p>
+        {peopleQuery.isPending ? (
+          <p className="text-sm text-muted-foreground">正在加载…</p>
+        ) : (
+          <DataTable
+            columns={peopleColumns}
+            data={people}
+            getRowId={(row) => String(row.id)}
+            emptyMessage="还没有员工。"
+          />
+        )}
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!pName.trim()) {
+              toast.error("请填写姓名");
+              return;
+            }
+            if (pWebhook.trim() && !pKind) {
+              toast.error("填了 webhook 就要选渠道类型");
+              return;
+            }
+            addPerson.mutate();
+          }}
+        >
+          <Input
+            className="w-36"
+            placeholder="姓名（必填）"
+            value={pName}
+            onChange={(e) => setPName(e.target.value)}
+          />
+          <Input
+            className="w-36"
+            placeholder="登录名（可选）"
+            value={pLogin}
+            onChange={(e) => setPLogin(e.target.value)}
+          />
+          <Select value={pKind} onValueChange={(v) => v && setPKind(v)}>
+            <SelectTrigger className="w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(CHANNEL_KIND_NAMES).map(([k, v]) => (
+                <SelectItem key={k} value={k}>
+                  {v}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            className="min-w-56 flex-1"
+            placeholder="个人渠道 webhook URL（可选）"
+            value={pWebhook}
+            onChange={(e) => setPWebhook(e.target.value)}
+          />
+          <Button type="submit" disabled={addPerson.isPending}>
+            添加
+          </Button>
+        </form>
+        <p className="text-xs text-muted-foreground">
+          「测试」会对该员工的第一个个人渠道发一条测试消息。
+        </p>
+      </section>
+
+      <section className="space-y-3 rounded-lg border p-4">
+        <h2 className="text-lg font-medium">事件路由</h2>
+        <p className="text-sm text-muted-foreground">
+          事件命中后按「摄像头 × 规则类型」匹配员工并推送到其个人渠道；留空表示全部。
+        </p>
+        {routingsQuery.isPending ? (
+          <p className="text-sm text-muted-foreground">正在加载…</p>
+        ) : (
+          <DataTable
+            columns={routingColumns}
+            data={routings}
+            getRowId={(row) => String(row.id)}
+            emptyMessage="还没有事件路由。"
+          />
+        )}
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!rPerson) {
+              toast.error("请选择员工");
+              return;
+            }
+            addRouting.mutate();
+          }}
+        >
+          <Select value={rPerson} onValueChange={(v) => setRPerson(v ?? "")}>
+            <SelectTrigger className="w-36">
+              <SelectValue placeholder="选择员工" />
+            </SelectTrigger>
+            <SelectContent>
+              {people.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={rCamera} onValueChange={(v) => v && setRCamera(String(v))}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>全部摄像头</SelectItem>
+              {cameras.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  [{c.id}] {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={rRule} onValueChange={(v) => v && setRRule(String(v))}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>全部类型</SelectItem>
+              {Object.entries(RULE_TYPE_NAMES).map(([k, v]) => (
+                <SelectItem key={k} value={k}>
+                  {v}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button type="submit" disabled={addRouting.isPending}>
             添加
           </Button>
         </form>
