@@ -43,3 +43,15 @@ export const VLM_VERDICT_NAMES: Record<string, string> = {
   false_alarm: "误报",
   uncertain: "不确定",
 };
+
+export const HUMAN_VERDICT_NAMES: Record<string, string> = {
+  confirmed: "属实",
+  false_alarm: "误报",
+  unclear: "看不清",
+};
+
+export const PERSON_CHANNEL_KINDS: Record<string, string> = {
+  feishu: "飞书",
+  dingtalk: "钉钉",
+  wecom: "企业微信",
+};

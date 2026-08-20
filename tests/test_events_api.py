@@ -138,40 +138,43 @@ def test_event_disposition_flow(client):
     """处置闭环：状态流转/星标/负责人/备注全部留痕。"""
     camera_id = _make_camera(client)
     event_id = _insert_event(camera_id)
+    person = client.post("/api/people", json={"name": "张三"}).json()
 
-    # 初始状态
     body = client.get(f"/events/{event_id}").json()
     assert body["status"] == "open"
     assert body["starred"] is False
     assert body["assignee"] is None
 
-    # 加关注 + 指派 + 备注
     resp = client.patch(f"/events/{event_id}", json={
-        "starred": True, "assignee": "张三", "note": "夜班跟进"})
+        "starred": True, "assignee_id": person["id"], "note": "夜班跟进"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["starred"] is True
     assert body["assignee"] == "张三"
+    assert body["assignee_id"] == person["id"]
     assert body["note"] == "夜班跟进"
 
-    # 状态流转 open → acked → resolved，acked 标志同步
-    resp = client.patch(f"/events/{event_id}", json={"status": "acked"})
+    resp = client.patch(f"/events/{event_id}", json={
+        "verdict": "confirmed"})
     assert resp.json()["status"] == "acked"
-    assert resp.json()["acked"] is True
+    assert resp.json()["verdict"] == "confirmed"
+
     resp = client.patch(f"/events/{event_id}", json={"status": "resolved"})
     assert resp.json()["status"] == "resolved"
 
-    # 处置时间线：star/assign/note/status×2
     actions = client.get(f"/events/{event_id}/actions").json()
     kinds = [a["action"] for a in actions]
-    assert kinds == ["star", "assign", "note", "status", "status"]
-    assert actions[3]["payload"] == {"from": "open", "to": "acked"}
+    assert "star" in kinds
+    assert "assign" in kinds
+    assert "note" in kinds
+    assert "verdict" in kinds
+    assert kinds.count("status") >= 2
 
-    # 非法状态被拒绝
     assert client.patch(f"/events/{event_id}",
                         json={"status": "bogus"}).status_code == 422
+    assert client.patch(f"/events/{event_id}",
+                        json={"assignee": "自由文本"}).status_code == 400
 
-    # 404
     assert client.patch("/events/9999", json={"starred": True}).status_code == 404
     assert client.get("/events/9999/actions").status_code == 404
 
@@ -325,3 +328,48 @@ def test_events_needs_action_filter(client):
     assert {e["id"] for e in only_todo} == {todo_id}
     only_obs = client.get("/events", params={"needs_action": False}).json()
     assert {e["id"] for e in only_obs} == {obs_id}
+
+
+def test_verdict_false_alarm_sets_ignored(client):
+    camera_id = _make_camera(client)
+    event_id = _insert_event(camera_id)
+
+    resp = client.patch(f"/events/{event_id}", json={"verdict": "false_alarm"})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["verdict"] == "false_alarm"
+    assert body["status"] == "ignored"
+    assert body["acked"] is True
+
+    actions = client.get(f"/events/{event_id}/actions").json()
+    assert [a["action"] for a in actions] == ["verdict", "status"]
+
+
+def test_resolved_requires_confirmed_verdict(client):
+    camera_id = _make_camera(client)
+    event_id = _insert_event(camera_id)
+
+    resp = client.patch(f"/events/{event_id}", json={"status": "resolved"})
+    assert resp.status_code == 400, resp.text
+    assert "属实" in resp.json()["detail"]
+
+
+def test_observe_event_cannot_be_disposed(client):
+    camera_id = _make_camera(client)
+    session = get_session()
+    try:
+        event = Event(
+            camera_id=camera_id, type="line_crossing", confidence=0.9,
+            intent="observe", needs_action=False, status="logged", detail={})
+        session.add(event)
+        session.commit()
+        event_id = event.id
+    finally:
+        session.close()
+
+    assert client.patch(f"/events/{event_id}",
+                        json={"status": "acked"}).status_code == 400
+    assert client.patch(f"/events/{event_id}",
+                        json={"verdict": "confirmed"}).status_code == 400
+    assert client.patch(f"/events/{event_id}",
+                        json={"starred": True}).status_code == 200

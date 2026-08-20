@@ -51,6 +51,13 @@ EVENT_STATUS_NAMES = {
 INTENT_OBSERVE = "observe"
 INTENT_ALERT = "alert"
 
+VERDICT_CONFIRMED = "confirmed"
+VERDICT_FALSE_ALARM = "false_alarm"
+VERDICT_UNCLEAR = "unclear"
+VERDICTS = (VERDICT_CONFIRMED, VERDICT_FALSE_ALARM, VERDICT_UNCLEAR)
+
+PERSON_CHANNEL_KINDS = ("feishu", "dingtalk", "wecom")
+
 
 def default_intent(rule_type: str) -> str:
     """越线默认记账；其余默认告警。创建规则未传 intent 时用。"""
@@ -123,6 +130,9 @@ class Event(Base):
     status: Mapped[str] = mapped_column(String(16), default=EVENT_OPEN, index=True)
     starred: Mapped[bool] = mapped_column(Boolean, default=False)
     assignee: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    assignee_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("people.id", ondelete="SET NULL"), nullable=True)
+    verdict: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # 从规则拷贝，事后改规则不影响历史
     intent: Mapped[str] = mapped_column(String(16), default=INTENT_ALERT)
@@ -144,6 +154,43 @@ class EventAction(Base):
     # 变更细节：{"from": ..., "to": ...} 或通知结果 {"ok": ..., "error": ...}
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     ts: Mapped[float] = mapped_column(Float, default=time.time, index=True)
+
+
+class Person(Base):
+    """员工：可不设 login_name，仍可作为待办负责人并收个人 IM。"""
+
+    __tablename__ = "people"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64))
+    login_name: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PersonChannel(Base):
+    """员工个人 IM 渠道。"""
+
+    __tablename__ = "person_channels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        ForeignKey("people.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    webhook: Mapped[str] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class EventRouting(Base):
+    """事件路由：摄像头 × 规则类型 → 员工；空值通配。"""
+
+    __tablename__ = "event_routings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        ForeignKey("people.id", ondelete="CASCADE"), index=True)
+    camera_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rule_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class NotifyChannel(Base):
@@ -288,6 +335,8 @@ class EventOut(BaseModel):
     status: str
     starred: bool
     assignee: Optional[str]
+    assignee_id: Optional[int] = None
+    verdict: Optional[str] = None
     note: Optional[str]
     intent: str = INTENT_ALERT
     needs_action: bool = True
@@ -315,6 +364,9 @@ class EventUpdate(BaseModel):
     status: Optional[str] = Field(default=None, pattern="^(open|acked|resolved|ignored)$")
     starred: Optional[bool] = None
     assignee: Optional[str] = None
+    assignee_id: Optional[int] = None
+    verdict: Optional[str] = Field(
+        default=None, pattern="^(confirmed|false_alarm|unclear)$")
     note: Optional[str] = None
 
 
@@ -325,6 +377,75 @@ class EventActionOut(BaseModel):
     actor: str
     payload: dict[str, Any]
     ts: float
+
+    model_config = {"from_attributes": True}
+
+
+class PersonCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    login_name: Optional[str] = Field(default=None, max_length=64)
+
+
+class PersonUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    login_name: Optional[str] = Field(default=None, max_length=64)
+
+
+class PersonOut(BaseModel):
+    id: int
+    name: str
+    login_name: Optional[str]
+    created_at: float
+
+    model_config = {"from_attributes": True}
+
+
+class PersonChannelIn(BaseModel):
+    kind: str = Field(pattern="^(feishu|dingtalk|wecom)$")
+    webhook: str = Field(min_length=1)
+    enabled: bool = True
+
+
+class PersonChannelUpdate(BaseModel):
+    kind: Optional[str] = Field(default=None, pattern="^(feishu|dingtalk|wecom)$")
+    webhook: Optional[str] = Field(default=None, min_length=1)
+    enabled: Optional[bool] = None
+
+
+class PersonChannelOut(BaseModel):
+    id: int
+    person_id: int
+    kind: str
+    webhook: str
+    enabled: bool
+
+    model_config = {"from_attributes": True}
+
+
+class EventRoutingIn(BaseModel):
+    person_id: int
+    camera_id: Optional[int] = None
+    rule_type: Optional[str] = Field(
+        default=None,
+        pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
+    enabled: bool = True
+
+
+class EventRoutingUpdate(BaseModel):
+    person_id: Optional[int] = None
+    camera_id: Optional[int] = None
+    rule_type: Optional[str] = Field(
+        default=None,
+        pattern="^(zone_intrusion|loitering|object_count|zone_count|line_crossing)$")
+    enabled: Optional[bool] = None
+
+
+class EventRoutingOut(BaseModel):
+    id: int
+    person_id: int
+    camera_id: Optional[int]
+    rule_type: Optional[str]
+    enabled: bool
 
     model_config = {"from_attributes": True}
 

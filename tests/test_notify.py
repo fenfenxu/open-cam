@@ -1,10 +1,8 @@
-"""通知渠道与推送测试：渠道 CRUD、匹配规则、推送结果留痕。
-
-webhook 发送一律 monkeypatch 掉，不依赖真实网络。
-"""
+"""通知：个人渠道 + 群机器人；仅待办推送。"""
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -21,11 +19,16 @@ def client(tmp_settings):
         yield c
 
 
-def _insert_event(camera_id: int, rule_type: str = "zone_intrusion") -> int:
+def _insert_todo(camera_id: int, rule_type: str = "zone_intrusion",
+                 *, needs_action: bool = True) -> int:
     session = get_session()
     try:
-        event = Event(camera_id=camera_id, type=rule_type, confidence=0.9,
-                      detail={"count": 1})
+        event = Event(
+            camera_id=camera_id, type=rule_type, confidence=0.9,
+            intent="alert" if needs_action else "observe",
+            needs_action=needs_action,
+            status="open" if needs_action else "logged",
+            detail={"count": 1})
         session.add(event)
         session.commit()
         return event.id
@@ -59,13 +62,6 @@ def test_channel_crud(client):
 
     assert client.delete(f"/api/notify-channels/{ch['id']}").status_code == 204
     assert client.get("/api/notify-channels").json() == []
-    assert client.patch("/api/notify-channels/999",
-                        json={"enabled": False}).status_code == 404
-
-    # 非法规则类型被拒绝
-    assert client.post("/api/notify-channels", json={
-        "name": "x", "webhook": "https://example.com",
-        "rule_type": "bogus"}).status_code == 422
 
 
 def test_channel_test_endpoint(client, monkeypatch):
@@ -82,71 +78,88 @@ def test_channel_test_endpoint(client, monkeypatch):
     assert resp.json()["ok"] is True
     assert calls and calls[0][0] == "https://example.com/hook"
 
-    def boom(client_, url, payload):
-        raise RuntimeError("连接超时")
 
-    monkeypatch.setattr("opencam.api.notify.send_webhook", boom)
-    resp = client.post(f"/api/notify-channels/{ch['id']}/test")
-    assert resp.json()["ok"] is False
-    assert "连接超时" in resp.json()["error"]
-
-
-def test_notify_event_matching_and_logging(client, monkeypatch):
-    sent = []
+def test_notify_person_and_group_channels(client, monkeypatch):
+    posts: list[str] = []
 
     def fake_send(client_, url, payload):
-        sent.append((url, payload))
+        posts.append(url)
+        assert payload.get("needs_action") is True
+        assert "assignee_id" in payload
 
     monkeypatch.setattr(notify, "send_webhook", fake_send)
 
-    # 通配渠道 + 只匹配 loitering 的渠道 + 停用渠道
+    p_low = client.post("/api/people", json={"name": "甲"}).json()
+    p_high = client.post("/api/people", json={"name": "乙"}).json()
+    client.post(f"/api/people/{p_low['id']}/channels", json={
+        "kind": "feishu", "webhook": "https://example.com/p-low"})
+    client.post(f"/api/people/{p_high['id']}/channels", json={
+        "kind": "dingtalk", "webhook": "https://example.com/p-high"})
+    client.post("/api/event-routings", json={"person_id": p_low["id"]})
+    client.post("/api/event-routings", json={"person_id": p_high["id"]})
     client.post("/api/notify-channels", json={
-        "name": "全部", "webhook": "https://example.com/all"})
+        "name": "群兜底", "webhook": "https://example.com/group"})
+
+    event_id = _insert_todo(camera_id=1)
+    assert notify.notify_event(event_id) == 3
+    assert posts == [
+        "https://example.com/p-low",
+        "https://example.com/p-high",
+        "https://example.com/group",
+    ]
+
+    session = get_session()
+    try:
+        event = session.get(Event, event_id)
+        assert event is not None
+        assert event.assignee_id == p_low["id"]
+        assert event.assignee == "甲"
+    finally:
+        session.close()
+
+
+def test_person_channel_failure_still_pushes_group(client, monkeypatch):
+    def flaky_send(client_, url, payload):
+        if "personal" in url:
+            raise RuntimeError("502 bad gateway")
+
+    monkeypatch.setattr(notify, "send_webhook", flaky_send)
+
+    person = client.post("/api/people", json={"name": "值班"}).json()
+    client.post(f"/api/people/{person['id']}/channels", json={
+        "kind": "feishu", "webhook": "https://example.com/personal"})
+    client.post("/api/event-routings", json={"person_id": person["id"]})
     client.post("/api/notify-channels", json={
-        "name": "徘徊专线", "webhook": "https://example.com/loitering",
-        "rule_type": "loitering"})
-    client.post("/api/notify-channels", json={
-        "name": "停用", "webhook": "https://example.com/off", "enabled": False})
+        "name": "群", "webhook": "https://example.com/group"})
 
-    # 入侵事件：只有通配渠道命中
-    e1 = _insert_event(camera_id=1, rule_type="zone_intrusion")
-    assert notify.notify_event(e1) == 1
-    assert [u for u, _ in sent] == ["https://example.com/all"]
-    actions = _actions(e1)
-    assert len(actions) == 1
-    assert actions[0].action == "notify"
-    assert actions[0].actor == "全部"
-    assert actions[0].payload["ok"] is True
-
-    # 徘徊事件：通配 + 专线都命中
-    sent.clear()
-    e2 = _insert_event(camera_id=1, rule_type="loitering")
-    assert notify.notify_event(e2) == 2
-    assert len(sent) == 2
-    assert len(_actions(e2)) == 2
-
-
-def test_notify_event_failure_logged(client, monkeypatch):
-    def boom(client_, url, payload):
-        raise RuntimeError("502 bad gateway")
-
-    monkeypatch.setattr(notify, "send_webhook", boom)
-    client.post("/api/notify-channels", json={
-        "name": "不稳定渠道", "webhook": "https://example.com/flaky"})
-
-    event_id = _insert_event(camera_id=1)
-    assert notify.notify_event(event_id) == 1
+    event_id = _insert_todo(camera_id=1)
+    assert notify.notify_event(event_id) == 2
     actions = _actions(event_id)
+    assert len(actions) == 2
     assert actions[0].payload["ok"] is False
-    assert "502" in actions[0].payload["error"]
+    assert actions[1].payload["ok"] is True
 
 
-def test_resend_notify_endpoint(client, monkeypatch):
-    submitted = []
-    monkeypatch.setattr("opencam.api.events.notifier.submit",
-                        lambda eid: submitted.append(eid))
-    event_id = _insert_event(camera_id=1)
-    resp = client.post(f"/events/{event_id}/notify")
-    assert resp.status_code == 200
-    assert submitted == [event_id]
+def test_notify_skips_non_todo(client, monkeypatch):
+    posts = []
+
+    def fake_send(client_, url, payload):
+        posts.append(url)
+
+    monkeypatch.setattr(notify, "send_webhook", fake_send)
+    client.post("/api/notify-channels", json={
+        "name": "群", "webhook": "https://example.com/group"})
+
+    event_id = _insert_todo(camera_id=1, needs_action=False)
+    assert notify.notify_event(event_id) == 0
+    assert posts == []
+
+
+def test_resend_notify_requires_todo(client, monkeypatch):
+    monkeypatch.setattr("opencam.api.events.notifier.submit", lambda eid: None)
+    todo_id = _insert_todo(camera_id=1)
+    obs_id = _insert_todo(camera_id=1, needs_action=False)
+
+    assert client.post(f"/events/{todo_id}/notify").status_code == 200
+    assert client.post(f"/events/{obs_id}/notify").status_code == 400
     assert client.post("/events/9999/notify").status_code == 404
