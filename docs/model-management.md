@@ -44,6 +44,8 @@ Camera → AnalysisProfile → PipelineStage → ModelVersion → Rule
 - 手工关联：`relation_source=manual`；
 - AI 推荐：`relation_source=ai_recommended`，必须保存 `confidence` 和 `reason`，初始 `relation_status=pending`；
 - 通过 `/api/model-bindings/{id}/confirm` 或 `/reject` 审核推荐。AI 推荐不能覆盖已有手工关联，也不能因为推荐存在就直接上线模型。
+- 通过 `POST /api/model-bindings/recommend` 按目标的能力标签、输入/输出契约、任务标识和名称描述生成候选；候选会保存 `model_version_id`、`confidence`、`reason` 与 `warnings`，且默认禁用。
+- 推荐器是本地确定性匹配，不调用外部模型服务；重复推荐幂等，人工拒绝不会被再次推荐复活。
 
 ## 实施状态
 
@@ -52,3 +54,5 @@ Camera → AnalysisProfile → PipelineStage → ModelVersion → Rule
 Stage 2 已完成：`AnalysisProfile`、`PipelineStage`、`CameraBinding`、规则能力声明、方案包阶段声明，以及模型关联的待审核/确认/拒绝流程已落地。
 
 Stage 3 已完成：摄像头启动时生成冻结的 `RuntimePlan`，按阶段能力、输入输出契约、设备、延迟预算、线上状态和产物哈希筛选模型；运行时模型不可用会让摄像头进入 `error` 并在 health 中返回用户可读原因。方案/阶段变更及模型部署、回滚会重启受影响的摄像头。事件保存分析方案版本、阶段、模型版本 id 和产物摘要，`GET /api/cameras/{id}/runtime-plan` 可查看当前计划。
+
+Stage 4 已完成：推荐接口根据规则、摄像头、分析方案或推理阶段的需求生成待审核候选，保存可解释的置信度、理由、警告和具体版本；已有人工关系时不创建 AI 关系，确认/拒绝仍由人工操作，确认也不会自动把版本写入阶段或触发部署。

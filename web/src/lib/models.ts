@@ -29,6 +29,35 @@ export type ModelAsset = {
   updated_at: number;
 };
 
+export type PipelineStage = {
+  id: number;
+  key: string;
+  name: string;
+  capabilities: string[];
+};
+
+export type AnalysisProfile = {
+  id: number;
+  name: string;
+  stages: PipelineStage[];
+};
+
+export type ModelBinding = {
+  id: number;
+  model_asset_id: number;
+  model_version_id: number | null;
+  target_type: string;
+  target_id: number | null;
+  target_key: string | null;
+  relation_source: "manual" | "ai_recommended";
+  relation_status: "pending" | "confirmed" | "rejected";
+  confidence: number | null;
+  reason: string | null;
+  warnings: string[];
+  enabled: boolean;
+  created_at: number;
+};
+
 export const MODEL_ORIGIN_TYPES: Array<{ value: ModelOriginType; label: string }> = [
   { value: "builtin", label: "系统内置" },
   { value: "uploaded", label: "用户上传" },

@@ -416,6 +416,11 @@ class ModelBinding(Base):
         String(16), default=MODEL_BINDING_CONFIRMED, index=True)
     confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 推荐器的可解释提示；与 reason 区分，便于人工审核时逐条处理风险。
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    # 关联资产的具体产物版本；确认关系不会自动部署该版本。
+    model_version_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("model_versions.id", ondelete="SET NULL"), nullable=True, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
 
@@ -1136,6 +1141,8 @@ class ModelBindingCreate(BaseModel):
         default=None, pattern="^(pending|confirmed|rejected)$")
     confidence: Optional[float] = Field(default=None, ge=0, le=1)
     reason: Optional[str] = None
+    warnings: list[str] = Field(default_factory=list)
+    model_version_id: Optional[int] = None
     enabled: bool = True
 
 
@@ -1149,6 +1156,8 @@ class ModelBindingOut(BaseModel):
     relation_status: str
     confidence: Optional[float]
     reason: Optional[str]
+    warnings: list[str] = Field(default_factory=list)
+    model_version_id: Optional[int]
     enabled: bool
     created_at: float
 
