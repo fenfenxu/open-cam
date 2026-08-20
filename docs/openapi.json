@@ -2695,6 +2695,47 @@
       }
     },
     "/api/packs/{pack_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "方案包详情",
+        "description": "规范化 PackDetail；无效/不兼容包仍返回，availability 标明原因。",
+        "operationId": "get_pack_detail_api_packs__pack_id__get",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "packs"
@@ -2716,6 +2757,56 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/{pack_id}/assets/{asset_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "方案包白名单资产",
+        "description": "仅已声明且校验通过的资产；支持 Range、MIME、ETag。",
+        "operationId": "get_pack_asset_api_packs__pack_id__assets__asset_id__get",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          },
+          {
+            "name": "asset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -4946,6 +5037,41 @@
         "type": "object",
         "title": "NotifyChannelUpdate"
       },
+      "PackApplicationOut": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "camera_count": {
+            "type": "integer",
+            "title": "Camera Count"
+          },
+          "rule_count": {
+            "type": "integer",
+            "title": "Rule Count"
+          },
+          "auto_start": {
+            "type": "boolean",
+            "title": "Auto Start",
+            "default": false
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "camera_count",
+          "rule_count"
+        ],
+        "title": "PackApplicationOut"
+      },
       "PackApplyOut": {
         "properties": {
           "cameras": {
@@ -4969,6 +5095,418 @@
           "rules"
         ],
         "title": "PackApplyOut"
+      },
+      "PackCameraDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "purpose": {
+            "type": "string",
+            "title": "Purpose",
+            "default": ""
+          },
+          "placement": {
+            "type": "string",
+            "title": "Placement",
+            "default": ""
+          },
+          "poster_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Asset Id"
+          },
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rule Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PackCameraDetailOut"
+      },
+      "PackDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "vertical": {
+            "type": "string",
+            "title": "Vertical"
+          },
+          "author": {
+            "type": "string",
+            "title": "Author",
+            "default": ""
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "availability": {
+            "type": "string",
+            "title": "Availability"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "presentation": {
+            "$ref": "#/components/schemas/PackPresentationOut"
+          },
+          "cameras": {
+            "items": {
+              "$ref": "#/components/schemas/PackCameraDetailOut"
+            },
+            "type": "array",
+            "title": "Cameras"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PackRuleDetailOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "experience": {
+            "$ref": "#/components/schemas/PackExperienceOut"
+          },
+          "application": {
+            "$ref": "#/components/schemas/PackApplicationOut"
+          },
+          "privacy": {
+            "$ref": "#/components/schemas/PackPrivacyOut"
+          },
+          "readme_html": {
+            "type": "string",
+            "title": "Readme Html",
+            "default": ""
+          },
+          "min_opencam_version": {
+            "type": "string",
+            "title": "Min Opencam Version",
+            "default": "0.1.0"
+          },
+          "format_version": {
+            "type": "integer",
+            "title": "Format Version",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "version",
+          "vertical",
+          "origin",
+          "fingerprint",
+          "availability",
+          "presentation",
+          "cameras",
+          "rules",
+          "experience",
+          "application"
+        ],
+        "title": "PackDetail"
+      },
+      "PackExperienceOut": {
+        "properties": {
+          "scenes": {
+            "items": {
+              "$ref": "#/components/schemas/PackSceneOut"
+            },
+            "type": "array",
+            "title": "Scenes"
+          }
+        },
+        "type": "object",
+        "title": "PackExperienceOut"
+      },
+      "PackOutcomeOut": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "PackOutcomeOut"
+      },
+      "PackPresentationOut": {
+        "properties": {
+          "tagline": {
+            "type": "string",
+            "title": "Tagline",
+            "default": ""
+          },
+          "cover_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Asset Id"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/PackOutcomeOut"
+            },
+            "type": "array",
+            "title": "Outcomes"
+          },
+          "requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Requirements"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Limitations"
+          }
+        },
+        "type": "object",
+        "title": "PackPresentationOut"
+      },
+      "PackPrivacyOut": {
+        "properties": {
+          "processing": {
+            "type": "string",
+            "title": "Processing",
+            "default": "local"
+          },
+          "uploads_frames": {
+            "type": "boolean",
+            "title": "Uploads Frames",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "PackPrivacyOut"
+      },
+      "PackRuleDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "type_label": {
+            "type": "string",
+            "title": "Type Label"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          },
+          "cooldown": {
+            "type": "number",
+            "title": "Cooldown"
+          },
+          "intent": {
+            "type": "string",
+            "title": "Intent"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "type_label",
+          "cooldown",
+          "intent",
+          "summary"
+        ],
+        "title": "PackRuleDetailOut"
+      },
+      "PackSceneEventOut": {
+        "properties": {
+          "at_sec": {
+            "type": "number",
+            "title": "At Sec"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "result": {
+            "type": "string",
+            "title": "Result",
+            "default": ""
+          },
+          "intent": {
+            "type": "string",
+            "title": "Intent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at_sec",
+          "title",
+          "intent"
+        ],
+        "title": "PackSceneEventOut"
+      },
+      "PackSceneOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "camera_id": {
+            "type": "string",
+            "title": "Camera Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "default": true
+          },
+          "degrade_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degrade Reason"
+          },
+          "input_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Asset Id"
+          },
+          "result_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Asset Id"
+          },
+          "poster_asset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Asset Id"
+          },
+          "trial_available": {
+            "type": "boolean",
+            "title": "Trial Available",
+            "default": false
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PackSceneEventOut"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "camera_id",
+          "title"
+        ],
+        "title": "PackSceneOut"
       },
       "PersonChannelIn": {
         "properties": {
