@@ -43,7 +43,8 @@ def test_fresh_db_stamped_at_head(tmp_path):
     assert migrations.current_revision(engine) == migrations.head_revision()
     assert migrations.verify_schema(engine) == []
     tables = set(inspect(engine).get_table_names())
-    assert {"cameras", "rules", "events", "alembic_version"} <= tables
+    assert {"cameras", "rules", "events", "alembic_version",
+            "pack_deployments", "pack_deployment_resources"} <= tables
     # 没有跨版本升级，不应产生备份
     assert not (tmp_path / "backups").exists()
 
@@ -94,7 +95,8 @@ def test_legacy_db_adopted_and_data_preserved(tmp_path):
                 "intent", "needs_action", "repeat_count"} <= event_cols
         # 新表已补建
         tables = set(inspect(conn).get_table_names())
-        assert {"event_actions", "notify_channels", "videos", "model_versions"} <= tables
+        assert {"event_actions", "notify_channels", "videos", "model_versions",
+                "pack_deployments", "pack_deployment_resources"} <= tables
 
 
 def test_v0004_db_missing_model_versions_is_upgraded(tmp_path):
@@ -120,6 +122,32 @@ def test_v0004_db_missing_model_versions_is_upgraded(tmp_path):
     init_db(url, backup_dir=tmp_path / "backups")
     engine = _engine(db)
     assert "model_versions" in set(inspect(engine).get_table_names())
+    assert migrations.verify_schema(engine) == []
+    assert migrations.current_revision(engine) == migrations.head_revision()
+
+
+def test_v0008_db_upgrades_to_pack_deployments(tmp_path):
+    """已 stamp 到 0008 的库：启动时补 pack_deployments 表并质检通过。"""
+    import opencam.db as oc_db
+
+    db = tmp_path / "opencam.db"
+    url = _url(db)
+    init_db(url, backup_dir=tmp_path / "backups")
+    if oc_db._engine is not None:
+        oc_db._engine.dispose()
+
+    conn = sqlite3.connect(db)
+    conn.execute("DROP TABLE IF EXISTS pack_deployment_resources")
+    conn.execute("DROP TABLE IF EXISTS pack_deployments")
+    conn.execute("UPDATE alembic_version SET version_num = '0008'")
+    conn.commit()
+    conn.close()
+
+    init_db(url, backup_dir=tmp_path / "backups")
+    engine = _engine(db)
+    tables = set(inspect(engine).get_table_names())
+    assert "pack_deployments" in tables
+    assert "pack_deployment_resources" in tables
     assert migrations.verify_schema(engine) == []
     assert migrations.current_revision(engine) == migrations.head_revision()
 

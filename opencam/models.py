@@ -309,6 +309,54 @@ class ModelVersion(Base):
     status: Mapped[str] = mapped_column(String(16), default=MODEL_REGISTERED, index=True)
 
 
+# 方案部署状态：配置中 / 已激活 / 资源缺失降级
+DEPLOY_CONFIGURING = "configuring"
+DEPLOY_ACTIVE = "active"
+DEPLOY_DEGRADED = "degraded"
+DEPLOY_STATUSES = (DEPLOY_CONFIGURING, DEPLOY_ACTIVE, DEPLOY_DEGRADED)
+
+DEPLOY_KIND_CAMERA = "camera"
+DEPLOY_KIND_RULE = "rule"
+DEPLOY_KIND_VIDEO = "video"
+DEPLOY_KINDS = (DEPLOY_KIND_CAMERA, DEPLOY_KIND_RULE, DEPLOY_KIND_VIDEO)
+
+DEPLOY_OWNERSHIP_CREATED = "created"
+DEPLOY_OWNERSHIP_BOUND = "bound"
+DEPLOY_OWNERSHIPS = (DEPLOY_OWNERSHIP_CREATED, DEPLOY_OWNERSHIP_BOUND)
+
+
+class PackDeployment(Base):
+    """一次方案包应用的部署记录（非门店/工单模型）。"""
+
+    __tablename__ = "pack_deployments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pack_id: Mapped[str] = mapped_column(String(128), index=True)
+    pack_version: Mapped[str] = mapped_column(String(64))
+    pack_digest: Mapped[str] = mapped_column(String(64))  # 内容指纹
+    status: Mapped[str] = mapped_column(String(16), default=DEPLOY_CONFIGURING, index=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class PackDeploymentResource(Base):
+    """部署与 Camera/Rule/Video 的归属映射。"""
+
+    __tablename__ = "pack_deployment_resources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    deployment_id: Mapped[int] = mapped_column(
+        ForeignKey("pack_deployments.id", ondelete="CASCADE"), index=True)
+    # 机位槽位：新包为 manifest camera id；旧包固定 default
+    camera_slot_id: Mapped[str] = mapped_column(String(64), default="default")
+    # camera / rule / video
+    kind: Mapped[str] = mapped_column(String(16))
+    resource_id: Mapped[int] = mapped_column(Integer)  # 对应 ORM 行 id
+    # created = 本次新建；bound = 绑定已有（旧包摄像头）
+    ownership: Mapped[str] = mapped_column(String(16), default=DEPLOY_OWNERSHIP_CREATED)
+    configured: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 # ---------- Pydantic schema ----------
 
 class CameraCreate(BaseModel):
@@ -689,6 +737,67 @@ class PackDetail(BaseModel):
     readme_html: str = ""
     min_opencam_version: str = "0.1.0"
     format_version: int = 1
+
+
+class ApplyPlanCameraOut(BaseModel):
+    slot_id: str
+    name: str
+    action: str  # create | bind
+    source_hint: str = ""
+
+
+class ApplyPlanRuleOut(BaseModel):
+    name: str
+    type: str
+    camera_slot_id: str
+    action: str = "create"
+
+
+class ApplyPlanVideoOut(BaseModel):
+    filename: str
+    camera_slot_id: str
+    action: str = "copy"
+
+
+class ApplyPlanOut(BaseModel):
+    pack_id: str
+    pack_version: str
+    fingerprint: str
+    mode: str  # create_cameras | existing_camera
+    cameras: list[ApplyPlanCameraOut] = Field(default_factory=list)
+    rules: list[ApplyPlanRuleOut] = Field(default_factory=list)
+    videos: list[ApplyPlanVideoOut] = Field(default_factory=list)
+    will_not: list[str] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PackDeploymentResourceOut(BaseModel):
+    id: int
+    camera_slot_id: str
+    kind: str
+    resource_id: int
+    ownership: str
+    configured: bool
+    missing: bool = False
+    label: str = ""
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class PackDeploymentOut(BaseModel):
+    id: int
+    pack_id: str
+    pack_version: str
+    pack_digest: str
+    status: str
+    created_at: float
+    updated_at: float
+    resources: list[PackDeploymentResourceOut] = Field(default_factory=list)
+    activation_steps: list[str] = Field(default_factory=list)
+
+
+class PackDeploymentResourcePatch(BaseModel):
+    configured: bool = True
 
 
 class ModelAssetCreate(BaseModel):
