@@ -81,8 +81,17 @@ def test_vlm_settings():
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
     except httpx.HTTPStatusError as exc:
+        detail = None
+        try:
+            payload = exc.response.json()
+            error = payload.get("error") if isinstance(payload, dict) else None
+            if isinstance(error, dict):
+                detail = error.get("message")
+        except (ValueError, TypeError):
+            pass
+        suffix = f"：{detail}" if detail else "，请检查 Key、地址和模型名"
         raise HTTPException(
-            400, f"接口返回 {exc.response.status_code}，请检查 Key、地址和模型名") from None
+            400, f"接口返回 {exc.response.status_code}{suffix}") from None
     except httpx.HTTPError as exc:
         raise HTTPException(503, f"连不上大模型：{exc}") from None
 

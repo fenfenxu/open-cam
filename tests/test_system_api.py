@@ -164,6 +164,82 @@ def test_vlm_test_uses_saved_endpoint(client, monkeypatch):
     assert posted["json"]["model"] == "demo-vl"
 
 
+def test_kimi_code_restricts_models_and_omits_temperature(client, monkeypatch):
+    calls = []
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url, json=None, timeout=None):
+            calls.append({"url": url, "json": json, "timeout": timeout})
+            return _Resp()
+
+    monkeypatch.setattr("opencam.vlm_config.httpx.Client", _Client)
+    client.put("/api/system/vlm", json={
+        "api_key": "sk-kimi-test",
+        "base_url": "https://api.kimi.com/coding/v1",
+        "model": "not-a-kimi-model",
+    })
+
+    config = client.get("/api/system/vlm").json()
+    assert config["model"] == "k3"
+
+    resp = client.post("/api/system/vlm/test")
+    assert resp.status_code == 200, resp.text
+    posted = next(c for c in calls if "url" in c)
+    assert posted["json"]["model"] == "k3"
+    assert "temperature" not in posted["json"]
+
+
+def test_vlm_test_exposes_upstream_error_message(client, monkeypatch):
+    class _Resp:
+        def raise_for_status(self):
+            import httpx
+
+            request = httpx.Request("POST", "https://example.test/v1/chat/completions")
+            response = httpx.Response(
+                400,
+                request=request,
+                json={"error": {"message": "invalid temperature"}},
+            )
+            raise httpx.HTTPStatusError("bad request", request=request,
+                                        response=response)
+
+    class _Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url, json=None, timeout=None):
+            return _Resp()
+
+    monkeypatch.setattr("opencam.vlm_config.httpx.Client", _Client)
+    client.put("/api/system/vlm", json={
+        "api_key": "sk-test-key",
+        "base_url": "https://example.test/v1",
+        "model": "demo-vl",
+    })
+    resp = client.post("/api/system/vlm/test")
+    assert resp.status_code == 400
+    assert "invalid temperature" in resp.json()["detail"]
+
+
 def test_dev_status_idle(client, monkeypatch):
     monkeypatch.setenv("OPENCAM_RELOAD", "1")
     from opencam import devplaybook as dp

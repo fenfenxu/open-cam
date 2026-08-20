@@ -19,6 +19,7 @@ import { jsonBody, type Camera } from "@/lib/cameras";
 import { RULE_TYPE_NAMES, PERSON_CHANNEL_KINDS } from "@/lib/labels";
 import {
   VLM_PRESETS,
+  KIMI_CODE_MODEL_OPTIONS,
   matchVlmPreset,
   type AccountStatus,
   type NotifyChannel,
@@ -60,6 +61,8 @@ export function SettingsPage() {
   const [pCamera, setPCamera] = useState(ALL);
   const [pRule, setPRule] = useState(ALL);
   const syncedVlm = useRef(false);
+  const selectedVlmPreset = VLM_PRESETS.find((item) => item.id === preset);
+  const isKimiCode = selectedVlmPreset?.id === "kimi-code";
 
   const infoQuery = useQuery({
     queryKey: ["system-info"],
@@ -399,11 +402,43 @@ export function SettingsPage() {
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="vlm-url">接口地址</Label>
-            <Input id="vlm-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+            <Input
+              id="vlm-url"
+              value={baseUrl}
+              onChange={(e) => {
+                const value = e.target.value;
+                setBaseUrl(value);
+                setPreset(matchVlmPreset(value));
+              }}
+            />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="vlm-model">模型名</Label>
-            <Input id="vlm-model" value={model} onChange={(e) => setModel(e.target.value)} />
+            {isKimiCode ? (
+              <Select value={model} onValueChange={(value) => value && setModel(value)}>
+                <SelectTrigger id="vlm-model" className="w-full max-w-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {KIMI_CODE_MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="vlm-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+              />
+            )}
+            {isKimiCode ? (
+              <p className="text-xs text-muted-foreground">
+                仅允许 Kimi Code 官方模型 ID；具体可用项取决于会员套餐。
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="vlm-key">API Key</Label>

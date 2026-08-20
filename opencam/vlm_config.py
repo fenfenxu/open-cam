@@ -20,6 +20,14 @@ from .config import settings
 logger = logging.getLogger(__name__)
 
 OVERLAY_NAME = "vlm.json"
+KIMI_CODE_BASE_URL = "https://api.kimi.com/coding/v1"
+KIMI_CODE_MODELS = (
+    "k3",
+    "k3-256k",
+    "kimi-for-coding",
+    "kimi-for-coding-highspeed",
+)
+KIMI_CODE_DEFAULT_MODEL = "k3"
 _KEEP = object()
 
 _OVERLAY_KEYS = (
@@ -86,6 +94,25 @@ def _first_float(*vals: Any) -> Optional[float]:
     return None
 
 
+def is_kimi_code_endpoint(base_url: str) -> bool:
+    """判断是否为 Kimi Code 的 OpenAI 兼容端点。"""
+    return base_url.rstrip("/") == KIMI_CODE_BASE_URL
+
+
+def normalize_model(base_url: str, model: str) -> str:
+    """Kimi Code 只允许官方模型 ID，避免写入任意模型名。"""
+    if is_kimi_code_endpoint(base_url) and model not in KIMI_CODE_MODELS:
+        return KIMI_CODE_DEFAULT_MODEL
+    return model
+
+
+def completion_options(base_url: str) -> dict[str, Any]:
+    """返回兼容各供应商的采样参数；Kimi Code 不接受 temperature=0。"""
+    if is_kimi_code_endpoint(base_url):
+        return {}
+    return {"temperature": 0}
+
+
 def mask_secret(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
@@ -110,18 +137,20 @@ def resolve_review() -> VlmEndpoint:
         overlay.get("timeout"),
         settings.vlm_timeout,
     ) or settings.vlm_timeout
+    base_url = _first_str(
+        os.environ.get("OPENCAM_VLM_BASE_URL"),
+        overlay.get("base_url"),
+        settings.vlm_base_url,
+    ) or settings.vlm_base_url
+    model = _first_str(
+        os.environ.get("OPENCAM_VLM_MODEL"),
+        overlay.get("model"),
+        settings.vlm_model,
+    ) or settings.vlm_model
     return VlmEndpoint(
         api_key=api_key,
-        base_url=_first_str(
-            os.environ.get("OPENCAM_VLM_BASE_URL"),
-            overlay.get("base_url"),
-            settings.vlm_base_url,
-        ) or settings.vlm_base_url,
-        model=_first_str(
-            os.environ.get("OPENCAM_VLM_MODEL"),
-            overlay.get("model"),
-            settings.vlm_model,
-        ) or settings.vlm_model,
+        base_url=base_url,
+        model=normalize_model(base_url, model),
         timeout=timeout,
         source=source,
     )
@@ -145,20 +174,22 @@ def resolve_label() -> VlmEndpoint:
         review.timeout,
         settings.vlm_label_timeout,
     ) or settings.vlm_label_timeout
+    base_url = _first_str(
+        os.environ.get("OPENCAM_VLM_LABEL_BASE_URL"),
+        overlay.get("label_base_url"),
+        overlay.get("base_url"),
+        settings.vlm_label_base_url,
+    ) or settings.vlm_label_base_url
+    model = _first_str(
+        os.environ.get("OPENCAM_VLM_LABEL_MODEL"),
+        overlay.get("label_model"),
+        overlay.get("model"),
+        settings.vlm_label_model,
+    ) or settings.vlm_label_model
     return VlmEndpoint(
         api_key=api_key,
-        base_url=_first_str(
-            os.environ.get("OPENCAM_VLM_LABEL_BASE_URL"),
-            overlay.get("label_base_url"),
-            overlay.get("base_url"),
-            settings.vlm_label_base_url,
-        ) or settings.vlm_label_base_url,
-        model=_first_str(
-            os.environ.get("OPENCAM_VLM_LABEL_MODEL"),
-            overlay.get("label_model"),
-            overlay.get("model"),
-            settings.vlm_label_model,
-        ) or settings.vlm_label_model,
+        base_url=base_url,
+        model=normalize_model(base_url, model),
         timeout=timeout,
         source=source,
     )
@@ -207,6 +238,12 @@ def update_overlay(*, api_key: Any = _KEEP, base_url: Any = _KEEP,
             data[key] = float(val)
         else:
             data[key] = str(val).strip()
+    if data.get("base_url") and data.get("model"):
+        data["model"] = normalize_model(data["base_url"], data["model"])
+    if data.get("label_base_url") and data.get("label_model"):
+        data["label_model"] = normalize_model(
+            data["label_base_url"], data["label_model"]
+        )
     save_overlay(data)
     return public_view()
 
@@ -216,14 +253,15 @@ def ping() -> dict[str, Any]:
     if not ep.api_key:
         raise ValueError("还没有填写 API Key")
     with httpx.Client(headers={"Authorization": f"Bearer {ep.api_key}"}) as client:
+        payload = {
+            "model": ep.model,
+            "messages": [{"role": "user", "content": "只回复 ok"}],
+            "max_tokens": 8,
+        }
+        payload.update(completion_options(ep.base_url))
         resp = client.post(
             f"{ep.base_url.rstrip('/')}/chat/completions",
-            json={
-                "model": ep.model,
-                "messages": [{"role": "user", "content": "只回复 ok"}],
-                "max_tokens": 8,
-                "temperature": 0,
-            },
+            json=payload,
             timeout=min(float(ep.timeout), 20.0),
         )
         resp.raise_for_status()

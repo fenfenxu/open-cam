@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-from ..vlm_config import resolve_review
+from ..vlm_config import completion_options, resolve_review
 from .storage import ensure_task_id, save_definition, task_dir
 
 logger = logging.getLogger(__name__)
@@ -191,15 +191,16 @@ def call_llm_decompose(goal: str) -> dict[str, Any]:
         raise RuntimeError("未配置 LLM api key")
     headers = {"Authorization": f"Bearer {ep.api_key}"}
     with httpx.Client(headers=headers) as client:
+        payload = {
+            "model": ep.model,
+            "messages": [
+                {"role": "user", "content": _PROMPT.format(goal=goal)},
+            ],
+        }
+        payload.update(completion_options(ep.base_url))
         resp = client.post(
             f"{ep.base_url.rstrip('/')}/chat/completions",
-            json={
-                "model": ep.model,
-                "temperature": 0,
-                "messages": [
-                    {"role": "user", "content": _PROMPT.format(goal=goal)},
-                ],
-            },
+            json=payload,
             timeout=ep.timeout,
         )
         resp.raise_for_status()

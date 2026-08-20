@@ -17,7 +17,7 @@ from typing import Optional
 import httpx
 
 from ..config import resolve_snapshot_path
-from ..vlm_config import resolve_review
+from ..vlm_config import completion_options, resolve_review
 from ..db import get_session
 from ..models import VLM_DONE, VLM_FAILED, VLM_SKIPPED, Event
 
@@ -36,20 +36,21 @@ def review_event(client: httpx.Client, image_path: str, event_type: str,
     prompt = _PROMPT.format(event_type=event_type,
                             detail=json.dumps(detail, ensure_ascii=False)[:500])
     ep = resolve_review()
+    payload = {
+        "model": ep.model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url",
+                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+            ],
+        }],
+    }
+    payload.update(completion_options(ep.base_url))
     resp = client.post(
         f"{ep.base_url.rstrip('/')}/chat/completions",
-        json={
-            "model": ep.model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url",
-                     "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                ],
-            }],
-            "temperature": 0,
-        },
+        json=payload,
         timeout=ep.timeout,
     )
     resp.raise_for_status()

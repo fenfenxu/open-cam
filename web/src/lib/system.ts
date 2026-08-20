@@ -17,7 +17,23 @@ export const VLM_PRESETS = [
     base_url: "https://api.moonshot.cn/v1",
     model: "moonshot-v1-8k-vision-preview",
   },
+  {
+    id: "kimi-code",
+    name: "Kimi Code（固定模型）",
+    base_url: "https://api.kimi.com/coding/v1",
+    model: "kimi-for-coding",
+  },
   { id: "custom", name: "自定义 OpenAI 兼容接口", base_url: "", model: "" },
+] as const;
+
+export const KIMI_CODE_MODEL_OPTIONS = [
+  { value: "k3", label: "k3（Kimi K3，1M 上下文）" },
+  { value: "k3-256k", label: "k3-256k（Kimi K3，256K 上下文）" },
+  { value: "kimi-for-coding", label: "kimi-for-coding（K2.7 Code）" },
+  {
+    value: "kimi-for-coding-highspeed",
+    label: "kimi-for-coding-highspeed（高速版）",
+  },
 ] as const;
 
 export type SystemInfo = {

@@ -19,7 +19,7 @@ import cv2
 import httpx
 
 from ..config import settings
-from ..vlm_config import resolve_label
+from ..vlm_config import completion_options, normalize_model, resolve_label
 from .crop import crop_polygon
 from .storage import (
     list_frames,
@@ -54,9 +54,11 @@ def resolve_vlm_config(definition: dict[str, Any]) -> VlmLabelConfig:
     if not isinstance(override, dict):
         override = {}
     ep = resolve_label()
+    base_url = str(override.get("base_url") or ep.base_url)
+    model = str(override.get("model") or ep.model)
     return VlmLabelConfig(
-        base_url=str(override.get("base_url") or ep.base_url),
-        model=str(override.get("model") or ep.model),
+        base_url=base_url,
+        model=normalize_model(base_url, model),
         timeout=float(override.get("timeout") or ep.timeout),
         api_key=ep.api_key,
     )
@@ -115,20 +117,21 @@ def call_vlm_label(image_bytes: bytes, definition: dict[str, Any],
     classes = list(definition.get("classes") or [])
     headers = {"Authorization": f"Bearer {cfg.api_key}"}
     with httpx.Client(headers=headers) as client:
+        payload = {
+            "model": cfg.model,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _prompt(definition)},
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                ],
+            }],
+        }
+        payload.update(completion_options(cfg.base_url))
         resp = client.post(
             f"{cfg.base_url.rstrip('/')}/chat/completions",
-            json={
-                "model": cfg.model,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": _prompt(definition)},
-                        {"type": "image_url",
-                         "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                    ],
-                }],
-                "temperature": 0,
-            },
+            json=payload,
             timeout=cfg.timeout,
         )
         resp.raise_for_status()
