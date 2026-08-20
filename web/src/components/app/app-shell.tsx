@@ -143,10 +143,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const stalled = health === "down" && applyAt != null && now - applyAt >= 60_000;
 
   return (
-    <div className="flex min-h-svh bg-background text-foreground">
-      <aside className="flex w-56 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
+    <div className="flex h-svh overflow-hidden bg-background text-foreground">
+      <aside className="flex h-svh min-h-0 w-56 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
         <div className="px-4 py-4 text-base font-medium">open-cam</div>
-        <nav aria-label="主导航" className="flex flex-1 flex-col gap-5 px-2">
+        <nav aria-label="主导航" className="min-h-0 flex flex-1 flex-col gap-5 overflow-y-auto px-2">
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="space-y-1">
               <p className="px-2 text-[11px] font-medium tracking-wide text-muted-foreground">
@@ -190,11 +190,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </a>
           </div>
         </nav>
-        <div className="border-t px-4 py-3 text-xs text-muted-foreground">
-          本地运行 · 数据不出本机
-        </div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end border-b px-4 py-2">
           <ThemeToggle />
         </header>
@@ -205,7 +202,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           applying={applyAt != null}
           onApply={() => apply.mutate()}
         />
-        <main className="min-w-0 flex-1 overflow-auto p-6">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-auto p-6">{children}</main>
       </div>
     </div>
   );
