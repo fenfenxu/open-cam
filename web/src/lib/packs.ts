@@ -117,6 +117,94 @@ export type PackDetail = {
 export type PackApplyResult = {
   cameras?: { id: number; name?: string }[];
   rules?: { type: string; name?: string }[];
+  deployment_id?: number | null;
+};
+
+export type PackApplyPlan = {
+  pack_id: string;
+  pack_version: string;
+  fingerprint: string;
+  mode: PackApplicationMode;
+  cameras: {
+    slot_id: string;
+    name: string;
+    action: "create" | "bind";
+    source_hint: string;
+  }[];
+  rules: {
+    name: string;
+    type: string;
+    camera_slot_id: string;
+    action: string;
+  }[];
+  videos: { filename: string; camera_slot_id: string; action: string }[];
+  will_not: string[];
+  next_steps: string[];
+  warnings: string[];
+};
+
+export type PackTrialRule = {
+  id: string;
+  name: string;
+  type: string;
+  type_label: string;
+  matched: boolean;
+  hits: number;
+  last_hit_at: number | null;
+};
+
+export type PackTrialHit = {
+  at_sec: number;
+  rule_id: string;
+  rule_name: string;
+  rule_type: string;
+  confidence: number;
+  detail: Record<string, unknown>;
+};
+
+export type PackTrial = {
+  id: string;
+  pack_id: string;
+  scene_id: string;
+  scene_title: string;
+  status: "running" | "stopped" | "expired" | "error" | string;
+  source_kind: "pack" | "video" | "camera" | string;
+  started_at: number;
+  expires_at: number;
+  duration_sec: number;
+  remaining_sec: number;
+  fps: number;
+  device: string;
+  width: number;
+  height: number;
+  rules: PackTrialRule[];
+  hits: PackTrialHit[];
+  error: string | null;
+  live_url: string;
+};
+
+export type PackDeploymentResource = {
+  id: number;
+  camera_slot_id: string;
+  kind: "camera" | "rule" | "video" | string;
+  resource_id: number;
+  ownership: "created" | "bound" | string;
+  configured: boolean;
+  missing: boolean;
+  label: string;
+  detail: Record<string, unknown>;
+};
+
+export type PackDeployment = {
+  id: number;
+  pack_id: string;
+  pack_version: string;
+  pack_digest: string;
+  status: "configuring" | "active" | "degraded" | string;
+  created_at: number;
+  updated_at: number;
+  resources: PackDeploymentResource[];
+  activation_steps: string[];
 };
 
 export const AVAILABILITY_NAMES: Record<PackAvailability, string> = {

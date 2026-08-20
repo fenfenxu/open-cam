@@ -5,6 +5,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -13,15 +22,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
-import { jsonBody, type Camera } from "@/lib/cameras";
+import { jsonBody, type Camera, type VideoAsset } from "@/lib/cameras";
 import {
   AVAILABILITY_NAMES,
   ORIGIN_NAMES,
   packAssetUrl,
   sceneHasMedia,
+  type PackApplyPlan,
+  type PackDeployment,
   type PackApplyResult,
   type PackDetail,
   type PackScene,
+  type PackTrial,
 } from "@/lib/packs";
 
 function errorMessage(err: unknown): string {
@@ -99,8 +111,19 @@ export function PackDetailPage() {
 function PackDetailView({ detail }: { detail: PackDetail }) {
   const queryClient = useQueryClient();
   const [selectedCam, setSelectedCam] = useState("");
+  const [plan, setPlan] = useState<PackApplyPlan | null>(null);
+  const [planOpen, setPlanOpen] = useState(false);
+  const [deploymentId, setDeploymentId] = useState<number | null>(null);
   const available = detail.availability === "available";
   const scenes = detail.experience.scenes;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const queryId = new URLSearchParams(window.location.search).get("deployment");
+    const storedId = window.localStorage.getItem(`opencam:deployment:${detail.id}`);
+    const id = Number(queryId || storedId);
+    if (Number.isInteger(id) && id > 0) setDeploymentId(id);
+  }, [detail.id]);
 
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
@@ -109,20 +132,51 @@ function PackDetailView({ detail }: { detail: PackDetail }) {
   });
   const cameras = camerasQuery.data ?? [];
 
-  const apply = useMutation({
+  const applyPlan = useMutation({
     mutationFn: async () => {
       const body =
         detail.application.mode === "existing_camera"
           ? { camera_id: Number(selectedCam) }
           : {};
+      return api<PackApplyPlan>(
+        `/api/packs/${encodeURIComponent(detail.id)}/apply-plan`,
+        jsonBody("POST", body),
+      );
+    },
+    onSuccess: (data) => {
+      setPlan(data);
+      setPlanOpen(true);
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const apply = useMutation({
+    mutationFn: async () => {
+      if (!plan) throw new Error("请先生成应用计划");
+      const body = {
+        ...(detail.application.mode === "existing_camera"
+          ? { camera_id: Number(selectedCam) }
+          : {}),
+        expected_fingerprint: plan.fingerprint,
+      };
       return api<PackApplyResult>(
         `/api/packs/${encodeURIComponent(detail.id)}/apply`,
         jsonBody("POST", body),
       );
     },
     onSuccess: async (data) => {
+      const nextDeploymentId = data.deployment_id ?? null;
+      setPlanOpen(false);
+      setPlan(null);
+      if (nextDeploymentId) {
+        setDeploymentId(nextDeploymentId);
+        window.localStorage.setItem(
+          `opencam:deployment:${detail.id}`,
+          String(nextDeploymentId),
+        );
+      }
       if (detail.application.mode === "existing_camera") {
-        toast.success(`已应用 ${data.rules?.length ?? 0} 条规则，可到「规则」页调整`);
+        toast.success(`已应用 ${data.rules?.length ?? 0} 条规则，请按清单完成校准`);
       } else {
         toast.success(
           `已创建 ${data.cameras?.length ?? 0} 路停止态摄像头，请到「摄像头」页换成真实源后校准启用`,
@@ -183,8 +237,8 @@ function PackDetailView({ detail }: { detail: PackDetail }) {
               </Button>
             )}
             <Button
-              disabled={!canApply || apply.isPending}
-              onClick={() => apply.mutate()}
+              disabled={!canApply || applyPlan.isPending || apply.isPending}
+              onClick={() => applyPlan.mutate()}
             >
               应用方案
             </Button>
@@ -206,6 +260,16 @@ function PackDetailView({ detail }: { detail: PackDetail }) {
 
       {/* 效果体验工作台 */}
       {scenes.length ? <ExperienceWorkbench detail={detail} /> : null}
+
+      {deploymentId ? (
+        <DeploymentChecklist
+          deploymentId={deploymentId}
+          onClear={() => {
+            setDeploymentId(null);
+            window.localStorage.removeItem(`opencam:deployment:${detail.id}`);
+          }}
+        />
+      ) : null}
 
       {/* 能解决什么 */}
       {detail.presentation.outcomes.length ? (
@@ -355,8 +419,8 @@ function PackDetailView({ detail }: { detail: PackDetail }) {
                 )
               ) : null}
               <Button
-                disabled={!canApply || apply.isPending}
-                onClick={() => apply.mutate()}
+                disabled={!canApply || applyPlan.isPending || apply.isPending}
+                onClick={() => applyPlan.mutate()}
               >
                 应用方案
               </Button>
@@ -386,7 +450,110 @@ function PackDetailView({ detail }: { detail: PackDetail }) {
           {detail.author || "匿名"} · 内容指纹 {detail.fingerprint.slice(0, 12)}
         </p>
       </section>
+
+      <ApplyPlanDialog
+        open={planOpen}
+        plan={plan}
+        confirming={apply.isPending}
+        onOpenChange={setPlanOpen}
+        onConfirm={() => apply.mutate()}
+      />
     </div>
+  );
+}
+
+function ApplyPlanDialog({
+  open,
+  plan,
+  confirming,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  plan: PackApplyPlan | null;
+  confirming: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>确认应用方案</DialogTitle>
+          <DialogDescription>
+            服务端已根据当前方案内容计算变更。确认时会再次校验指纹，内容变化会要求重新预览。
+          </DialogDescription>
+        </DialogHeader>
+        {plan ? (
+          <div className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">摄像头</p>
+                <p className="font-medium">{plan.cameras.length} 路</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">规则</p>
+                <p className="font-medium">{plan.rules.length} 条</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">内容指纹</p>
+                <p className="font-mono text-xs">{plan.fingerprint.slice(0, 16)}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">将要变更</h3>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                {plan.cameras.map((camera) => (
+                  <li key={camera.slot_id}>
+                    {camera.action === "create" ? "新建" : "绑定"}摄像头「{camera.name}」
+                    {camera.source_hint ? `（${camera.source_hint}）` : ""}
+                  </li>
+                ))}
+                {plan.videos.map((video) => (
+                  <li key={`${video.camera_slot_id}-${video.filename}`}>
+                    复制演示源「{video.filename}」
+                  </li>
+                ))}
+                {plan.rules.map((rule) => (
+                  <li key={`${rule.camera_slot_id}-${rule.name}`}>
+                    新建规则「{rule.name}」（{rule.type}）
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {plan.will_not.length ? (
+              <div className="space-y-2 rounded-md bg-muted/50 p-3">
+                <h3 className="text-sm font-medium">不会发生</h3>
+                <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                  {plan.will_not.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </div>
+            ) : null}
+            {plan.next_steps.length ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">应用后继续</h3>
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                  {plan.next_steps.map((item) => <li key={item}>{item}</li>)}
+                </ol>
+              </div>
+            ) : null}
+            {plan.warnings.map((warning) => (
+              <p key={warning} className="text-sm text-amber-700 dark:text-amber-300">
+                {warning}
+              </p>
+            ))}
+          </div>
+        ) : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming}>
+            返回修改
+          </Button>
+          <Button onClick={onConfirm} disabled={!plan || confirming}>
+            {confirming ? "正在应用…" : "确认并创建部署"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -414,10 +581,200 @@ function ExperienceWorkbench({ detail }: { detail: PackDetail }) {
         ))}
       </div>
       <ScenePlayer key={scene.id} detail={detail} scene={scene} />
+      <TrialWorkbench detail={detail} scene={scene} />
       <p className="text-xs text-muted-foreground">
         这是方案自带的效果演示，用于说明检测逻辑；真实效果取决于机位、画质、模型和规则校准。
       </p>
     </section>
+  );
+}
+
+function TrialWorkbench({ detail, scene }: { detail: PackDetail; scene: PackScene }) {
+  const [trialId, setTrialId] = useState<string | null>(null);
+  const [sourceKind, setSourceKind] = useState<"pack" | "video" | "camera">("pack");
+  const [videoId, setVideoId] = useState("");
+  const [cameraId, setCameraId] = useState("");
+  const trialCameras = useQuery({
+    queryKey: ["cameras", "pack-trial"],
+    queryFn: () => api<Camera[]>("/api/cameras"),
+  });
+  const trialVideos = useQuery({
+    queryKey: ["videos", "pack-trial"],
+    queryFn: () => api<VideoAsset[]>("/api/videos"),
+  });
+  const trialQuery = useQuery({
+    queryKey: ["pack-trial", trialId],
+    queryFn: () => api<PackTrial>(`/api/pack-trials/${encodeURIComponent(trialId ?? "")}`),
+    enabled: Boolean(trialId),
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.status === "running" ? 1000 : false,
+  });
+  const startTrial = useMutation({
+    mutationFn: () => {
+      const source = {
+        kind: sourceKind,
+        ...(sourceKind === "video" ? { video_id: Number(videoId) } : {}),
+        ...(sourceKind === "camera" ? { camera_id: Number(cameraId) } : {}),
+      };
+      return api<PackTrial>(
+        `/api/packs/${encodeURIComponent(detail.id)}/trials`,
+        jsonBody("POST", { scene_id: scene.id, source }),
+      );
+    },
+    onSuccess: (data) => setTrialId(data.id),
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const stopTrial = useMutation({
+    mutationFn: () => api(`/api/pack-trials/${encodeURIComponent(trialId ?? "")}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setTrialId(null);
+      toast.success("试跑已停止，临时资源已释放");
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const trial = trialQuery.data;
+  const running = trial?.status === "running";
+  const canTrial = detail.availability === "available" && scene.available && scene.trial_available;
+  const canStart = canTrial && !trialId && !startTrial.isPending &&
+    (sourceKind === "pack" ||
+      (sourceKind === "video" && Boolean(videoId)) ||
+      (sourceKind === "camera" && Boolean(cameraId)));
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-muted/20 p-4" aria-label="本机隔离试跑">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium">本机隔离试跑</h3>
+          <p className="text-xs text-muted-foreground">
+            只处理当前场景，默认最多 60 秒；不写事件、快照，不调用 VLM 或通知。
+          </p>
+        </div>
+        <Badge variant={canTrial ? "outline" : "secondary"}>
+          {canTrial ? "可试跑" : "当前场景不可试跑"}
+        </Badge>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-xs">
+          <span className="text-muted-foreground">输入来源</span>
+          <select
+            aria-label="试跑来源"
+            className="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
+            value={sourceKind}
+            disabled={Boolean(trialId) || startTrial.isPending}
+            onChange={(event) => setSourceKind(event.target.value as typeof sourceKind)}
+          >
+            <option value="pack">方案包试跑源</option>
+            <option value="video">视频库</option>
+            <option value="camera">正在运行的摄像头</option>
+          </select>
+        </label>
+        {sourceKind === "video" ? (
+          <label className="grid gap-1 text-xs">
+            <span className="text-muted-foreground">视频</span>
+            <select
+              aria-label="选择试跑视频"
+              className="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
+              value={videoId}
+              disabled={Boolean(trialId)}
+              onChange={(event) => setVideoId(event.target.value)}
+            >
+              <option value="">请选择视频</option>
+              {(trialVideos.data ?? []).map((video) => (
+                <option key={video.id} value={video.id}>{video.filename}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {sourceKind === "camera" ? (
+          <label className="grid gap-1 text-xs">
+            <span className="text-muted-foreground">摄像头</span>
+            <select
+              aria-label="选择试跑摄像头"
+              className="h-9 min-w-48 rounded-md border bg-background px-2 text-sm"
+              value={cameraId}
+              disabled={Boolean(trialId)}
+              onChange={(event) => setCameraId(event.target.value)}
+            >
+              <option value="">请选择运行中的摄像头</option>
+              {(trialCameras.data ?? []).filter((camera) => camera.status === "running").map((camera) => (
+                <option key={camera.id} value={camera.id}>{camera.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {running ? (
+          <Button variant="destructive" onClick={() => stopTrial.mutate()} disabled={stopTrial.isPending}>
+            {stopTrial.isPending ? "正在停止…" : "停止试跑"}
+          </Button>
+        ) : (
+          <Button onClick={() => startTrial.mutate()} disabled={!canStart}>
+            {startTrial.isPending ? "正在启动…" : "开始试跑"}
+          </Button>
+        )}
+      </div>
+      {trialQuery.isError ? (
+        <p role="alert" className="text-sm text-destructive">试跑状态读取失败：{errorMessage(trialQuery.error)}</p>
+      ) : null}
+      {trial?.status === "error" ? (
+        <p role="alert" className="text-sm text-destructive">试跑失败：{trial.error || "体验源或检测器不可用"}</p>
+      ) : null}
+      {trial ? (
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.7fr)]">
+          <div className="space-y-2">
+            {running ? (
+              <img
+                src={trial.live_url}
+                alt={`${scene.title}本机试跑画面`}
+                className="aspect-video w-full rounded-md bg-black object-contain"
+              />
+            ) : (
+              <div className="flex aspect-video items-center justify-center rounded-md border bg-muted/40 text-sm text-muted-foreground">
+                试跑{trial.status === "expired" ? "已过期" : "已结束"}，可重新开始。
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+              <span>状态：{running ? "运行中" : trial.status}</span>
+              <span>处理：{trial.fps.toFixed(1)} FPS</span>
+              <span>设备：{trial.device || "本机"}</span>
+              <span>剩余：{Math.ceil(trial.remaining_sec)} 秒</span>
+              <span>画面：{trial.width}×{trial.height}</span>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <h4 className="text-sm font-medium">规则状态</h4>
+              <ul className="mt-2 space-y-1 text-sm">
+                {trial.rules.map((rule) => (
+                  <li key={rule.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5">
+                    <span>{rule.name}</span>
+                    <span className={rule.matched ? "text-green-700 dark:text-green-300" : "text-muted-foreground"}>
+                      {rule.matched ? `命中 ${rule.hits} 次` : `未命中 · ${rule.hits} 次`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium">临时命中时间线</h4>
+              {trial.hits.length ? (
+                <ul className="mt-2 max-h-36 space-y-1 overflow-auto text-xs">
+                  {trial.hits.map((hit, index) => (
+                    <li key={`${hit.rule_id}-${hit.at_sec}-${index}`} className="flex gap-2 rounded-md border px-2 py-1.5">
+                      <span className="font-mono text-muted-foreground">{fmtSec(hit.at_sec)}</span>
+                      <span>{hit.rule_name} · 置信度 {(hit.confidence * 100).toFixed(0)}%</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">暂未命中，继续观察画面。</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -571,5 +928,194 @@ function ScenePlayer({ detail, scene }: { detail: PackDetail; scene: PackScene }
         )}
       </div>
     </div>
+  );
+}
+
+const DEPLOYMENT_STATUS_NAMES: Record<string, string> = {
+  configuring: "配置中",
+  active: "已激活",
+  degraded: "资源缺失，已降级",
+};
+
+function DeploymentChecklist({
+  deploymentId,
+  onClear,
+}: {
+  deploymentId: number;
+  onClear: () => void;
+}) {
+  const deploymentQuery = useQuery({
+    queryKey: ["pack-deployment", deploymentId],
+    queryFn: () => api<PackDeployment>(`/api/pack-deployments/${deploymentId}`),
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.status === "configuring" ? 2000 : false,
+  });
+  const [localSteps, setLocalSteps] = useState<Record<string, boolean>>({});
+  const storageKey = `opencam:deployment-steps:${deploymentId}`;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      setLocalSteps(saved ? (JSON.parse(saved) as Record<string, boolean>) : {});
+    } catch {
+      setLocalSteps({});
+    }
+  }, [storageKey]);
+
+  const configureRules = useMutation({
+    mutationFn: async ({ resourceIds, configured }: { resourceIds: number[]; configured: boolean }) => {
+      let result: PackDeployment | null = null;
+      for (const resourceId of resourceIds) {
+        result = await api<PackDeployment>(
+          `/api/pack-deployments/${deploymentId}/resources/${resourceId}`,
+          jsonBody("PATCH", { configured }),
+        );
+      }
+      return result;
+    },
+    onSuccess: async () => {
+      await deploymentQuery.refetch();
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const markLocal = (key: string, checked: boolean) => {
+    const next = { ...localSteps, [key]: checked };
+    setLocalSteps(next);
+    window.localStorage.setItem(storageKey, JSON.stringify(next));
+  };
+
+  if (deploymentQuery.isPending) {
+    return (
+      <section className="space-y-2 rounded-lg border p-4">
+        <h2 className="text-lg font-medium">部署激活清单</h2>
+        <p className="text-sm text-muted-foreground">正在读取部署状态…</p>
+      </section>
+    );
+  }
+  if (deploymentQuery.isError || !deploymentQuery.data) {
+    return (
+      <section className="space-y-3 rounded-lg border border-destructive/40 p-4">
+        <h2 className="text-lg font-medium">部署激活清单</h2>
+        <p role="alert" className="text-sm text-destructive">
+          无法读取部署 #{deploymentId}：{errorMessage(deploymentQuery.error)}
+        </p>
+        <Button variant="outline" onClick={onClear}>移除失效部署入口</Button>
+      </section>
+    );
+  }
+
+  const deployment = deploymentQuery.data;
+  const slots = [...new Set(deployment.resources.map((resource) => resource.camera_slot_id))];
+  const statusName = DEPLOYMENT_STATUS_NAMES[deployment.status] ?? deployment.status;
+  const shareUrl = typeof window === "undefined"
+    ? ""
+    : `${window.location.origin}${window.location.pathname}?deployment=${deployment.id}`;
+
+  return (
+    <section className="space-y-4 rounded-lg border p-4" aria-label="部署激活清单">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-medium">部署激活清单</h2>
+          <p className="text-xs text-muted-foreground">
+            部署 #{deployment.id} · {deployment.pack_version} · 可复制链接，之后继续完成配置。
+          </p>
+        </div>
+        <Badge variant={deployment.status === "active" ? "default" : deployment.status === "degraded" ? "destructive" : "secondary"}>
+          {statusName}
+        </Badge>
+      </div>
+      {deployment.status === "degraded" ? (
+        <p role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          有摄像头、规则或视频资源已缺失，请先恢复资源；缺失资源不会被标记为完成。
+        </p>
+      ) : null}
+      {shareUrl ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/50 p-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{shareUrl}</span>
+          <Button
+            size="xs"
+            variant="outline"
+            onClick={() => {
+              void navigator.clipboard?.writeText(shareUrl);
+              toast.success("部署继续链接已复制");
+            }}
+          >
+            复制继续链接
+          </Button>
+        </div>
+      ) : null}
+      <div className="space-y-3">
+        {slots.map((slot) => {
+          const resources = deployment.resources.filter((resource) => resource.camera_slot_id === slot);
+          const camera = resources.find((resource) => resource.kind === "camera");
+          const rules = resources.filter((resource) => resource.kind === "rule");
+          const missing = resources.some((resource) => resource.missing);
+          const calibrated = rules.length > 0 && rules.every((resource) => resource.configured);
+          const step = (key: string) => `${slot}:${key}`;
+          const local = (key: string) => Boolean(localSteps[step(key)]);
+          const steps = [
+            { key: "source", label: "换源", description: "换成真实 RTSP 或视频文件源" },
+            { key: "view", label: "看画面", description: "打开详情确认视角、光线和画质" },
+            { key: "start", label: "启动", description: "确认规则后启动这一路摄像头" },
+            { key: "verify", label: "验证", description: "看到预期事件或统计后完成验收" },
+          ];
+          return (
+            <article key={slot} className="space-y-3 rounded-md border p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-medium">机位 {slot}</h3>
+                  <p className="text-xs text-muted-foreground">{camera?.label || "摄像头资源缺失"}</p>
+                </div>
+                {camera && !camera.missing ? (
+                  <Button size="xs" variant="outline" render={<Link prefetch={false} href={`/cameras/${camera.resource_id}`} />}>
+                    打开摄像头详情
+                  </Button>
+                ) : null}
+              </div>
+              {missing ? <p className="text-xs text-destructive">该机位有资源缺失。</p> : null}
+              <ol className="grid gap-2 sm:grid-cols-2">
+                {steps.slice(0, 2).map((item) => (
+                  <li key={item.key} className="flex items-start gap-2 rounded-md bg-muted/40 p-2">
+                    <Checkbox
+                      checked={local(item.key)}
+                      disabled={!camera || camera.missing}
+                      aria-label={`${slot} ${item.label}`}
+                      onCheckedChange={(value) => markLocal(step(item.key), value === true)}
+                    />
+                    <span className="text-sm"><strong className="font-medium">{item.label}</strong><span className="block text-xs text-muted-foreground">{item.description}</span></span>
+                  </li>
+                ))}
+                <li className="flex items-start gap-2 rounded-md bg-muted/40 p-2 sm:col-span-2">
+                  <Checkbox
+                    checked={calibrated}
+                    disabled={missing || rules.length === 0 || configureRules.isPending}
+                    aria-label={`${slot} 校准并启用规则`}
+                    onCheckedChange={(value) => configureRules.mutate({
+                      resourceIds: rules.map((resource) => resource.id),
+                      configured: value === true,
+                    })}
+                  />
+                  <span className="text-sm"><strong className="font-medium">校准并启用</strong><span className="block text-xs text-muted-foreground">校准区域、计数线和阈值后，逐条启用规则</span></span>
+                </li>
+                {steps.slice(2).map((item) => (
+                  <li key={item.key} className="flex items-start gap-2 rounded-md bg-muted/40 p-2">
+                    <Checkbox
+                      checked={local(item.key)}
+                      disabled={!camera || camera.missing || !calibrated}
+                      aria-label={`${slot} ${item.label}`}
+                      onCheckedChange={(value) => markLocal(step(item.key), value === true)}
+                    />
+                    <span className="text-sm"><strong className="font-medium">{item.label}</strong><span className="block text-xs text-muted-foreground">{item.description}</span></span>
+                  </li>
+                ))}
+              </ol>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }

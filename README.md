@@ -120,7 +120,11 @@ uv run python scripts/export_openapi.py
 | `GET /api/events/{id}/snapshot` | 事件快照图 |
 | `GET/POST /api/notify-channels`、`PATCH/DELETE .../{id}`、`POST .../{id}/test` | 通知渠道 CRUD 与测试推送（webhook，兼容飞书/企业微信/钉钉机器人；摄像头/规则类型留空表示全部） |
 | `GET /api/system/info` | 算力设备 / 内存 / 模型 / 方案包统计 / VLM 配置状态 |
-| `GET /api/packs`、`POST /api/packs/install`、`POST /api/packs/{id}/apply`、`DELETE /api/packs/{id}` | 方案包列出 / 安装 / 应用 / 卸载 |
+| `GET /api/packs`、`GET /api/packs/{id}`、`GET /api/packs/{id}/assets/{asset}` | 方案包列表、详情与白名单演示资产（支持 Range/ETag） |
+| `POST /api/packs/{id}/trials`、`GET/DELETE /api/pack-trials/{id}` | 当前场景本机隔离试跑、状态轮询与幂等停止；不写事件/快照、不调用 VLM/通知 |
+| `POST /api/packs/{id}/apply-plan`、`POST /api/packs/{id}/apply` | 先预览摄像头/规则/视频变更，再带 `expected_fingerprint` 确认应用；旧调用仍兼容 |
+| `GET /api/pack-deployments/{id}`、`PATCH .../resources/{resource_id}` | 跨会话读取部署、逐路完成换源/看画面/校准/启用/启动/验证清单 |
+| `POST /api/packs/install`、`DELETE /api/packs/{id}` | 方案包安装 / 卸载 |
 | `GET /api/packs/online` | 在线市场（stub，未配置平台时降级为内置包） |
 | `GET /api/account/status`、`POST /api/account/login`、`/logout` | 平台账号（stub，不强制登录） |
 | `GET /health` | 健康检查 |
@@ -143,7 +147,7 @@ uv run python scripts/export_openapi.py
 - **摄像头**：CRUD 与启停；详情页 `#/cameras/{id}` 可看 MJPEG 直播，文件源可拖进度回放。
 - **规则**：场景引导式三步配置——选场景卡片 → 填参数（默认值+中文提示）→ 画布画多边形 ROI；已有规则显示中文名与参数摘要，叠加显示可删除。
 - **事件处置**：时间线 + 摄像头/类型/处置状态/VLM 判定过滤与「仅看关注」，行内星标关注；详情区可流转状态（确认/处置完成/误报忽略）、编辑负责人与备注、重发通知，并展示完整处置时间线。
-- **方案市场**：浏览内置方案包、一键应用到摄像头、从本地目录/zip/URL 安装、卸载。
+- **方案市场**：浏览内置方案包、进入可分享的详情页查看业务价值和演示；详情支持单场景本机试跑（包内源、视频库或运行中摄像头），应用前先预览变更并确认内容指纹，应用后按部署清单跨会话完成换源、看画面、校准、启用、启动和验证。从本地目录/zip/URL 安装、卸载仍可用。
 - **设置**：算力信息、大模型（接口/模型/API Key，可测连接）、平台账号状态、通知渠道管理（webhook + 适用范围 + 测试推送）。
 
 ## 规则：五种场景
