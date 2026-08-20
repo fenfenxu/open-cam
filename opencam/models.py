@@ -212,19 +212,39 @@ MODEL_LIVE = "live"
 MODEL_PREVIOUS = "previous"
 MODEL_RETIRED = "retired"
 
-# 模型资产来源：来源不是模型能力，二者必须分开管理。
+# 模型资产来源（产生方式）与交付方式（传播方式）是两条独立维度：
+# 一个模型可以同时是 trained + published 或 trained + solution。
+MODEL_ORIGIN_BUILTIN = "builtin"
+MODEL_ORIGIN_UPLOADED = "uploaded"
+MODEL_ORIGIN_TRAINED = "trained"
+MODEL_ORIGIN_TYPES = (
+    MODEL_ORIGIN_BUILTIN,
+    MODEL_ORIGIN_UPLOADED,
+    MODEL_ORIGIN_TRAINED,
+)
+
+MODEL_DISTRIBUTION_PRIVATE = "private"
+MODEL_DISTRIBUTION_PUBLISHED = "published"
+MODEL_DISTRIBUTION_SOLUTION = "solution"
+MODEL_DISTRIBUTION_TYPES = (
+    MODEL_DISTRIBUTION_PRIVATE,
+    MODEL_DISTRIBUTION_PUBLISHED,
+    MODEL_DISTRIBUTION_SOLUTION,
+)
+
+# 原型遗留的单一来源枚举（0009 起由 origin/distribution 派生写入，下版本删除）。
 MODEL_SOURCE_BUILTIN = "builtin"
 MODEL_SOURCE_PUBLISHED = "published"
 MODEL_SOURCE_SOLUTION = "solution"
 MODEL_SOURCE_UPLOADED = "uploaded"
 MODEL_SOURCE_TRAINED = "trained"
-MODEL_SOURCE_TYPES = (
-    MODEL_SOURCE_BUILTIN,
-    MODEL_SOURCE_PUBLISHED,
-    MODEL_SOURCE_SOLUTION,
-    MODEL_SOURCE_UPLOADED,
-    MODEL_SOURCE_TRAINED,
-)
+
+
+def legacy_source_type(origin_type: str, distribution_type: str) -> str:
+    """由新维度派生旧 source_type，仅用于过渡期双写。"""
+    if distribution_type != MODEL_DISTRIBUTION_PRIVATE:
+        return distribution_type
+    return origin_type
 
 MODEL_KIND_DETECTION = "object_detection"
 MODEL_KIND_CLASSIFICATION = "classification"
@@ -255,10 +275,21 @@ class ModelAsset(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str] = mapped_column(Text, default="")
-    # builtin / published / solution / uploaded / trained
-    source_type: Mapped[str] = mapped_column(String(24), index=True)
+    # 产生方式：builtin 系统内置 / uploaded 用户上传 / trained 用户训练或二次训练
+    origin_type: Mapped[str] = mapped_column(String(24), index=True)
+    # 传播方式：private 仅本机 / published 用户发布 / solution 随解决方案交付
+    distribution_type: Mapped[str] = mapped_column(
+        String(24), default=MODEL_DISTRIBUTION_PRIVATE, index=True)
     # object_detection / classification / segmentation / pose / ocr / vlm
     model_kind: Mapped[str] = mapped_column(String(32), index=True)
+    # 能力标签，如 person_detection、uniform_classification、plate.text
+    capabilities: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False)
+    # 输入输出契约（自由结构），供运行时解析与 AI 推荐匹配
+    input_contract: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False)
+    output_contract: Mapped[dict[str, Any]] = mapped_column(
+        JSON, default=dict, nullable=False)
     # 语义任务槽位，如 person_detection、垃圾桶:满溢状态
     task_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
     # 方案包和训练任务是来源上下文，不等于运行时绑定。
@@ -267,6 +298,8 @@ class ModelAsset(Base):
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    # 过渡兼容字段：原型单一来源枚举，由 origin/distribution 派生双写，下版本删除。
+    source_type: Mapped[str] = mapped_column(String(24), default="")
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     updated_at: Mapped[float] = mapped_column(Float, default=time.time)
 
@@ -293,7 +326,7 @@ class ModelBinding(Base):
 
 
 class ModelVersion(Base):
-    """一次训练产出的可部署模型版本（指标 + 产物路径 + 来源任务）。"""
+    """不可变模型版本：一次训练/上传/方案交付的具体产物（指标 + 产物路径 + 哈希）。"""
 
     __tablename__ = "model_versions"
 
@@ -304,6 +337,13 @@ class ModelVersion(Base):
     # 同一对象+属性共用一个线上槽位，便于新任务替换旧任务的线上模型
     slot_key: Mapped[str] = mapped_column(String(128), index=True)
     artifact_path: Mapped[str] = mapped_column(Text)
+    # 产物文件 sha256，部署与事件留痕用它追溯具体产物
+    artifact_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # 训练/导出框架与推理运行时，如 yolov8 + ultralytics、onnx + onnxruntime
+    framework: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    runtime: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # 推理输入边长（方形输入），如 640
+    input_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[float] = mapped_column(Float, default=time.time)
     status: Mapped[str] = mapped_column(String(16), default=MODEL_REGISTERED, index=True)
@@ -616,6 +656,10 @@ class ModelVersionOut(BaseModel):
     model_asset_id: Optional[int] = None
     slot_key: str
     artifact_path: str
+    artifact_hash: Optional[str] = None
+    framework: Optional[str] = None
+    runtime: Optional[str] = None
+    input_size: Optional[int] = None
     metrics: dict[str, Any]
     created_at: float
     status: str
@@ -803,9 +847,15 @@ class PackDeploymentResourcePatch(BaseModel):
 class ModelAssetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str = ""
-    source_type: str = Field(pattern="^(builtin|published|solution|uploaded|trained)$")
+    origin_type: str = Field(
+        default=MODEL_ORIGIN_UPLOADED, pattern="^(builtin|uploaded|trained)$")
+    distribution_type: str = Field(
+        default=MODEL_DISTRIBUTION_PRIVATE, pattern="^(private|published|solution)$")
     model_kind: str = Field(
         pattern="^(object_detection|classification|segmentation|pose|ocr|vlm)$")
+    capabilities: list[str] = Field(default_factory=list)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
     task_key: Optional[str] = Field(default=None, max_length=128)
     solution_pack_id: Optional[str] = Field(default=None, max_length=128)
     training_task_id: Optional[str] = Field(default=None, max_length=64)
@@ -815,11 +865,16 @@ class ModelAssetCreate(BaseModel):
 class ModelAssetUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=128)
     description: Optional[str] = None
-    source_type: Optional[str] = Field(
-        default=None, pattern="^(builtin|published|solution|uploaded|trained)$")
+    origin_type: Optional[str] = Field(
+        default=None, pattern="^(builtin|uploaded|trained)$")
+    distribution_type: Optional[str] = Field(
+        default=None, pattern="^(private|published|solution)$")
     model_kind: Optional[str] = Field(
         default=None,
         pattern="^(object_detection|classification|segmentation|pose|ocr|vlm)$")
+    capabilities: Optional[list[str]] = None
+    input_contract: Optional[dict[str, Any]] = None
+    output_contract: Optional[dict[str, Any]] = None
     task_key: Optional[str] = Field(default=None, max_length=128)
     solution_pack_id: Optional[str] = Field(default=None, max_length=128)
     training_task_id: Optional[str] = Field(default=None, max_length=64)
@@ -831,8 +886,12 @@ class ModelAssetOut(BaseModel):
     id: int
     name: str
     description: str
-    source_type: str
+    origin_type: str
+    distribution_type: str
     model_kind: str
+    capabilities: list[str] = Field(default_factory=list)
+    input_contract: dict[str, Any] = Field(default_factory=dict)
+    output_contract: dict[str, Any] = Field(default_factory=dict)
     task_key: Optional[str]
     solution_pack_id: Optional[str]
     training_task_id: Optional[str]

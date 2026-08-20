@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session_scope
+from ..model_assets import register_pack_models
 from ..models import (
     ApplyPlanOut,
     CameraOut,
@@ -71,16 +72,21 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/install", status_code=201, summary="安装方案包", description="source 支持本地目录、.zip 文件路径或 http(s) URL。")
-def install(body: InstallRequest):
+def install(body: InstallRequest, session: Session = Depends(session_scope)):
     try:
-        return installer.install(body.source)
+        brief = installer.install(body.source)
+        # 随包声明的模型登记为可追溯资产（幂等，不覆盖用户编辑）
+        register_pack_models(session, installer.installed_packs_dir() / brief["id"],
+                             brief["id"])
+        return brief
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/install-upload", status_code=201, summary="上传并安装方案包",
              description="上传 .zip 方案包并安装。")
-def install_upload(file: UploadFile):
+def install_upload(file: UploadFile, session: Session = Depends(session_scope)):
+    """接收浏览器选择的 ZIP 文件，再复用本地 ZIP 安装流程。"""
     filename = Path(file.filename or "").name
     if Path(filename).suffix.lower() != ".zip":
         raise HTTPException(400, "请上传 .zip 方案包")
@@ -89,7 +95,11 @@ def install_upload(file: UploadFile):
         with tempfile.NamedTemporaryFile(suffix=".zip") as uploaded:
             shutil.copyfileobj(file.file, uploaded)
             uploaded.flush()
-            return installer.install(uploaded.name)
+            brief = installer.install(uploaded.name)
+            register_pack_models(session,
+                                 installer.installed_packs_dir() / brief["id"],
+                                 brief["id"])
+            return brief
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
 

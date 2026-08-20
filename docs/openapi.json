@@ -2883,177 +2883,6 @@
         }
       }
     },
-    "/api/packs/{pack_id}/trials": {
-      "post": {
-        "tags": [
-          "packs"
-        ],
-        "summary": "发起本机隔离试跑",
-        "description": "单场景实时试跑：全局最多一个主动会话，默认 60 秒 TTL。不写库、不存快照、不调 VLM/通知。",
-        "operationId": "start_trial_api_packs__pack_id__trials_post",
-        "parameters": [
-          {
-            "name": "pack_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Pack Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TrialStartIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TrialOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/pack-trials/{trial_id}": {
-      "get": {
-        "tags": [
-          "packs"
-        ],
-        "summary": "试跑状态",
-        "description": "规则状态、临时命中时间线、实际帧率与设备信息；已过期返回 410。",
-        "operationId": "get_trial_api_pack_trials__trial_id__get",
-        "parameters": [
-          {
-            "name": "trial_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Trial Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TrialOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "packs"
-        ],
-        "summary": "停止试跑",
-        "description": "幂等：已停止/过期/出错的试跑同样返回 204。",
-        "operationId": "stop_trial_api_pack_trials__trial_id__delete",
-        "parameters": [
-          {
-            "name": "trial_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Trial Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/pack-trials/{trial_id}/live.mjpg": {
-      "get": {
-        "tags": [
-          "packs"
-        ],
-        "summary": "试跑 MJPEG 实时画面",
-        "description": "约 8fps 推送叠加检测框/规则状态的画面；未运行 409，已过期 410。",
-        "operationId": "trial_live_mjpeg_api_pack_trials__trial_id__live_mjpg_get",
-        "parameters": [
-          {
-            "name": "trial_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Trial Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/account/status": {
       "get": {
         "tags": [
@@ -3715,7 +3544,7 @@
         "operationId": "list_assets_api_models_assets_get",
         "parameters": [
           {
-            "name": "source_type",
+            "name": "origin_type",
             "in": "query",
             "required": false,
             "schema": {
@@ -3727,8 +3556,28 @@
                   "type": "null"
                 }
               ],
-              "title": "Source Type"
-            }
+              "description": "产生方式：builtin/uploaded/trained",
+              "title": "Origin Type"
+            },
+            "description": "产生方式：builtin/uploaded/trained"
+          },
+          {
+            "name": "distribution_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "交付方式：private/published/solution",
+              "title": "Distribution Type"
+            },
+            "description": "交付方式：private/published/solution"
           },
           {
             "name": "model_kind",
@@ -3745,6 +3594,42 @@
               ],
               "title": "Model Kind"
             }
+          },
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按能力标签过滤",
+              "title": "Capability"
+            },
+            "description": "按能力标签过滤"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "active/archived；缺省返回全部",
+              "title": "Status"
+            },
+            "description": "active/archived；缺省返回全部"
           },
           {
             "name": "q",
@@ -3797,7 +3682,7 @@
           "models"
         ],
         "summary": "创建模型资产",
-        "description": "登记模型名称、描述、来源类型和模型能力；不等于部署到运行时。",
+        "description": "登记模型名称、描述、来源、交付方式和能力；不等于部署到运行时。",
         "operationId": "create_asset_api_models_assets_post",
         "requestBody": {
           "required": true,
@@ -3816,6 +3701,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ModelAssetOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/models/assets/upload": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "上传模型产物",
+        "description": "上传权重文件并登记为可追溯资产 + 首个版本（含 sha256）。",
+        "operationId": "upload_asset_api_models_assets_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_asset_api_models_assets_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
                 }
               }
             }
@@ -4373,6 +4300,177 @@
           }
         }
       }
+    },
+    "/api/pack-trials/{trial_id}/live.mjpg": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "试跑 MJPEG 实时画面",
+        "description": "约 8fps 推送叠加检测框/规则状态的画面；未运行 409，已过期 410。",
+        "operationId": "trial_live_mjpeg_api_pack_trials__trial_id__live_mjpg_get",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pack-trials/{trial_id}": {
+      "get": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "试跑状态",
+        "description": "规则状态、临时命中时间线、实际帧率与设备信息；已过期返回 410。",
+        "operationId": "get_trial_api_pack_trials__trial_id__get",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "停止试跑",
+        "description": "幂等：已停止/过期/出错的试跑同样返回 204。",
+        "operationId": "stop_trial_api_pack_trials__trial_id__delete",
+        "parameters": [
+          {
+            "name": "trial_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trial Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/packs/{pack_id}/trials": {
+      "post": {
+        "tags": [
+          "packs"
+        ],
+        "summary": "发起本机隔离试跑",
+        "description": "单场景实时试跑：全局最多一个主动会话，默认 60 秒 TTL。不写库、不存快照、不调 VLM/通知。",
+        "operationId": "start_trial_api_packs__pack_id__trials_post",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrialStartIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrialOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4469,6 +4567,94 @@
           "file"
         ],
         "title": "Body_install_upload_api_packs_install_upload_post"
+      },
+      "Body_upload_asset_api_models_assets_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "model_kind": {
+            "type": "string",
+            "pattern": "^(object_detection|classification|segmentation|pose|ocr|vlm)$",
+            "title": "Model Kind",
+            "default": "object_detection"
+          },
+          "distribution_type": {
+            "type": "string",
+            "pattern": "^(private|published|solution)$",
+            "title": "Distribution Type",
+            "default": "private"
+          },
+          "capabilities": {
+            "type": "string",
+            "title": "Capabilities",
+            "description": "逗号分隔的能力标签",
+            "default": ""
+          },
+          "task_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Key"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "input_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "name"
+        ],
+        "title": "Body_upload_asset_api_models_assets_upload_post"
       },
       "Body_upload_video_api_cameras_upload_post": {
         "properties": {
@@ -5447,15 +5633,39 @@
             "title": "Description",
             "default": ""
           },
-          "source_type": {
+          "origin_type": {
             "type": "string",
-            "pattern": "^(builtin|published|solution|uploaded|trained)$",
-            "title": "Source Type"
+            "pattern": "^(builtin|uploaded|trained)$",
+            "title": "Origin Type",
+            "default": "uploaded"
+          },
+          "distribution_type": {
+            "type": "string",
+            "pattern": "^(private|published|solution)$",
+            "title": "Distribution Type",
+            "default": "private"
           },
           "model_kind": {
             "type": "string",
             "pattern": "^(object_detection|classification|segmentation|pose|ocr|vlm)$",
             "title": "Model Kind"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Contract"
           },
           "task_key": {
             "anyOf": [
@@ -5502,7 +5712,6 @@
         "type": "object",
         "required": [
           "name",
-          "source_type",
           "model_kind"
         ],
         "title": "ModelAssetCreate"
@@ -5521,13 +5730,34 @@
             "type": "string",
             "title": "Description"
           },
-          "source_type": {
+          "origin_type": {
             "type": "string",
-            "title": "Source Type"
+            "title": "Origin Type"
+          },
+          "distribution_type": {
+            "type": "string",
+            "title": "Distribution Type"
           },
           "model_kind": {
             "type": "string",
             "title": "Model Kind"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output Contract"
           },
           "task_key": {
             "anyOf": [
@@ -5585,7 +5815,8 @@
           "id",
           "name",
           "description",
-          "source_type",
+          "origin_type",
+          "distribution_type",
           "model_kind",
           "task_key",
           "solution_pack_id",
@@ -5622,17 +5853,29 @@
             ],
             "title": "Description"
           },
-          "source_type": {
+          "origin_type": {
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^(builtin|published|solution|uploaded|trained)$"
+                "pattern": "^(builtin|uploaded|trained)$"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Source Type"
+            "title": "Origin Type"
+          },
+          "distribution_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(private|published|solution)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution Type"
           },
           "model_kind": {
             "anyOf": [
@@ -5645,6 +5888,44 @@
               }
             ],
             "title": "Model Kind"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Contract"
           },
           "task_key": {
             "anyOf": [
@@ -5896,6 +6177,50 @@
           "artifact_path": {
             "type": "string",
             "title": "Artifact Path"
+          },
+          "artifact_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Hash"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "input_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Size"
           },
           "metrics": {
             "additionalProperties": true,
@@ -6841,17 +7166,68 @@
             ],
             "title": "Description"
           },
-          "source_type": {
+          "origin_type": {
             "type": "string",
-            "pattern": "^(builtin|published|solution|uploaded|trained)$",
-            "title": "Source Type",
+            "pattern": "^(builtin|uploaded|trained)$",
+            "title": "Origin Type",
             "default": "trained"
+          },
+          "distribution_type": {
+            "type": "string",
+            "pattern": "^(private|published|solution)$",
+            "title": "Distribution Type",
+            "default": "private"
           },
           "model_kind": {
             "type": "string",
             "pattern": "^(object_detection|classification|segmentation|pose|ocr|vlm)$",
             "title": "Model Kind",
             "default": "classification"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "framework": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Framework",
+            "description": "训练/导出框架",
+            "default": "yolov8"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime",
+            "description": "推理运行时",
+            "default": "ultralytics"
+          },
+          "input_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Size",
+            "description": "推理输入边长，如 640"
           }
         },
         "type": "object",
@@ -7109,266 +7485,21 @@
         "type": "object",
         "title": "TrainRequest"
       },
-      "TrialHitOut": {
+      "UploadResult": {
         "properties": {
-          "at_sec": {
-            "type": "number",
-            "title": "At Sec"
+          "asset": {
+            "$ref": "#/components/schemas/ModelAssetOut"
           },
-          "rule_id": {
-            "type": "string",
-            "title": "Rule Id"
-          },
-          "rule_name": {
-            "type": "string",
-            "title": "Rule Name"
-          },
-          "rule_type": {
-            "type": "string",
-            "title": "Rule Type"
-          },
-          "confidence": {
-            "type": "number",
-            "title": "Confidence"
-          },
-          "detail": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Detail"
+          "version": {
+            "$ref": "#/components/schemas/ModelVersionOut"
           }
         },
         "type": "object",
         "required": [
-          "at_sec",
-          "rule_id",
-          "rule_name",
-          "rule_type",
-          "confidence"
+          "asset",
+          "version"
         ],
-        "title": "TrialHitOut"
-      },
-      "TrialOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "pack_id": {
-            "type": "string",
-            "title": "Pack Id"
-          },
-          "scene_id": {
-            "type": "string",
-            "title": "Scene Id"
-          },
-          "scene_title": {
-            "type": "string",
-            "title": "Scene Title"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "source_kind": {
-            "type": "string",
-            "title": "Source Kind"
-          },
-          "started_at": {
-            "type": "number",
-            "title": "Started At"
-          },
-          "expires_at": {
-            "type": "number",
-            "title": "Expires At"
-          },
-          "duration_sec": {
-            "type": "number",
-            "title": "Duration Sec"
-          },
-          "remaining_sec": {
-            "type": "number",
-            "title": "Remaining Sec"
-          },
-          "fps": {
-            "type": "number",
-            "title": "Fps",
-            "default": 0.0
-          },
-          "device": {
-            "type": "string",
-            "title": "Device",
-            "default": ""
-          },
-          "width": {
-            "type": "integer",
-            "title": "Width",
-            "default": 0
-          },
-          "height": {
-            "type": "integer",
-            "title": "Height",
-            "default": 0
-          },
-          "rules": {
-            "items": {
-              "$ref": "#/components/schemas/TrialRuleStateOut"
-            },
-            "type": "array",
-            "title": "Rules"
-          },
-          "hits": {
-            "items": {
-              "$ref": "#/components/schemas/TrialHitOut"
-            },
-            "type": "array",
-            "title": "Hits"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "live_url": {
-            "type": "string",
-            "title": "Live Url",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "pack_id",
-          "scene_id",
-          "scene_title",
-          "status",
-          "source_kind",
-          "started_at",
-          "expires_at",
-          "duration_sec",
-          "remaining_sec"
-        ],
-        "title": "TrialOut"
-      },
-      "TrialRuleStateOut": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type"
-          },
-          "type_label": {
-            "type": "string",
-            "title": "Type Label"
-          },
-          "matched": {
-            "type": "boolean",
-            "title": "Matched",
-            "default": false
-          },
-          "hits": {
-            "type": "integer",
-            "title": "Hits",
-            "default": 0
-          },
-          "last_hit_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Hit At"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "type",
-          "type_label"
-        ],
-        "title": "TrialRuleStateOut"
-      },
-      "TrialSourceIn": {
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "pack",
-              "video",
-              "camera"
-            ],
-            "title": "Kind",
-            "default": "pack"
-          },
-          "video_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Video Id"
-          },
-          "camera_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Camera Id"
-          }
-        },
-        "type": "object",
-        "title": "TrialSourceIn"
-      },
-      "TrialStartIn": {
-        "properties": {
-          "scene_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Scene Id"
-          },
-          "source": {
-            "$ref": "#/components/schemas/TrialSourceIn"
-          },
-          "duration_sec": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration Sec"
-          }
-        },
-        "type": "object",
-        "required": [
-          "scene_id"
-        ],
-        "title": "TrialStartIn"
+        "title": "UploadResult"
       },
       "ValidationError": {
         "properties": {
@@ -7531,6 +7662,267 @@
         },
         "type": "object",
         "title": "VlmSettingsUpdate"
+      },
+      "TrialOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "scene_id": {
+            "type": "string",
+            "title": "Scene Id"
+          },
+          "scene_title": {
+            "type": "string",
+            "title": "Scene Title"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source_kind": {
+            "type": "string",
+            "title": "Source Kind"
+          },
+          "started_at": {
+            "type": "number",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "number",
+            "title": "Expires At"
+          },
+          "duration_sec": {
+            "type": "number",
+            "title": "Duration Sec"
+          },
+          "remaining_sec": {
+            "type": "number",
+            "title": "Remaining Sec"
+          },
+          "fps": {
+            "type": "number",
+            "title": "Fps",
+            "default": 0.0
+          },
+          "device": {
+            "type": "string",
+            "title": "Device",
+            "default": ""
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "default": 0
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "default": 0
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/TrialRuleStateOut"
+            },
+            "type": "array",
+            "title": "Rules"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/TrialHitOut"
+            },
+            "type": "array",
+            "title": "Hits"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "live_url": {
+            "type": "string",
+            "title": "Live Url",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pack_id",
+          "scene_id",
+          "scene_title",
+          "status",
+          "source_kind",
+          "started_at",
+          "expires_at",
+          "duration_sec",
+          "remaining_sec"
+        ],
+        "title": "TrialOut"
+      },
+      "TrialStartIn": {
+        "properties": {
+          "scene_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Scene Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TrialSourceIn"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_id"
+        ],
+        "title": "TrialStartIn"
+      },
+      "TrialHitOut": {
+        "properties": {
+          "at_sec": {
+            "type": "number",
+            "title": "At Sec"
+          },
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "rule_name": {
+            "type": "string",
+            "title": "Rule Name"
+          },
+          "rule_type": {
+            "type": "string",
+            "title": "Rule Type"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at_sec",
+          "rule_id",
+          "rule_name",
+          "rule_type",
+          "confidence"
+        ],
+        "title": "TrialHitOut"
+      },
+      "TrialSourceIn": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pack",
+              "video",
+              "camera"
+            ],
+            "title": "Kind",
+            "default": "pack"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "camera_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Camera Id"
+          }
+        },
+        "type": "object",
+        "title": "TrialSourceIn"
+      },
+      "TrialRuleStateOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "type_label": {
+            "type": "string",
+            "title": "Type Label"
+          },
+          "matched": {
+            "type": "boolean",
+            "title": "Matched",
+            "default": false
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits",
+            "default": 0
+          },
+          "last_hit_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Hit At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "type",
+          "type_label"
+        ],
+        "title": "TrialRuleStateOut"
       }
     }
   },

@@ -264,6 +264,7 @@ POST /api/solution-pack-installations/{installation_id}/apply
 - `id/name/vertical/description/author` → `SolutionPack`；
 - `version/min_opencam_version` → `SolutionPackVersion`；
 - `cameras[]` → `CameraTemplate`；其中 `source` 是 `sample_asset`，不是实际摄像头源；
+- `models[]` → 随包交付的模型声明；安装时登记为 `builtin + solution` 的 `ModelAsset`（含能力标签），声明了包内权重文件时同时生成带 sha256 的 `ModelVersion`；
 - `rules/*.yaml` → `RuleTemplate`；`camera` → `camera_key`；
 - `prompts/*.txt` → `PromptTemplate`；
 - `README.md`、视频和其他文件 → `Asset`；

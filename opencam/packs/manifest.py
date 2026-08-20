@@ -4,6 +4,7 @@
     pack.yaml        # id/name/version/vertical/...；可选 format_version=2 产品内容
     rules/*.yaml     # 规则模板: name/type/params(polygon 用 0-1 相对坐标)/cooldown
     prompts/*.txt    # 可选: 该行业 VLM 复核提示词模板
+    models/          # 可选: pack.yaml models[] 声明的随包权重文件
     README.md        # 说明
     experience/      # 可选: 预览媒体与事件样例（v2）
 """
@@ -74,6 +75,24 @@ class PackExperience(BaseModel):
         return v
 
 
+class PackModel(BaseModel):
+    """pack.yaml models[] 中一个随包交付的模型声明。
+
+    安装时登记为模型资产（distribution_type=solution）；file 指向包内权重，
+    存在时同时生成带 sha256 的模型版本。
+    """
+
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$")
+    name: str = Field(min_length=1)
+    description: str = ""
+    model_kind: Literal["object_detection", "classification", "segmentation",
+                        "pose", "ocr", "vlm"] = "object_detection"
+    capabilities: list[str] = Field(default_factory=list)
+    file: str | None = None
+    framework: str = ""
+    runtime: str = ""
+
+
 class PackManifest(BaseModel):
     """pack.yaml 的 schema。format_version=2 时启用 presentation/experience。"""
 
@@ -88,6 +107,7 @@ class PackManifest(BaseModel):
     cameras: list[PackCamera] | None = None
     presentation: PackPresentation | None = None
     experience: PackExperience | None = None
+    models: list[PackModel] | None = None
 
     @field_validator("format_version")
     @classmethod
@@ -126,6 +146,19 @@ class PackManifest(BaseModel):
                 raise ValueError(
                     f"场景 {scene.id} 的 camera 必须指向包内摄像头 id")
         return self
+
+    @field_validator("models")
+    @classmethod
+    def _models_ok(cls, v: list[PackModel] | None) -> list[PackModel] | None:
+        if v is None:
+            return v
+        ids = [m.id for m in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("models id 必须唯一")
+        for m in v:
+            if m.file and (m.file.startswith("/") or ".." in Path(m.file).parts):
+                raise ValueError(f"模型 {m.id} 的 file 必须是包内相对路径")
+        return v
 
 
 class RuleTemplate(BaseModel):

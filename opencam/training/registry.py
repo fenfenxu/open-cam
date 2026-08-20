@@ -151,7 +151,10 @@ def previous_of(session: Session, slot_key: str) -> Optional[ModelVersion]:
 def register_version(session: Session, task_id: str,
                      metrics: Optional[dict[str, Any]] = None,
                      artifact_path: Optional[str] = None,
-                     model_asset_id: Optional[int] = None) -> ModelVersion:
+                     model_asset_id: Optional[int] = None,
+                     framework: Optional[str] = None,
+                     runtime: Optional[str] = None,
+                     input_size: Optional[int] = None) -> ModelVersion:
     if not task_exists(task_id):
         raise RegistryError("训练任务不存在", 404)
     definition = load_definition(task_id)
@@ -164,11 +167,16 @@ def register_version(session: Session, task_id: str,
     if not dest.is_absolute():
         dest = (settings.data_dir / dest).resolve()
     dest = _safe_artifact(dest)
+    from ..model_assets import sha256_file
     row = ModelVersion(
         task_id=task_id,
         model_asset_id=model_asset_id,
         slot_key=slot,
         artifact_path=str(dest),
+        artifact_hash=sha256_file(dest),
+        framework=framework,
+        runtime=runtime,
+        input_size=input_size,
         metrics=normalized,
         created_at=time.time(),
         status=MODEL_REGISTERED,

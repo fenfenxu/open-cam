@@ -1,9 +1,6 @@
-export type ModelSourceType =
-  | "builtin"
-  | "published"
-  | "solution"
-  | "uploaded"
-  | "trained";
+export type ModelOriginType = "builtin" | "uploaded" | "trained";
+
+export type ModelDistributionType = "private" | "published" | "solution";
 
 export type ModelKind =
   | "object_detection"
@@ -17,8 +14,12 @@ export type ModelAsset = {
   id: number;
   name: string;
   description: string;
-  source_type: ModelSourceType;
+  origin_type: ModelOriginType;
+  distribution_type: ModelDistributionType;
   model_kind: ModelKind;
+  capabilities: string[];
+  input_contract: Record<string, unknown>;
+  output_contract: Record<string, unknown>;
   task_key: string | null;
   solution_pack_id: string | null;
   training_task_id: string | null;
@@ -28,12 +29,16 @@ export type ModelAsset = {
   updated_at: number;
 };
 
-export const MODEL_SOURCE_TYPES: Array<{ value: ModelSourceType; label: string }> = [
-  { value: "builtin", label: "系统内置模型" },
-  { value: "published", label: "用户发布模型" },
-  { value: "solution", label: "解决方案模型" },
-  { value: "uploaded", label: "用户上传模型" },
-  { value: "trained", label: "用户训练模型" },
+export const MODEL_ORIGIN_TYPES: Array<{ value: ModelOriginType; label: string }> = [
+  { value: "builtin", label: "系统内置" },
+  { value: "uploaded", label: "用户上传" },
+  { value: "trained", label: "用户训练" },
+];
+
+export const MODEL_DISTRIBUTION_TYPES: Array<{ value: ModelDistributionType; label: string }> = [
+  { value: "private", label: "仅本机使用" },
+  { value: "published", label: "用户发布" },
+  { value: "solution", label: "随方案交付" },
 ];
 
 export const MODEL_KINDS: Array<{ value: ModelKind; label: string }> = [
@@ -45,8 +50,12 @@ export const MODEL_KINDS: Array<{ value: ModelKind; label: string }> = [
   { value: "vlm", label: "视觉大模型" },
 ];
 
-export function modelSourceLabel(value: ModelSourceType): string {
-  return MODEL_SOURCE_TYPES.find((item) => item.value === value)?.label || value;
+export function modelOriginLabel(value: ModelOriginType): string {
+  return MODEL_ORIGIN_TYPES.find((item) => item.value === value)?.label || value;
+}
+
+export function modelDistributionLabel(value: ModelDistributionType): string {
+  return MODEL_DISTRIBUTION_TYPES.find((item) => item.value === value)?.label || value;
 }
 
 export function modelKindLabel(value: ModelKind): string {
