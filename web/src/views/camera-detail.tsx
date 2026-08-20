@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { Link, useParams } from "react-router";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
 import { VideoWall } from "@/components/app/video-wall";
@@ -16,7 +17,8 @@ function errorMessage(err: unknown): string {
 }
 
 export function CameraDetailPage() {
-  const { id } = useParams();
+  const pathname = usePathname() || "";
+  const id = pathname.split("/").filter(Boolean)[1];
   const queryClient = useQueryClient();
   const cameraId = Number(id);
 
@@ -67,7 +69,7 @@ export function CameraDetailPage() {
   return (
     <div className="space-y-4">
       <p className="text-sm">
-        <Link className="underline" to="/cameras">
+        <Link className="underline" href="/cameras">
           ← 摄像头列表
         </Link>
       </p>
@@ -82,7 +84,7 @@ export function CameraDetailPage() {
           cam ? (
             <div className="flex items-center gap-2">
               <Badge variant="secondary">{cam.status}</Badge>
-              <Button variant="outline" render={<Link to={`/rules?camera=${cam.id}`} />}>
+              <Button variant="outline" render={<Link href={`/rules?camera=${cam.id}`} />}>
                 配置规则
               </Button>
               <Button

@@ -2394,6 +2394,44 @@
         }
       }
     },
+    "/api/system/dev": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "开发态：热加载与待执行 DDL",
+        "operationId": "get_dev_status_api_system_dev_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/dev/apply": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "确认后触发一次进程替换以执行迁移",
+        "operationId": "apply_dev_ddl_api_system_dev_apply_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/stats/footfall": {
       "get": {
         "tags": [

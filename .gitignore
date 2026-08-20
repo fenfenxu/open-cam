@@ -11,3 +11,6 @@ __pycache__/
 config.yaml
 # loop-it 实例事实是仓库的一部分（不含密钥），不随上面的 config.yaml 规则忽略
 !.loop-it/config.yaml
+opencam/_dev_reload.py
+web/.next/
+web/out/

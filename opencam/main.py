@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -18,6 +20,7 @@ from .api import account, cameras, events, notify, packs, people, rule_presets, 
 from .config import migrate_legacy_data_dir, settings
 from .db import get_session, init_db
 from .detection.vlm import vlm_reviewer
+from .devplaybook import CONSOLE_UNBUILT, dist_is_stale, startup_lines
 from .doctor import verify_startup
 from .models import CAMERA_RUNNING, Camera
 from .notify import notifier
@@ -46,6 +49,31 @@ def _restore_cameras() -> None:
             logger.exception("恢复摄像头 %d 失败", camera.id)
 
 
+def _log_startup_banner() -> None:
+    """给终端里的 Agent / 开发者一块固定扫读区：热加载、DDL、前端下一步。"""
+    from . import migrations
+
+    session = get_session()
+    try:
+        bind = session.get_bind()
+        schema_rev = migrations.current_revision(bind)
+    finally:
+        session.close()
+    web_root = Path(__file__).resolve().parents[1] / "web"
+    dist_ok = (web_root / "out" / "index.html").is_file()
+    port = int(os.environ.get("PORT", "8600"))
+    for line in startup_lines(
+        port=port,
+        dist_ok=dist_ok,
+        dist_stale=dist_is_stale(web_root),
+        detector=settings.detector,
+        reload_on=os.environ.get("OPENCAM_RELOAD", "0") == "1",
+        schema_rev=schema_rev,
+        schema_head=migrations.head_revision(),
+    ):
+        logger.info("%s", line)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 旧版本数据在仓库 ./data，首次启动自动搬到用户数据目录
@@ -57,6 +85,7 @@ async def lifespan(app: FastAPI):
     init_db(settings.db_url, backup_dir=settings.data_dir / "backups")
     # 启动自检：schema 版本/完整性不合格则拒绝启动
     verify_startup()
+    _log_startup_banner()
     vlm_reviewer.start()
     notifier.start()
     _restore_cameras()
@@ -105,6 +134,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/docs", include_in_schema=False)
 def swagger_ui():
@@ -146,50 +183,74 @@ def health():
     return {"status": "ok"}
 
 
-# ---- 本地 Web 控制台（Vite 构建产物 web/dist + History SPA fallback）----
-# REST 与前端同路径（如 GET /events）。浏览器导航 Accept 含 text/html 时回 index.html；
-# fetch/API 客户端默认 */* 仍走 JSON。/docs /redoc 保持文档页。
+# ---- 本地 Web 控制台（Next 静态导出 web/out + History SPA fallback）----
+# REST 与前端同路径（如 GET /cameras）。只在真正打开页面时回 HTML；
+# fetch / XHR（Sec-Fetch-Dest=empty）走 JSON。HTML 禁止缓存，避免文档响应毒化后续 fetch。
 
-DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
+DIST = Path(__file__).resolve().parents[1] / "web" / "out"
 _SPA_HTML_SKIP = {"/docs", "/redoc", "/openapi.json"}
+_REST_PAGE_PREFIXES = {"cameras", "videos", "events", "rules", "training", "models"}
+_SPA_HTML_HEADERS = {
+    "Cache-Control": "no-store",
+    "Vary": "Accept, Sec-Fetch-Dest",
+}
 
 
 def _dist_file(rel: str) -> Path | None:
-    """只返回 dist 内的真实文件，拒绝 .. 逃出目录。"""
+    """只返回 out 内的真实文件，拒绝 .. 逃出目录；目录则取 index.html。"""
     if not DIST.is_dir() or rel.startswith("/"):
         return None
     candidate = (DIST / rel).resolve()
     root = DIST.resolve()
     if root not in candidate.parents and candidate != root:
         return None
-    return candidate if candidate.is_file() else None
+    if candidate.is_file():
+        return candidate
+    index = candidate / "index.html"
+    if index.is_file() and (root in index.parents):
+        return index
+    return None
+
+
+def _is_html_navigation(request: Request) -> bool:
+    """区分「打开页面」和 fetch。有 Sec-Fetch-Dest 时只认 document；否则退回 Accept。"""
+    if request.method != "GET":
+        return False
+    dest = request.headers.get("sec-fetch-dest", "").lower()
+    if dest:
+        return dest == "document"
+    return "text/html" in request.headers.get("accept", "")
+
+
+def _html_file(path: Path) -> FileResponse:
+    return FileResponse(path, headers=_SPA_HTML_HEADERS)
 
 
 def _console_index() -> FileResponse:
     index = DIST / "index.html"
     if not index.is_file():
-        raise HTTPException(503, "控制台未构建，请先运行 make web-build")
-    return FileResponse(index)
+        raise HTTPException(503, CONSOLE_UNBUILT)
+    return _html_file(index)
 
 
 @app.middleware("http")
 async def spa_html_navigation(request: Request, call_next):
     """刷新 /events、/cameras 等 History 路由时返回 HTML，避免撞上 REST 出 JSON。"""
-    if request.method == "GET" and "text/html" in request.headers.get("accept", ""):
+    if _is_html_navigation(request):
         path = request.url.path
-        if path not in _SPA_HTML_SKIP:
+        if path not in _SPA_HTML_SKIP and not path.startswith("/api/") and not path.startswith("/_next/"):
             rel = path.lstrip("/")
             asset = _dist_file(rel) if rel else None
             if asset is not None:
-                return FileResponse(asset)
+                return _html_file(asset)
             if DIST.joinpath("index.html").is_file():
                 return _console_index()
     return await call_next(request)
 
 
-_assets = DIST / "assets"
-if _assets.is_dir():
-    app.mount("/assets", StaticFiles(directory=_assets), name="assets")
+_next = DIST / "_next"
+if _next.is_dir():
+    app.mount("/_next", StaticFiles(directory=_next), name="next-static")
 
 
 @app.get("/", include_in_schema=False)
@@ -200,6 +261,11 @@ def console():
 @app.get("/{full_path:path}", include_in_schema=False)
 def spa(full_path: str):
     asset = _dist_file(full_path)
+    head = full_path.strip("/").split("/")[0] if full_path.strip("/") else ""
+    if head in _REST_PAGE_PREFIXES and (asset is None or asset.name == "index.html"):
+        return RedirectResponse("/" + full_path.strip("/"), status_code=307)
     if asset is not None:
+        if asset.suffix == ".html" or asset.name == "index.html":
+            return _html_file(asset)
         return FileResponse(asset)
     return _console_index()

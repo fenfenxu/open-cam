@@ -9,7 +9,7 @@ open-cam 是视频监控分析工具：接入 RTSP 流或视频文件，YOLO + �
 - 语言：Python ≥ 3.12；构建后端 hatchling；包管理/运行用 **uv**。
 - Web 框架：FastAPI + uvicorn（默认端口 8600）；数据库 SQLite + SQLAlchemy + Alembic 版本化迁移（pydantic-settings 管配置）。
 - 检测：ultralytics YOLOv8 + ByteTrack（`lap` 是 ByteTrack 依赖）；OpenCV（headless 版）读流。
-- Web 控制台：Vite + React + TypeScript + shadcn/ui（`web/`）。开发用 `make web-dev`（代理到已启动的后端）；`make web-build` 后 FastAPI 挂 `web/dist`，`make run` 提供同一套控制台。需要 Node 20+。
+- Web 控制台：Next.js 16 + React + TypeScript + shadcn/ui（`web/`，Node 20+）。怎么开、改完怎么生效见「构建与运行命令」。5173 左下角 `N` 是 Next Dev Overlay；8600 静态包左下角「报错」胶囊收集同一批 `console.error`。改表结构走页面横幅确认，不是点 Issues。
 - 前端、README、代码注释、规则名等用户可见内容均使用**中文**；代码标识符用英文。
 - 事件分观察（`intent=observe`，如越线计数，只记录进客流统计）与待办（`needs_action=true`，需要人处置，有 open/acked/resolved/ignored 状态机）；`GET /api/stats/footfall` 只统计观察，`GET /api/stats/ops` 只统计待办。
 
@@ -46,6 +46,7 @@ opencam/
 ├── models.py          SQLAlchemy ORM（Camera/Video/Rule/Event/EventAction/NotifyChannel）+ Pydantic schema + 状态常量
 ├── db.py              engine/session 管理（init_db 触发版本化迁移 / get_session）
 ├── doctor.py          升级质检与健康检查（启动自检 verify_startup + check_health）
+├── devplaybook.py     本地开发：改动分类 / make next / 启动横幅文案
 ├── migrations/        Alembic 版本化迁移：env.py + versions/ 版本脚本（规矩见「升级与数据安全」）
 ├── hardware.py        推理设备探测（cuda→mps→cpu）
 ├── pipeline.py        PipelineWorker/PipelineManager、start_camera/stop_camera
@@ -60,12 +61,13 @@ opencam/
 ├── packs/             方案包：manifest 校验 / installer（目录/zip/URL 安装）/ apply（相对坐标→像素换算）
 └── training/          自助训练：任务定义、抽帧、标注、本地微调评估、模型版本登记与 A/B 部署回滚
 
-web/                   Vite 控制台源码（构建产物 web/dist，gitignore）
+web/                   Next.js 16 控制台源码（构建产物 web/out，gitignore）
 tests/                 pytest（见下）
 agent/monitor_agent.py 示例监控 Agent：轮询未确认事件 → LLM 定级 → webhook → 自动 ack
 packs/                 四个内置行业方案包（retail-chain/salon/restaurant/fast-food）
 skills/opencam/        Agent Skill（拷到 ~/.agents/skills/ 使用）
 scripts/export_openapi.py  导出 docs/openapi.json
+scripts/dev_next.py        make next：按 git 改动打印必做项
 docs/                  openapi.json 快照、upgrade-safety.md（升级与数据安全设计）、fastfood-analytics.md（需求全景）、cli-go-migration.md、model-training.md
 rules/                 规则 yaml 示例
 data/                  旧版默认数据目录（现已默认用户数据目录；本地 ./data 存在时首次启动自动搬迁）
@@ -73,27 +75,34 @@ data/                  旧版默认数据目录（现已默认用户数据目录
 
 ## 构建与运行命令
 
-```bash
-# 安装（必须 uv）
-uv venv --python 3.12
-uv pip install -e .
+命令以 `make help` 为准。Agent 先看生命周期，再按「改了什么」处理。
 
-# 启动服务（默认端口 8600；控制台需先 make web-build）
-uv run uvicorn opencam.main:app --port 8600
-make web-dev     # 开发控制台（另开终端，代理到 8600）
-make web-build   # 产出 web/dist，随后 make run 即可打开控制台
+**怎么启动 / 重启**
 
-# 无模型环境/CI（不下载 yolov8n.pt）
-export OPENCAM_DETECTOR=mock
+| 目的 | 命令 | 浏览器 |
+|------|------|--------|
+| 后端（默认热加载 `opencam/*.py`） | `make start` | `8600/docs` |
+| 无 YOLO 模型 | `make start-mock` | 同上 |
+| 停 / 重启（端口被占先 stop，不要再开一个进程） | `make stop` / `make restart` | — |
+| 改前端热更新 | 另开 `make ui`（必须已 start；`next dev`） | **5173**（左下角 N 是 Next Overlay） |
+| 单端口控制台或 `tests/test_web.py` | 先 `make ui-build` 再 `make start` | **8600** |
 
-# CLI（安装后）
-opencam cameras list        # 或开发时 uv run opencam cameras list
+关热加载：`RELOAD=0 make start`。`PORT=xxxx` 可改端口。启动成功后终端会打一块横幅（热加载 / DDL / 前端 / schema）。
 
-# 改动 API 后重新导出 schema 快照
-uv run python scripts/export_openapi.py
-```
+**改了什么 → 做什么（也可 `make next`）**
 
-上述命令在根目录 `Makefile` 中有对应 target（`make install / run / run-mock / test / web-dev / web-build / openapi / config / clean`，`make help` 查看全部）。跑 `tests/test_web.py` 前必须 `make web-build`。
+| 改动 | 生效方式 |
+|------|----------|
+| `opencam/**/*.py`（不含表结构） | `make start` 默认 `--reload`，保存即换进程；未开 reload 则 `make restart` |
+| `opencam/models.py` / DDL | **不会**因存盘而建列。`make revision m="说明"` → 人工 review → 控制台横幅确认重启（或 `make restart`）；启动时 `ensure_schema` 才跑迁移 |
+| 已有迁移脚本 | 控制台横幅「确认并重启」，或 `make restart` |
+| `web/src` | 有 `make ui` 则热更新（开 5173）；只有 start 吃 `web/out` → `make ui-build`（一般不用重启后端） |
+| `opencam/api/`、`main.py` 路由 | 等 reload/restart 后 **`make openapi`** |
+| 测试 | `make test` |
+
+其余：`make install` / `install-dev` / `config`。CLI：`opencam cameras list`（开发时 `uv run opencam cameras list`）。
+
+启动失败要读报错里的命令：缺列会提示 `make revision`；端口占用提示 `make stop`；控制台 503 会说明 `make ui`（5173）或 `make ui-build`。运行期质检：`GET /api/system/health` 或 `opencam system doctor`。
 
 配置：可选 `config.yaml`（参考 `config.example.yaml`，已在 .gitignore）；任意字段可用 `OPENCAM_` + 大写字段名环境变量覆盖。VLM 的 api_key 可在控制台「设置 → 大模型」填写（写入本机 `data_dir/vlm.json`），也可用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。不要把 key 提交进仓库。
 
@@ -132,7 +141,7 @@ uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，�
 - **版本脚本要幂等**：upgrade 前用 `sa.inspect` 判存在性（参照 `0002`/`0003`/`0004`），因为存量库可能已被旧补丁补过部分结构。
 - **破坏性变更分两步走**：先加新列/新表 + 双写/回填，隔一个版本再删旧的；绝不在一个版本里又改结构又毁旧数据。
 - **迁移前备份、失败回滚**：`init_db` → `migrations.ensure_schema` 在版本变化前自动把库文件复制到 `data_dir/backups/`，升级后跑 `verify_schema` 质检，不合格自动还原。不要绕过它直接改 schema。
-- **升级质检**：启动时 lifespan 跑 `doctor.verify_startup()`，不合格拒绝启动（fail fast）；运行期用 `GET /api/system/health` 或 `opencam system doctor`（schema 版本/完整性、目录可写、快照文件抽查）。
+- **升级质检**：启动时 lifespan 跑 `doctor.verify_startup()`，不合格拒绝启动（fail fast）；`verify_schema` 检查缺表**和缺列**（只改 `models.py` 没写迁移会在启动时报 `make revision`）。运行期用 `GET /api/system/health` 或 `opencam system doctor`。
 - **快照路径只存相对 data_dir 的相对路径**（如 `snapshots/xxx.jpg`），读取统一走 `config.resolve_snapshot_path()`（兼容旧库的绝对路径，拒绝 `..` 穿越）。
 - **测试**：迁移相关行为补 `tests/test_upgrade.py`（存量库接入、备份、回滚、质检均有样板）；发版前 `make test` 全绿。
 

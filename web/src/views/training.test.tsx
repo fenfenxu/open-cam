@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nextNav } from "@/test/next-nav";
 import { MarketplacePage } from "./marketplace";
 import { SettingsPage } from "./settings";
 import { TrainingPage } from "./training";
@@ -41,14 +41,8 @@ describe("TrainingPage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter initialEntries={["/training"]}>
-        <Routes>
-          <Route path="/training" element={<TrainingPage />} />
-        </Routes>
-      </MemoryRouter>,
-      { wrapper },
-    );
+    nextNav.pathname = "/training";
+    render(<TrainingPage />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /说需求/ })).toBeInTheDocument();
@@ -84,12 +78,7 @@ describe("MarketplacePage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <MarketplacePage />
-      </MemoryRouter>,
-      { wrapper },
-    );
+    render(<MarketplacePage />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText("快餐店")).toBeInTheDocument();
@@ -132,12 +121,7 @@ describe("SettingsPage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <SettingsPage />
-      </MemoryRouter>,
-      { wrapper },
-    );
+    render(<SettingsPage />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText("0.1.0")).toBeInTheDocument();

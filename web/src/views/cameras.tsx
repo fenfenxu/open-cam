@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Link } from "react-router";
+import Link from "next/link";
 import { toast } from "sonner";
 import { z } from "zod";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, resolveApiUrl } from "@/lib/api";
 import {
   SOURCE_TYPE_NAMES,
   dash,
@@ -142,7 +142,7 @@ export function CamerasPage() {
     const body = new FormData();
     body.append("file", file);
     try {
-      const resp = await fetch("/cameras/upload", { method: "POST", body });
+      const resp = await fetch(resolveApiUrl("/cameras/upload"), { method: "POST", body });
       const payload = (await resp.json()) as { path?: string; detail?: unknown };
       if (!resp.ok) {
         throw new Error(
@@ -203,10 +203,10 @@ export function CamerasPage() {
           const running = cam.status === "running";
           return (
             <div className="flex flex-wrap gap-1">
-              <Button size="xs" variant="outline" render={<Link to={`/cameras/${cam.id}`} />}>
+              <Button size="xs" variant="outline" render={<Link href={`/cameras/${cam.id}`} />}>
                 查看
               </Button>
-              <Button size="xs" variant="outline" render={<Link to={`/rules?camera=${cam.id}`} />}>
+              <Button size="xs" variant="outline" render={<Link href={`/rules?camera=${cam.id}`} />}>
                 规则
               </Button>
               <Button

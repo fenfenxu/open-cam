@@ -24,8 +24,32 @@ function formatDetail(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+const COLLIDING = [
+  "/cameras",
+  "/videos",
+  "/events",
+  "/rules",
+  "/training",
+  "/models",
+];
+
+export function resolveApiUrl(path: string): string {
+  const base = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) || "";
+  if (!base) return path;
+  if (COLLIDING.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+    return `${base.replace(/\/$/, "")}${path}`;
+  }
+  return path;
+}
+
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const resp = await fetch(path, options);
+  const headers = new Headers(options?.headers);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+  const resp = await fetch(resolveApiUrl(path), {
+    ...options,
+    cache: options?.cache ?? "no-store",
+    headers,
+  });
   if (!resp.ok) {
     let detail: unknown;
     try {
@@ -34,7 +58,9 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     } catch {
       detail = undefined;
     }
-    throw new ApiError(resp.status, formatDetail(detail, `HTTP ${resp.status}`));
+    const message = formatDetail(detail, `HTTP ${resp.status}`);
+    console.error("[api]", `<- ${resp.status} ${path}`, { message });
+    throw new ApiError(resp.status, message);
   }
   if (resp.status === 204) return null as T;
   return resp.json() as Promise<T>;

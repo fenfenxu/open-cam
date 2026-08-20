@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { nextNav } from "@/test/next-nav";
 import { CameraDetailPage } from "./camera-detail";
 import { CamerasPage } from "./cameras";
 
@@ -38,12 +38,7 @@ describe("CamerasPage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <CamerasPage />
-      </MemoryRouter>,
-      { wrapper },
-    );
+    render(<CamerasPage />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText(/请新建/)).toBeInTheDocument();
@@ -53,6 +48,7 @@ describe("CamerasPage", () => {
 
 describe("CameraDetailPage", () => {
   it("shows RTSP replay copy", async () => {
+    nextNav.pathname = "/cameras/7";
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -71,14 +67,7 @@ describe("CameraDetailPage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter initialEntries={["/cameras/7"]}>
-        <Routes>
-          <Route path="/cameras/:id" element={<CameraDetailPage />} />
-        </Routes>
-      </MemoryRouter>,
-      { wrapper },
-    );
+    render(<CameraDetailPage />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText("该源为直播流，不支持回放。")).toBeInTheDocument();

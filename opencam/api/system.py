@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -10,8 +12,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .. import __version__
+from .. import migrations
 from .. import vlm_config
 from ..config import settings
+from ..db import get_session
+from .. import devplaybook as dp
 from ..hardware import memory_info, resolve_device
 
 router = APIRouter(prefix="/api/system", tags=["system"])
@@ -90,3 +95,52 @@ def system_health():
 
     result = check_health()
     return JSONResponse(result, status_code=200 if result["ok"] else 503)
+
+
+class DevStatusOut(BaseModel):
+    reload_on: bool
+    state: str
+    title: str
+    detail: str
+    steps: list[str]
+    can_apply: bool
+
+
+def _dev_snapshot() -> DevStatusOut:
+    session = get_session()
+    try:
+        bind = session.get_bind()
+        schema_rev = migrations.current_revision(bind)
+    finally:
+        session.close()
+    root = Path(__file__).resolve().parents[2]
+    st = dp.dev_status(
+        reload_on=os.environ.get("OPENCAM_RELOAD", "0") == "1",
+        changed_paths=dp.git_changed_files(root),
+        schema_rev=schema_rev,
+        schema_head=migrations.head_revision(),
+    )
+    return DevStatusOut(
+        reload_on=st.reload_on,
+        state=st.state,
+        title=st.title,
+        detail=st.detail,
+        steps=list(st.steps),
+        can_apply=st.can_apply,
+    )
+
+
+@router.get("/dev", summary="开发态：热加载与待执行 DDL")
+def get_dev_status():
+    return _dev_snapshot()
+
+
+@router.post("/dev/apply", summary="确认后触发一次进程替换以执行迁移")
+def apply_dev_ddl():
+    snap = _dev_snapshot()
+    if os.environ.get("OPENCAM_RELOAD", "0") != "1":
+        raise HTTPException(409, "热加载未开启，请在终端执行 make restart")
+    if not snap.can_apply:
+        raise HTTPException(409, snap.detail or "当前不能执行 DDL，请先 make revision")
+    dp.write_reload_sentinel()
+    return {"ok": True}

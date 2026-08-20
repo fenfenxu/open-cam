@@ -60,9 +60,8 @@ def upgrade() -> None:
         if "verdict" not in cols:
             op.add_column("events", sa.Column("verdict", sa.String(16), nullable=True))
         if "assignee_id" not in cols:
-            op.add_column("events", sa.Column(
-                "assignee_id", sa.Integer(),
-                sa.ForeignKey("people.id", ondelete="SET NULL"), nullable=True))
+            # SQLite 不支持 ALTER TABLE 加外键约束；ORM 侧仍声明 ForeignKey。
+            op.add_column("events", sa.Column("assignee_id", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:

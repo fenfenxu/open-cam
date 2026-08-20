@@ -65,7 +65,7 @@ alembic.ini         仅开发期 `make revision` 用；运行时不读它
 
 `opencam/doctor.py` 两个入口：
 
-- **启动自检** `verify_startup()`：lifespan 里 `init_db` 之后跑 `verify_schema`——`PRAGMA integrity_check`、必备表齐全（取自 `Base.metadata`，随模型自动更新）、`alembic_version == head`。不合格直接抛异常，**fail fast 拒绝启动**。
+- **启动自检** `verify_startup()`：lifespan 里 `init_db` 之后跑 `verify_schema`——`PRAGMA integrity_check`、必备表/列齐全（取自 `Base.metadata`，缺列会提示 `make revision`）、`alembic_version == head`。不合格直接抛异常，**fail fast 拒绝启动**。
 - **运行期全量检查** `check_health()`：`GET /api/system/health`（全过 200，否则 503 + 明细）或 `opencam system doctor`（不过则退出码 1）。检查项：
   - schema：版本、完整性；
   - 目录：data_dir / snapshot_dir 存在且可写（临时文件探测）；

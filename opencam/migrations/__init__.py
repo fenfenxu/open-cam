@@ -134,14 +134,31 @@ def verify_schema(engine: Engine,
         if result != "ok":
             problems.append(f"SQLite 完整性检查失败: {result}")
         tables = set(inspect(conn).get_table_names())
-    # 必备表直接取当前模型定义，随模型演进自动更新
+        columns_by_table = {
+            table: {col["name"] for col in inspect(conn).get_columns(table)}
+            for table in tables
+        }
+    # 必备表/列直接取当前模型定义，随模型演进自动更新
     for table in Base.metadata.tables:
         if table not in tables:
             problems.append(f"缺少数据表: {table}")
+            continue
+        db_cols = columns_by_table.get(table, set())
+        for col in Base.metadata.tables[table].columns:
+            if col.name in db_cols:
+                continue
+            problems.append(
+                f"缺少列 {table}.{col.name}：改了 models.py 但没有迁移脚本。"
+                f'运行 make revision m="加 {table}.{col.name}"，'
+                f"人工 review opencam/migrations/versions/ 后 make restart"
+            )
     current = current_revision(engine)
     head = head_revision(script_location)
     if current != head:
-        problems.append(f"schema 版本落后: 当前 {current}，最新 {head}")
+        problems.append(
+            f"schema 版本落后: 当前 {current}，最新 {head}。"
+            f"已有迁移脚本则 make restart；没有则先 make revision"
+        )
     return problems
 
 

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Star } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import Link from "next/link";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
 import { DetailDrawer } from "@/components/app/detail-drawer";
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { api, ApiError, fmtTime } from "@/lib/api";
+import { api, ApiError, fmtTime, resolveApiUrl } from "@/lib/api";
 import {
   ACTION_NAMES,
   HUMAN_VERDICT_NAMES,
@@ -148,10 +148,12 @@ function FilterSelect({
   onChange: (value: string) => void;
   items: { value: string; label: string }[];
 }) {
+  const selected = items.find((item) => item.value === value);
   return (
     <Select value={value} onValueChange={(next) => onChange(next ?? ALL)}>
-      <SelectTrigger>
-        <SelectValue />
+      <SelectTrigger aria-label={selected?.label}>
+        {/* Base UI 的 Value 默认显示 value 本身，必须显式传入文案 */}
+        <SelectValue>{selected?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {items.map((item) => (
@@ -190,7 +192,7 @@ function EventClipPlayer({ event }: { event: CamEvent }) {
       controls
       autoPlay
       playsInline
-      src={`/events/${event.id}/clip`}
+      src={resolveApiUrl(`/events/${event.id}/clip`)}
       onLoadedMetadata={(ev) => {
         const video = ev.currentTarget;
         if (video.duration > end - start + 1.5) video.currentTime = start;
@@ -535,7 +537,7 @@ export function EventsPage() {
             <div className="space-y-2">
               {event.snapshot_path ? (
                 <img
-                  src={`/events/${event.id}/snapshot`}
+                  src={resolveApiUrl(`/events/${event.id}/snapshot`)}
                   alt="快照"
                   className="w-full rounded-md border"
                 />
@@ -551,7 +553,7 @@ export function EventsPage() {
 
             <dl className="space-y-2">
               <Kv label="摄像头">
-                <Link className="underline" to={`/cameras/${event.camera_id}`}>
+                <Link className="underline" href={`/cameras/${event.camera_id}`}>
                   {cameraLabel(event)}
                 </Link>
               </Kv>

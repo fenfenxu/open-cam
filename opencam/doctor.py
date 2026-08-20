@@ -27,7 +27,10 @@ def verify_startup() -> None:
     """启动自检：schema 版本/完整性不合格直接抛异常，阻止带病启动。"""
     problems = migrations.verify_schema(_engine())
     if problems:
-        raise RuntimeError("数据库启动自检未通过: " + "; ".join(problems))
+        raise RuntimeError(
+            "数据库启动自检未通过: " + "; ".join(problems)
+            + "。改动对照：make next"
+        )
 
 
 def _check_dir_writable(path) -> str | None:

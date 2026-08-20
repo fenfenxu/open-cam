@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import Link from "next/link";
 import { FootfallChart } from "@/components/app/footfall-chart";
 import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
-import { api, fmtTime } from "@/lib/api";
+import { api, fmtTime, resolveApiUrl } from "@/lib/api";
 import { SOURCE_TYPE_NAMES, type Camera } from "@/lib/cameras";
 import {
   FOOTFALL_IN_COLOR,
@@ -25,8 +25,8 @@ function SnapshotThumb({ camera }: { camera: Camera }) {
   }, [running, camera.id]);
 
   const src = running
-    ? `/cameras/${camera.id}/snapshot.jpg?t=${tick || Date.now()}`
-    : `/cameras/${camera.id}/snapshot.jpg`;
+    ? resolveApiUrl(`/cameras/${camera.id}/snapshot.jpg?t=${tick || Date.now()}`)
+    : resolveApiUrl(`/cameras/${camera.id}/snapshot.jpg`);
 
   return (
     <img
@@ -58,7 +58,7 @@ function CameraCard({ camera }: { camera: Camera }) {
 
   return (
     <Link
-      to={`/cameras/${camera.id}`}
+      href={`/cameras/${camera.id}`}
       className="block space-y-3 rounded-lg border p-3 transition-colors hover:bg-muted/40"
     >
       <header className="flex items-center justify-between gap-2">
@@ -110,7 +110,7 @@ export function DashboardPage() {
       {camerasQuery.isSuccess && cameras.length === 0 && (
         <p className="text-sm text-muted-foreground">
           还没有摄像头，去
-          <Link className="underline" to="/cameras">
+          <Link className="underline" href="/cameras">
             「摄像头」
           </Link>
           页添加一路。

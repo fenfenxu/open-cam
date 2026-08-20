@@ -269,6 +269,39 @@ def client(tmp_settings):
         yield c
 
 
+def test_verify_schema_flags_orm_column_missing_from_db(tmp_path):
+    """改了 models.py 却没写迁移：库缺列时质检必须失败，并提示 make revision。"""
+    import opencam.db as oc_db
+
+    db = tmp_path / "opencam.db"
+    init_db(_url(db), backup_dir=tmp_path / "backups")
+    if oc_db._engine is not None:
+        oc_db._engine.dispose()
+
+    engine = _engine(db)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE events DROP COLUMN note"))
+    problems = migrations.verify_schema(engine)
+    joined = "; ".join(problems)
+    assert "events.note" in joined
+    assert "make revision" in joined
+
+
+def test_verify_schema_ignores_extra_db_columns(tmp_path):
+    """库里多出来的旧列不阻止启动（破坏性删除分两步走）。"""
+    import opencam.db as oc_db
+
+    db = tmp_path / "opencam.db"
+    init_db(_url(db), backup_dir=tmp_path / "backups")
+    if oc_db._engine is not None:
+        oc_db._engine.dispose()
+
+    engine = _engine(db)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE events ADD COLUMN leftover VARCHAR(8)"))
+    assert migrations.verify_schema(engine) == []
+
+
 def test_health_endpoint_all_ok(client):
     resp = client.get("/api/system/health")
     assert resp.status_code == 200, resp.text

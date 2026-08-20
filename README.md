@@ -21,7 +21,7 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲)
 - **采样检测而非逐帧**：默认 3 fps，CPU 可承受。
 - **SQLite 单文件**：零运维，模型层用 SQLAlchemy，后续可换 Postgres。
 - **VLM 走 OpenAI 兼容协议**：一家客户端代码覆盖多数供应商；API Key 在控制台「设置 → 大模型」填写，或用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。
-- **Web 控制台**：Vite + React + shadcn/ui。开发用 `make web-dev`（需另开 `make run`）；生产式访问先 `make web-build` 再打开 `http://127.0.0.1:8600`。需要 Node 20+。
+- **Web 控制台**：Next.js 16 + React + shadcn/ui（Node 20+）。`make start` 起后端（8600，默认热加载）；改前端另开 `make ui`（浏览器 **5173**，左下角 N 是 Next Overlay）；单端口先 `make ui-build`（8600 左下角「报错」胶囊同样收集 `console.error`）。改表结构走控制台横幅确认，不是点 Issues。改完代码执行 `make next` 看必做项。
 
 ## 快速开始
 
@@ -38,13 +38,14 @@ cp config.example.yaml config.yaml
 # 无模型环境/CI：切内置 mock detector，不下载 yolov8n.pt
 export OPENCAM_DETECTOR=mock
 
-# 启动服务（默认端口 8600）
-uv run uvicorn opencam.main:app --port 8600
+# 后端（默认端口 8600，保存 opencam/*.py 会自动换进程）
+make start          # 无 YOLO 模型：make start-mock
+# 端口被占：make stop 或 make restart
 
-# 控制台：先构建一次（Node 20+），再打开 http://127.0.0.1:8600
-make web-build
-# 开发时另开终端热更新（代理到已启动的 8600）
-make web-dev
+# 控制台（Node 20+）：
+#   改前端：另开 make ui，浏览器打开 http://127.0.0.1:5173
+#   单端口：先 make ui-build，再打开 http://127.0.0.1:8600
+# 改完代码不知道下一步：make next
 ```
 
 控制台点仪表盘卡片进入摄像头详情：运行中显示 MJPEG 直播。仅视频文件源可在详情页拖进度回放；RTSP 直播不支持回放（不会在本机录像）。
@@ -130,9 +131,14 @@ uv run python scripts/export_openapi.py
 
 ## Web 控制台
 
-源码在 `web/`（Vite + React）。`make web-build` 产出 `web/dist`，FastAPI 挂载该目录并用 SPA fallback：刷新 `/events` 等 History 路由返回 HTML，不 404。开发请 `make run`（或 `make run-mock`）后再 `make web-dev`。
+源码在 `web/`（Next.js 16 + React）。`make start` 起 FastAPI（默认热加载后端，排除 `models.py` / `migrations/`）；`make ui` 起 `next dev`（5173，rewrite `/api` 等到 8600）；`make ui-build` 产出 `web/out`，FastAPI 挂载并用 SPA fallback。5173 左下角 **N Issues** 是 Next Dev Overlay；8600 静态包没有 Next 开发进程，改由左下角「报错」胶囊拦截 `console.error` / 运行时错误。改表结构请看页面顶部横幅，确认后才重启执行迁移。
 
-浏览器打开 `http://127.0.0.1:8600`：
+- 改前端：`make start` + `make ui`，浏览器开 `http://127.0.0.1:5173`
+- 单端口：先 `make ui-build` 再 `make start`，浏览器开 `http://127.0.0.1:8600`
+- 改了表结构：`make revision m="说明"` → review → `make restart`（只重启不会建列）
+- 不确定：`make next`
+
+浏览器打开控制台后：
 
 - **仪表盘**：摄像头卡片网格，运行中的卡片约 1fps 轮询快照做准实时画面，附最近事件数；卡片下方内嵌今日 24 小时进/出客流双列柱状图（数据来自 `/api/stats/footfall`）。卡片可点进详情。
 - **摄像头**：CRUD 与启停；详情页 `#/cameras/{id}` 可看 MJPEG 直播，文件源可拖进度回放。
@@ -229,7 +235,7 @@ uv run python agent/monitor_agent.py \
 ## 测试
 
 ```bash
-make web-build       # 控制台冒烟测试依赖 dist
+make ui-build        # 控制台冒烟测试依赖 web/out
 uv run pytest        # 规则单测 + API 冒烟 + 端到端（mock detector，不下载模型）
 ```
 

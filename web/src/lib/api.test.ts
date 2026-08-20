@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError } from "./api";
+import { api, ApiError, resolveApiUrl } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -55,5 +56,58 @@ describe("api", () => {
     );
 
     await expect(api("/events/1")).resolves.toBeNull();
+  });
+
+  it("console.errors on non-2xx", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({ detail: "boom" }),
+      }),
+    );
+    await expect(api("/api/config")).rejects.toBeInstanceOf(ApiError);
+    expect(spy).toHaveBeenCalled();
+    const args = spy.mock.calls[0].map(String).join(" ");
+    expect(args).toContain("500");
+    expect(args).toContain("/api/config");
+  });
+
+  it("prefixes colliding REST paths when NEXT_PUBLIC_API_URL is set", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://127.0.0.1:8600");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await api("/cameras");
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toBe("http://127.0.0.1:8600/cameras");
+  });
+
+  it("leaves /api paths relative even when NEXT_PUBLIC_API_URL is set", () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://127.0.0.1:8600");
+    expect(resolveApiUrl("/api/system/dev")).toBe("/api/system/dev");
+    expect(resolveApiUrl("/cameras/1/live.mjpg")).toBe(
+      "http://127.0.0.1:8600/cameras/1/live.mjpg",
+    );
+  });
+
+  it("asks for JSON and skips HTTP cache so colliding pages cannot poison fetch", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [],
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await api("/cameras");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.cache).toBe("no-store");
+    const headers = new Headers(init.headers);
+    expect(headers.get("Accept")).toBe("application/json");
   });
 });

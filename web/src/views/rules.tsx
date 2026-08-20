@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
 import { PageHeader } from "@/components/app/page-header";
@@ -16,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, resolveApiUrl } from "@/lib/api";
 import { jsonBody, type Camera } from "@/lib/cameras";
 import { RULE_TYPE_NAMES } from "@/lib/labels";
 import {
@@ -53,7 +54,9 @@ function fieldValue(values: Record<string, unknown>, field: RuleField): string {
 
 export function RulesPage() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname() || "/rules";
   const [step, setStep] = useState(1);
   const [preset, setPreset] = useState<RulePreset | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
@@ -70,7 +73,7 @@ export function RulesPage() {
   });
 
   const cameras = camerasQuery.data ?? [];
-  const paramId = Number(searchParams.get("camera"));
+  const paramId = Number(searchParams?.get("camera"));
   const cameraId = Number.isFinite(paramId) && paramId > 0 ? paramId : cameras[0]?.id;
   const selectedCamera = cameras.find((c) => c.id === cameraId);
 
@@ -85,7 +88,7 @@ export function RulesPage() {
   }, [camerasQuery.isError, camerasQuery.error]);
 
   function pickCamera(id: number) {
-    setSearchParams({ camera: String(id) });
+    router.push(`${pathname.replace(/\/$/, "") || "/rules"}?camera=${id}`);
     setStep(1);
     setPreset(null);
     setPoints([]);
@@ -94,10 +97,10 @@ export function RulesPage() {
 
   useEffect(() => {
     const list = camerasQuery.data;
-    if (list?.length && !searchParams.get("camera")) {
-      setSearchParams({ camera: String(list[0].id) }, { replace: true });
+    if (list?.length && !searchParams?.get("camera")) {
+      router.replace(`${pathname.replace(/\/$/, "") || "/rules"}?camera=${list[0].id}`);
     }
-  }, [camerasQuery.data, searchParams, setSearchParams]);
+  }, [camerasQuery.data, searchParams, router, pathname]);
 
   const saveRule = useMutation({
     mutationFn: async () => {
@@ -141,7 +144,7 @@ export function RulesPage() {
     }
     if (!Number.isFinite(cameraId)) return;
     setPoints([]);
-    setSnapshotUrl(`/cameras/${cameraId}/snapshot.jpg?t=${Date.now()}`);
+    setSnapshotUrl(resolveApiUrl(`/cameras/${cameraId}/snapshot.jpg?t=${Date.now()}`));
     setStep(3);
   }
 
@@ -214,7 +217,7 @@ export function RulesPage() {
       ) : cameras.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           请先添加摄像头。到
-          <Link className="mx-1 underline" to="/cameras">
+          <Link className="mx-1 underline" href="/cameras">
             摄像头
           </Link>
           页新建一路。

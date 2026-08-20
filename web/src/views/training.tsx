@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
 import { PageHeader } from "@/components/app/page-header";
@@ -17,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, resolveApiUrl } from "@/lib/api";
 import { jsonBody, type Camera, type ModelVersion, type VideoAsset } from "@/lib/cameras";
 import type { Point } from "@/lib/rules";
 import {
@@ -40,8 +41,11 @@ function errorMessage(err: unknown): string {
 }
 
 export function TrainingPage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
+  const pathname = usePathname() || "";
+  const parts = pathname.split("/").filter(Boolean);
+  const id = parts[0] === "training" ? parts[1] : undefined;
+  const router = useRouter();
+  const navigate = router.push;
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [goal, setGoal] = useState("");
@@ -341,7 +345,7 @@ export function TrainingPage() {
 
   const previewUrl =
     id && (task?.frames || 0) > 0
-      ? `/training/tasks/${id}/preview.jpg?t=${task?.frames}`
+      ? resolveApiUrl(`/training/tasks/${id}/preview.jpg?t=${task?.frames}`)
       : null;
   const reviewItem = reviewQuery.data?.items[0];
   const report = task?.train?.result || {};
@@ -394,7 +398,7 @@ export function TrainingPage() {
             {vlmQuery.data && !vlmQuery.data.configured ? (
               <p className="text-sm text-destructive">
                 还没配置大模型。
-                <Link className="underline" to="/settings">
+                <Link className="underline" href="/settings">
                   去设置页填写接口和 API Key
                 </Link>
                 ，否则系统无法真正理解你写的需求。
@@ -558,7 +562,7 @@ export function TrainingPage() {
               <div className="space-y-2">
                 <img
                   className="max-h-64 rounded-md border object-contain"
-                  src={`/training/tasks/${id}/crop/${reviewItem.id}.jpg`}
+                  src={resolveApiUrl(`/training/tasks/${id}/crop/${reviewItem.id}.jpg`)}
                   alt="裁剪"
                 />
                 <p className="text-sm text-muted-foreground">

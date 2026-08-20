@@ -162,3 +162,58 @@ def test_vlm_test_uses_saved_endpoint(client, monkeypatch):
     posted = next(c for c in calls if "url" in c)
     assert posted["url"] == "https://example.test/v1/chat/completions"
     assert posted["json"]["model"] == "demo-vl"
+
+
+def test_dev_status_idle(client, monkeypatch):
+    monkeypatch.setenv("OPENCAM_RELOAD", "1")
+    from opencam import devplaybook as dp
+    monkeypatch.setattr(dp, "git_changed_files", lambda _root=None: [])
+    resp = client.get("/api/system/dev")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["state"] == "idle"
+    assert body["can_apply"] is False
+    assert body["reload_on"] is True
+
+
+def test_dev_apply_need_revision_409(client, monkeypatch):
+    monkeypatch.setenv("OPENCAM_RELOAD", "1")
+    from opencam import devplaybook as dp
+    monkeypatch.setattr(
+        dp, "git_changed_files", lambda _root=None: ["opencam/models.py"]
+    )
+    resp = client.post("/api/system/dev/apply")
+    assert resp.status_code == 409
+    assert "revision" in resp.json()["detail"]
+
+
+def test_dev_apply_writes_sentinel(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENCAM_RELOAD", "1")
+    from opencam import devplaybook as dp
+    sentinel = tmp_path / "_dev_reload.py"
+    monkeypatch.setattr(dp, "RELOAD_SENTINEL", sentinel)
+    monkeypatch.setattr(
+        dp, "dev_status",
+        lambda **kwargs: dp.DevStatus(
+            reload_on=True, state="need_apply", title="t", detail="d",
+            steps=("s",), can_apply=True,
+        ),
+    )
+    resp = client.post("/api/system/dev/apply")
+    assert resp.status_code == 200
+    assert sentinel.is_file()
+
+
+def test_dev_apply_reload_off_409(client, monkeypatch):
+    monkeypatch.setenv("OPENCAM_RELOAD", "0")
+    from opencam import devplaybook as dp
+    monkeypatch.setattr(
+        dp, "dev_status",
+        lambda **kwargs: dp.DevStatus(
+            reload_on=False, state="need_apply", title="t", detail="d",
+            steps=("s",), can_apply=True,
+        ),
+    )
+    resp = client.post("/api/system/dev/apply")
+    assert resp.status_code == 409
+    assert "make restart" in resp.json()["detail"]

@@ -58,6 +58,15 @@ export type NotifyChannel = {
   enabled: boolean;
 };
 
+export type DevStatus = {
+  reload_on: boolean;
+  state: "idle" | "need_revision" | "need_apply";
+  title: string;
+  detail: string;
+  steps: string[];
+  can_apply: boolean;
+};
+
 export function matchVlmPreset(baseUrl: string | undefined): string {
   return VLM_PRESETS.find((p) => p.base_url && p.base_url === baseUrl)?.id ?? "custom";
 }
