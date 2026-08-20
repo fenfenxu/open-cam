@@ -10,7 +10,7 @@ colors:
   neutral: "oklch(1 0 0)"
   on-neutral: "oklch(0.145 0 0)"
   surface-muted: "oklch(0.97 0 0)"
-  on-surface-muted: "oklch(0.556 0 0)"
+  on-surface-muted: "oklch(0.5 0 0)"
   border: "oklch(0.922 0 0)"
   focus: "oklch(0.708 0 0)"
   destructive: "oklch(0.577 0.245 27.325)"
@@ -107,6 +107,15 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.lg}"
     padding: 1.5rem
+  border-divider:
+    backgroundColor: "{colors.border}"
+    textColor: "{colors.on-neutral}"
+    height: 1px
+  focus-indicator:
+    backgroundColor: "{colors.focus}"
+    textColor: "{colors.on-neutral}"
+    rounded: "{rounded.sm}"
+    height: 2px
 ---
 
 ## Overview
