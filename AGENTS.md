@@ -11,6 +11,7 @@ open-cam 是视频监控分析工具：接入 RTSP 流或视频文件，YOLO + �
 - 检测：ultralytics YOLOv8 + ByteTrack（`lap` 是 ByteTrack 依赖）；OpenCV（headless 版）读流。
 - Web 控制台：Vite + React + TypeScript + shadcn/ui（`web/`）。开发用 `make web-dev`（代理到已启动的后端）；`make web-build` 后 FastAPI 挂 `web/dist`，`make run` 提供同一套控制台。需要 Node 20+。
 - 前端、README、代码注释、规则名等用户可见内容均使用**中文**；代码标识符用英文。
+- 事件分观察（`intent=observe`，如越线计数，只记录进客流统计）与待办（`needs_action=true`，需要人处置，有 open/acked/resolved/ignored 状态机）；`GET /api/stats/footfall` 只统计观察，`GET /api/stats/ops` 只统计待办。
 
 ## 运行时架构
 

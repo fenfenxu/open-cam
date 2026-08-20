@@ -2400,7 +2400,7 @@
           "stats"
         ],
         "summary": "分时段进出店客流",
-        "description": "按服务器本地时区把当天 line_crossing 事件分 24 小时桶，分别统计 in/out。",
+        "description": "按服务器本地时区把当天 line_crossing 观察事件（intent=observe）分 24 小时桶，分别统计 in/out。",
         "operationId": "footfall_api_stats_footfall_get",
         "parameters": [
           {
@@ -2413,6 +2413,74 @@
               "title": "Camera Id"
             },
             "description": "摄像头 ID"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM-DD，默认今天（本地时区）",
+              "title": "Date"
+            },
+            "description": "YYYY-MM-DD，默认今天（本地时区）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/ops": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "待办经营摘要",
+        "description": "统计当天新建待办（needs_action）的状态分桶、判定分桶与平均确认/处置时长。折叠不另计新开。",
+        "operationId": "ops_api_stats_ops_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "摄像头 ID，不传为全部",
+              "title": "Camera Id"
+            },
+            "description": "摄像头 ID，不传为全部"
           },
           {
             "name": "date",

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from opencam import cli
 from opencam.db import get_session
-from opencam.models import CAMERA_RUNNING, Camera, Event
+from opencam.models import CAMERA_RUNNING, INTENT_OBSERVE, Camera, Event
 
 
 @pytest.fixture()
@@ -200,7 +200,7 @@ def _add_event(camera_id: int, ts: float, direction: str = "in") -> int:
     session = get_session()
     try:
         event = Event(camera_id=camera_id, type="line_crossing",
-                      confidence=0.9, ts=ts,
+                      confidence=0.9, ts=ts, intent=INTENT_OBSERVE,
                       detail={"count": 1, "direction": direction, "track_id": 1,
                               "crossings": [{"track_id": 1,
                                              "direction": direction}]})
@@ -226,6 +226,34 @@ def test_events_list_filter_and_ack(cli_env, capsys):
     assert len(run_cli(capsys, "events", "list", "--acked", "true")) == 1
 
 
+def test_events_list_needs_action_passes_query(cli_env, capsys, monkeypatch):
+    """--needs-action 应原样进入请求 query（true/false 字符串由服务端解析）。"""
+    captured = {}
+    real_request = cli._request
+
+    def fake_request(client, method, path, **kwargs):
+        captured.update(kwargs.get("params") or {})
+        return real_request(client, method, path, **kwargs)
+
+    monkeypatch.setattr(cli, "_request", fake_request)
+    run_cli(capsys, "events", "list", "--needs-action", "true")
+    assert captured["needs_action"] == "true"
+
+
+def test_events_list_needs_action_filters(cli_env, capsys):
+    """行为验证：--needs-action true 只返回待办事件。"""
+    eid = _add_event(1, time.time(), "in")  # 默认 needs_action=true
+    session = get_session()
+    try:
+        session.get(Event, eid).needs_action = False
+        session.commit()
+    finally:
+        session.close()
+
+    assert run_cli(capsys, "events", "list", "--needs-action", "true") == []
+    assert len(run_cli(capsys, "events", "list", "--needs-action", "false")) == 1
+
+
 # ---------- stats ----------
 
 def test_stats_footfall(cli_env, capsys):
@@ -239,6 +267,29 @@ def test_stats_footfall(cli_env, capsys):
     assert data["buckets"][9] == {"hour": 9, "in": 1, "out": 1}
     assert data["total_in"] == 1
     assert data["total_out"] == 1
+
+
+def test_stats_ops(cli_env, capsys, monkeypatch):
+    """stats ops 调 /api/stats/ops 并透传 --camera-id / --date。"""
+    _add_event(1, time.time(), "in")  # 默认 needs_action=true，计入当日新开
+    captured = {}
+    real_request = cli._request
+
+    def fake_request(client, method, path, **kwargs):
+        captured["path"] = path
+        captured.update(kwargs.get("params") or {})
+        return real_request(client, method, path, **kwargs)
+
+    monkeypatch.setattr(cli, "_request", fake_request)
+    today = time.localtime()
+    date_str = f"{today.tm_year:04d}-{today.tm_mon:02d}-{today.tm_mday:02d}"
+    data = run_cli(capsys, "stats", "ops", "--camera-id", "1",
+                   "--date", date_str)
+    assert captured["path"] == "/api/stats/ops"
+    assert captured["camera_id"] == 1
+    assert captured["date"] == date_str
+    assert data["todos"]["opened"] == 1
+    assert data["verdicts"]["none"] == 1
 
 
 # ---------- system / pretty ----------

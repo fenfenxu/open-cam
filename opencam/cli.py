@@ -175,6 +175,7 @@ def _events(args, client) -> None:
         _emit(_request(client, "GET", "/events", params={
             "camera_id": args.camera_id, "rule_type": args.type,
             "vlm_verdict": args.vlm_verdict, "acked": args.acked,
+            "needs_action": args.needs_action,
             "limit": args.page_size, "offset": args.offset,
         }), args.pretty)
     elif args.action == "get":
@@ -211,6 +212,10 @@ def _packs(args, client) -> None:
 def _stats(args, client) -> None:
     if args.action == "footfall":
         _emit(_request(client, "GET", "/api/stats/footfall",
+                       params={"camera_id": args.camera_id, "date": args.date}),
+              args.pretty)
+    elif args.action == "ops":
+        _emit(_request(client, "GET", "/api/stats/ops",
                        params={"camera_id": args.camera_id, "date": args.date}),
               args.pretty)
 
@@ -346,6 +351,8 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--type", dest="type")
     q.add_argument("--vlm-verdict", choices=["confirmed", "false_alarm", "uncertain"])
     q.add_argument("--acked", choices=["true", "false"])
+    q.add_argument("--needs-action", choices=["true", "false"],
+                   help="按是否待办过滤，不传为全部")
     q.add_argument("--page-size", type=int, default=20,
                    help="每页条数，默认 20；结果满页时用 --offset 再拉下一页")
     q.add_argument("--offset", type=int, default=0,
@@ -374,6 +381,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp = p.add_subparsers(dest="action", required=True)
     q = sp.add_parser("footfall", help="分时段进出店客流")
     q.add_argument("--camera-id", type=int, required=True)
+    q.add_argument("--date", help="YYYY-MM-DD，默认今天")
+    q = sp.add_parser("ops", help="待办经营摘要（当日新开、状态/判定分桶、平均时长）")
+    q.add_argument("--camera-id", type=int)
     q.add_argument("--date", help="YYYY-MM-DD，默认今天")
     p.set_defaults(func=_stats)
 
