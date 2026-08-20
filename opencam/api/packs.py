@@ -1,16 +1,22 @@
-"""方案包 API：列出 / 安装 / 应用 / 卸载。在线浏览为平台 stub，未配置时降级为内置包。"""
+"""方案包 API：列出 / 详情 / 资产 / 安装 / 应用 / 卸载。
+
+在线浏览为平台 stub，未配置时降级为内置包。
+详情与资产走 PackCatalog；列表保持 installer brief 以兼容现有 Web/CLI。
+"""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session_scope
-from ..models import CameraOut, RuleOut
+from ..models import CameraOut, PackDetail, RuleOut
 from ..packs import installer
 from ..packs.apply import apply_pack
+from ..packs.catalog import catalog
 from ..packs.manifest import PackError
 from .cameras import camera_out
 
@@ -19,7 +25,7 @@ router = APIRouter(prefix="/api/packs", tags=["packs"])
 
 @router.get("", summary="方案包列表", description="内置 + 已安装；同 id 时已安装覆盖内置。")
 def list_packs():
-    """内置 + 已安装的方案包。"""
+    """内置 + 已安装的方案包（兼容 brief；规范化卡片见 PackCatalog.list）。"""
     return installer.list_packs()
 
 
@@ -69,6 +75,52 @@ def apply(pack_id: str, body: ApplyRequest,
     return PackApplyOut(
         cameras=[camera_out(c) for c in result.cameras],
         rules=[RuleOut.model_validate(r) for r in result.rules],
+    )
+
+
+@router.get("/{pack_id}", response_model=PackDetail,
+            summary="方案包详情",
+            description="规范化 PackDetail；无效/不兼容包仍返回，availability 标明原因。")
+def get_pack_detail(pack_id: str):
+    try:
+        return catalog.describe(pack_id)
+    except PackError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/{pack_id}/assets/{asset_id}",
+            summary="方案包白名单资产",
+            description="仅已声明且校验通过的资产；支持 Range、MIME、ETag。")
+def get_pack_asset(pack_id: str, asset_id: str, request: Request):
+    # 拒绝把路径伪装成 asset_id
+    if "/" in asset_id or "\\" in asset_id or ".." in asset_id or "%" in asset_id:
+        raise HTTPException(404, "资产不存在")
+    try:
+        asset = catalog.open_asset(
+            pack_id, asset_id, request.headers.get("range"))
+    except PackError as exc:
+        msg = str(exc)
+        code = 404 if "不存在" in msg or "非法" in msg else 400
+        raise HTTPException(code, msg) from exc
+
+    # 条件请求
+    inm = request.headers.get("if-none-match")
+    etag = f'"{asset.etag}"'
+    if inm and inm.strip() == etag:
+        return Response(status_code=304, headers={"ETag": etag})
+
+    cache = ("public, max-age=86400"
+             if asset.origin == "builtin"
+             else "private, max-age=60")
+    return FileResponse(
+        asset.path,
+        media_type=asset.media_type,
+        headers={
+            "ETag": etag,
+            "Accept-Ranges": "bytes",
+            "Cache-Control": cache,
+            "Content-Disposition": "inline",
+        },
     )
 
 

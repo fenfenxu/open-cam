@@ -491,3 +491,119 @@ class ModelVersionOut(BaseModel):
     status: str
 
     model_config = {"from_attributes": True}
+
+
+# ---------- 方案包 Catalog 输出（非 ORM） ----------
+
+
+class PackOutcomeOut(BaseModel):
+    title: str
+    description: str = ""
+
+
+class PackPresentationOut(BaseModel):
+    tagline: str = ""
+    cover_asset_id: str | None = None
+    outcomes: list[PackOutcomeOut] = Field(default_factory=list)
+    requirements: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class PackCameraDetailOut(BaseModel):
+    id: str
+    name: str
+    purpose: str = ""
+    placement: str = ""
+    poster_asset_id: str | None = None
+    rule_ids: list[str] = Field(default_factory=list)
+
+
+class PackRuleDetailOut(BaseModel):
+    id: str
+    name: str
+    type: str
+    type_label: str
+    camera_id: str | None = None
+    cooldown: float
+    intent: str
+    summary: str
+
+
+class PackSceneEventOut(BaseModel):
+    at_sec: float
+    title: str
+    result: str = ""
+    intent: str
+
+
+class PackSceneOut(BaseModel):
+    id: str
+    camera_id: str
+    title: str
+    available: bool = True
+    degrade_reason: str | None = None
+    input_asset_id: str | None = None
+    result_asset_id: str | None = None
+    poster_asset_id: str | None = None
+    trial_available: bool = False
+    events: list[PackSceneEventOut] = Field(default_factory=list)
+
+
+class PackExperienceOut(BaseModel):
+    scenes: list[PackSceneOut] = Field(default_factory=list)
+
+
+class PackApplicationOut(BaseModel):
+    mode: str  # create_cameras | existing_camera
+    camera_count: int
+    rule_count: int
+    auto_start: bool = False
+    warnings: list[str] = Field(default_factory=list)
+
+
+class PackPrivacyOut(BaseModel):
+    processing: str = "local"
+    uploads_frames: bool = False
+
+
+class PackCard(BaseModel):
+    id: str
+    name: str
+    version: str
+    vertical: str
+    author: str = ""
+    origin: str
+    fingerprint: str
+    tagline: str = ""
+    description: str = ""
+    availability: str  # available | unavailable | incompatible
+    unavailable_reason: str | None = None
+    camera_count: int = 0
+    rule_count: int = 0
+    scene_count: int = 0
+    has_demo: bool = False
+    trial_available: bool = False
+    application_mode: str
+    cover_asset_id: str | None = None
+
+
+class PackDetail(BaseModel):
+    id: str
+    name: str
+    version: str
+    vertical: str
+    author: str = ""
+    origin: str
+    fingerprint: str
+    description: str = ""
+    availability: str
+    unavailable_reason: str | None = None
+    presentation: PackPresentationOut
+    cameras: list[PackCameraDetailOut]
+    rules: list[PackRuleDetailOut]
+    experience: PackExperienceOut
+    application: PackApplicationOut
+    privacy: PackPrivacyOut = Field(default_factory=PackPrivacyOut)
+    readme_html: str = ""
+    min_opencam_version: str = "0.1.0"
+    format_version: int = 1
