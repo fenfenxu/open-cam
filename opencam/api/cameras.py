@@ -28,7 +28,8 @@ from ..models import (
     Rule,
     VideoOut,
 )
-from ..pipeline import start_camera, stop_camera
+from ..pipeline import pipeline_manager, start_camera, stop_camera
+from ..runtime import RuntimeResolutionError, resolve_runtime_plan
 from ..streams.manager import camera_manager
 from .videos import store_upload
 
@@ -36,25 +37,25 @@ router = APIRouter(prefix="/api/cameras", tags=["cameras"])
 
 
 def _health_for(camera_id: int, status: str) -> CameraHealth | None:
-    if status != CAMERA_RUNNING:
+    if status not in (CAMERA_RUNNING, "error"):
         return None
     worker = camera_manager.get(camera_id)
-    if worker is None:
-        return None
-    frame = worker.latest_frame()
+    frame = worker.latest_frame() if worker is not None else None
     has_frame = frame is not None
     age = None
-    if worker.last_frame_at:  # 0.0 视为从未出帧
+    if worker is not None and worker.last_frame_at:  # 0.0 视为从未出帧
         age = time.monotonic() - worker.last_frame_at
     width = height = None
     if frame is not None:
         height, width = int(frame.shape[0]), int(frame.shape[1])
     return CameraHealth(
-        alive=worker.is_alive(),
+        alive=worker.is_alive() if worker is not None else False,
         has_frame=has_frame,
         last_frame_age_sec=age,
         width=width,
         height=height,
+        runtime_status=pipeline_manager.runtime_status(camera_id)[0],
+        runtime_reason=pipeline_manager.runtime_status(camera_id)[1],
     )
 
 
@@ -206,10 +207,33 @@ def start(camera_id: int, session: Session = Depends(session_scope)):
         return camera_out(camera)
     try:
         start_camera(camera_id)
+    except RuntimeResolutionError as exc:
+        raise HTTPException(503, f"运行时模型不可用: {exc}") from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(500, f"启动失败: {exc}") from exc
     session.refresh(camera)
     return camera_out(camera)
+
+
+@router.get("/{camera_id}/runtime-plan", summary="查看摄像头运行时方案")
+def runtime_plan(camera_id: int, session: Session = Depends(session_scope)):
+    """返回运行中的冻结计划；未运行时预解析，失败返回用户可读原因。"""
+    camera = session.get(Camera, camera_id)
+    if camera is None:
+        raise HTTPException(404, "摄像头不存在")
+    plan = pipeline_manager.runtime_plan(camera_id)
+    if plan is not None:
+        return plan.as_dict()
+    try:
+        return resolve_runtime_plan(session, camera_id).as_dict()
+    except RuntimeResolutionError as exc:
+        return {
+            "camera_id": camera_id,
+            "status": "unavailable",
+            "runtime_status": "unavailable",
+            "reason": str(exc),
+            "stages": [],
+        }
 
 
 @router.post("/{camera_id}/stop", response_model=CameraOut, summary="停止摄像头")

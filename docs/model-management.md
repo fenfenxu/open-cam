@@ -49,4 +49,6 @@ Camera → AnalysisProfile → PipelineStage → ModelVersion → Rule
 
 模型资产正式化（计划 Stage 1）已完成：来源/交付拆分（`origin_type` + `distribution_type`）、能力标签与输入输出契约、版本哈希/框架/运行时均已落地；内置模型登记、训练登记、模型上传和方案安装都会生成可追溯资产；资产列表支持按来源、交付方式、模型类型、能力和描述搜索。原型的单一 `source_type` 列保留一个版本用于过渡（由新字段派生双写），下一版本删除。
 
-Stage 2 已完成：`AnalysisProfile`、`PipelineStage`、`CameraBinding`、规则能力声明、方案包阶段声明，以及模型关联的待审核/确认/拒绝流程已落地。运行时模型解析仍属于下一阶段。
+Stage 2 已完成：`AnalysisProfile`、`PipelineStage`、`CameraBinding`、规则能力声明、方案包阶段声明，以及模型关联的待审核/确认/拒绝流程已落地。
+
+Stage 3 已完成：摄像头启动时生成冻结的 `RuntimePlan`，按阶段能力、输入输出契约、设备、延迟预算、线上状态和产物哈希筛选模型；运行时模型不可用会让摄像头进入 `error` 并在 health 中返回用户可读原因。方案/阶段变更及模型部署、回滚会重启受影响的摄像头。事件保存分析方案版本、阶段、模型版本 id 和产物摘要，`GET /api/cameras/{id}/runtime-plan` 可查看当前计划。

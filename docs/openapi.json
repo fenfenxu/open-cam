@@ -414,6 +414,47 @@
         }
       }
     },
+    "/api/cameras/{camera_id}/runtime-plan": {
+      "get": {
+        "tags": [
+          "cameras"
+        ],
+        "summary": "查看摄像头运行时方案",
+        "description": "返回运行中的冻结计划；未运行时预解析，失败返回用户可读原因。",
+        "operationId": "runtime_plan_api_cameras__camera_id__runtime_plan_get",
+        "parameters": [
+          {
+            "name": "camera_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Camera Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/cameras/{camera_id}/stop": {
       "post": {
         "tags": [
@@ -5204,6 +5245,68 @@
         }
       }
     },
+    "/api/analysis-profiles/{profile_id}/stages/{stage_id}": {
+      "patch": {
+        "tags": [
+          "analysis-profiles"
+        ],
+        "summary": "更新分析阶段",
+        "description": "更新阶段模型槽位/版本；摄像头下次运行循环前会重启加载新计划。",
+        "operationId": "update_stage_api_analysis_profiles__profile_id__stages__stage_id__patch",
+        "parameters": [
+          {
+            "name": "profile_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            }
+          },
+          {
+            "name": "stage_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Stage Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineStageUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineStageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analysis-profiles/{profile_id}/camera-bindings": {
       "get": {
         "tags": [
@@ -6303,6 +6406,22 @@
               }
             ],
             "title": "Height"
+          },
+          "runtime_status": {
+            "type": "string",
+            "title": "Runtime Status",
+            "default": "not_configured"
+          },
+          "runtime_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Reason"
           }
         },
         "type": "object",
@@ -6806,6 +6925,50 @@
             "type": "integer",
             "title": "Repeat Count",
             "default": 1
+          },
+          "analysis_profile_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Profile Version"
+          },
+          "pipeline_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Stage"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
+          "artifact_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Digest"
           },
           "clip_start": {
             "anyOf": [
@@ -9058,6 +9221,98 @@
           "updated_at"
         ],
         "title": "PipelineStageOut"
+      },
+      "PipelineStageUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "order_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Index"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "input_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Contract"
+          },
+          "output_contract": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Contract"
+          },
+          "model_slot_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Slot Key"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          }
+        },
+        "type": "object",
+        "title": "PipelineStageUpdate"
       },
       "ProfileCameraBindingCreate": {
         "properties": {

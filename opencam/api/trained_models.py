@@ -48,6 +48,7 @@ from ..training.registry import (
     slot_key_from_definition,
 )
 from ..training.storage import load_definition, task_exists
+from ..pipeline import restart_cameras_for_model_change
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 bindings_router = APIRouter(prefix="/api/model-bindings", tags=["models"])
@@ -473,7 +474,9 @@ def get_model(model_id: int, session: Session = Depends(session_scope)):
 def deploy(model_id: int, body: DeployBody = DeployBody(),
            session: Session = Depends(session_scope)):
     try:
-        return deploy_version(session, model_id, force=body.force)
+        result = deploy_version(session, model_id, force=body.force)
+        restart_cameras_for_model_change(session, model_id)
+        return result
     except RegistryError as exc:
         _raise(exc)
 
@@ -483,7 +486,9 @@ def deploy(model_id: int, body: DeployBody = DeployBody(),
              description="按该版本所在槽位恢复 previous；没有上一版本时 400。")
 def rollback(model_id: int, session: Session = Depends(session_scope)):
     try:
-        return rollback_slot(session, model_id)
+        result = rollback_slot(session, model_id)
+        restart_cameras_for_model_change(session, model_id)
+        return result
     except RegistryError as exc:
         _raise(exc)
 

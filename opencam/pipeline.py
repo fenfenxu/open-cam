@@ -20,9 +20,11 @@ from .detection.escalate import Escalator, find_open_todo
 from .detection.rules import RuleEngine
 from .detection.vlm import vlm_reviewer
 from .models import (CAMERA_RUNNING, EVENT_LOGGED, EVENT_OPEN, INTENT_OBSERVE,
-                      Camera, Event, EventAction, Rule, VLM_PENDING, VLM_SKIPPED,
+                      Camera, CameraBinding, Event, EventAction, ModelBinding,
+                      ModelVersion, PipelineStage, Rule, VLM_PENDING, VLM_SKIPPED,
                       default_intent)
 from .notify import notifier
+from .runtime import RuntimePlan, RuntimeResolutionError, resolve_runtime_plan
 from .streams.manager import camera_manager
 
 logger = logging.getLogger(__name__)
@@ -33,7 +35,8 @@ _default_escalator = Escalator()
 def persist_hit(session, camera_id: int, rule: Rule, hit, snapshot_path: str | None,
                 source_offset: float | None = None, *,
                 escalator: Escalator | None = None,
-                now: float | None = None) -> Event | None:
+                now: float | None = None,
+                runtime_plan: RuntimePlan | None = None) -> Event | None:
     """按 intent/策略写库或折叠。返回新建或升格后的待办 Event；观察/未过关可返回 logged 或 None。"""
     escalator = escalator or _default_escalator
     now = time.time() if now is None else now
@@ -41,7 +44,9 @@ def persist_hit(session, camera_id: int, rule: Rule, hit, snapshot_path: str | N
     if intent == INTENT_OBSERVE:
         event = _insert_event(
             session, camera_id, hit, snapshot_path, source_offset, intent,
-            needs_action=False, status=EVENT_LOGGED, ts=now)
+            needs_action=False, status=EVENT_LOGGED, ts=now,
+            runtime_plan=runtime_plan,
+            rule_capabilities=getattr(rule, "capabilities", []))
         return event
 
     escalator.note_hit(rule.id, now)
@@ -52,7 +57,9 @@ def persist_hit(session, camera_id: int, rule: Rule, hit, snapshot_path: str | N
     if decision.write_logged and not decision.open_todo:
         event = _insert_event(
             session, camera_id, hit, snapshot_path, source_offset, intent,
-            needs_action=False, status=EVENT_LOGGED, ts=now)
+            needs_action=False, status=EVENT_LOGGED, ts=now,
+            runtime_plan=runtime_plan,
+            rule_capabilities=getattr(rule, "capabilities", []))
     if decision.fold:
         existing = find_open_todo(session, camera_id, rule.id)
         if existing is not None:
@@ -63,11 +70,15 @@ def persist_hit(session, camera_id: int, rule: Rule, hit, snapshot_path: str | N
             if decision.write_logged:
                 event = _insert_event(
                     session, camera_id, hit, snapshot_path, source_offset, intent,
-                    needs_action=False, status=EVENT_LOGGED, ts=now)
+                    needs_action=False, status=EVENT_LOGGED, ts=now,
+                    runtime_plan=runtime_plan,
+                    rule_capabilities=getattr(rule, "capabilities", []))
             else:
                 event = _insert_event(
                     session, camera_id, hit, snapshot_path, source_offset, intent,
-                    needs_action=True, status=EVENT_OPEN, ts=now)
+                    needs_action=True, status=EVENT_OPEN, ts=now,
+                    runtime_plan=runtime_plan,
+                    rule_capabilities=getattr(rule, "capabilities", []))
         event.needs_action = True
         event.status = EVENT_OPEN
         if event.vlm_status == VLM_SKIPPED:
@@ -79,7 +90,11 @@ def persist_hit(session, camera_id: int, rule: Rule, hit, snapshot_path: str | N
 
 def _insert_event(session, camera_id: int, hit, snapshot_path: str | None,
                   source_offset: float | None, intent: str, *,
-                  needs_action: bool, status: str, ts: float) -> Event:
+                  needs_action: bool, status: str, ts: float,
+                  runtime_plan: RuntimePlan | None = None,
+                  rule_capabilities: list[str] | None = None) -> Event:
+    stage = (runtime_plan.stage_for(rule_capabilities or [])
+             if runtime_plan else None)
     event = Event(
         camera_id=camera_id,
         rule_id=hit.rule_id,
@@ -94,6 +109,11 @@ def _insert_event(session, camera_id: int, hit, snapshot_path: str | None,
         status=status,
         repeat_count=1,
         vlm_status=VLM_SKIPPED if not needs_action else VLM_PENDING,
+        analysis_profile_version=(runtime_plan.analysis_profile_version
+                                  if runtime_plan else None),
+        pipeline_stage=stage.key if stage else None,
+        model_version_id=stage.model_version_id if stage else None,
+        artifact_digest=stage.artifact_digest if stage else None,
     )
     session.add(event)
     session.commit()
@@ -115,10 +135,13 @@ def _fold_todo(session, existing: Event, snapshot_path: str | None, now: float) 
 class PipelineWorker:
     """单摄像头的分析线程。"""
 
-    def __init__(self, camera_id: int, detector=None):
+    def __init__(self, camera_id: int, detector=None,
+                 runtime_plan: RuntimePlan | None = None):
         self.camera_id = camera_id
+        self.runtime_plan = runtime_plan
         # 共享传入的检测器（多路摄像头共用一个模型）；未传则自己构建
-        self._detector = detector or build_detector()
+        self._detector = detector or build_detector(
+            runtime_plan.model_path if runtime_plan else None)
         self._engine = RuleEngine()
         self._escalator = Escalator()
         self._stop = threading.Event()
@@ -177,7 +200,8 @@ class PipelineWorker:
                 event = persist_hit(
                     session, self.camera_id, rule, hit,
                     str(snapshot) if snapshot else None, sample.offset,
-                    escalator=self._escalator, now=now)
+                    escalator=self._escalator, now=now,
+                    runtime_plan=self.runtime_plan)
                 if event is None:
                     continue
                 logger.info("事件落库: id=%d camera=%d type=%s offset=%s action=%s",
@@ -213,19 +237,41 @@ class PipelineManager:
     def __init__(self):
         self._workers: dict[int, PipelineWorker] = {}
         self._lock = threading.Lock()
+        self._errors: dict[int, str] = {}
 
-    def start(self, camera_id: int) -> None:
+    def start(self, camera_id: int, runtime_plan: RuntimePlan | None = None) -> None:
         self.stop(camera_id)
-        worker = PipelineWorker(camera_id)
+        worker = PipelineWorker(camera_id, runtime_plan=runtime_plan)
         worker.start()
         with self._lock:
             self._workers[camera_id] = worker
+            self._errors.pop(camera_id, None)
 
     def stop(self, camera_id: int) -> None:
         with self._lock:
             worker = self._workers.pop(camera_id, None)
         if worker:
             worker.stop()
+
+    def set_error(self, camera_id: int, reason: str) -> None:
+        with self._lock:
+            self._errors[camera_id] = reason
+
+    def runtime_status(self, camera_id: int) -> tuple[str, str | None]:
+        with self._lock:
+            error = self._errors.get(camera_id)
+            worker = self._workers.get(camera_id)
+        if error:
+            return "unavailable", error
+        if worker is None:
+            return "not_running", None
+        plan = worker.runtime_plan
+        return (plan.runtime_status, plan.reason) if plan else ("ready", None)
+
+    def runtime_plan(self, camera_id: int) -> RuntimePlan | None:
+        with self._lock:
+            worker = self._workers.get(camera_id)
+        return worker.runtime_plan if worker else None
 
     def stop_all(self) -> None:
         with self._lock:
@@ -249,10 +295,27 @@ def start_camera(camera_id: int) -> None:
         camera = session.get(Camera, camera_id)
         if camera is None:
             raise ValueError(f"摄像头不存在: {camera_id}")
-        camera_manager.start(camera_id, camera.source_type, camera.source_uri)
-        pipeline_manager.start(camera_id)
-        camera.status = CAMERA_RUNNING
-        session.commit()
+        try:
+            runtime_plan = resolve_runtime_plan(session, camera_id)
+        except RuntimeResolutionError as exc:
+            camera.status = "error"
+            session.commit()
+            pipeline_manager.set_error(camera_id, str(exc))
+            raise
+        try:
+            camera_manager.start(camera_id, camera.source_type, camera.source_uri)
+            pipeline_manager.start(camera_id, runtime_plan=runtime_plan)
+            camera.status = CAMERA_RUNNING
+            session.commit()
+        except Exception as exc:
+            # 采集或推理初始化失败也要留下可读的运行时健康原因，避免只看到
+            # 一个没有上下文的 500；已启动的采集线程同步清理。
+            pipeline_manager.stop(camera_id)
+            camera_manager.stop(camera_id)
+            camera.status = "error"
+            pipeline_manager.set_error(camera_id, str(exc))
+            session.commit()
+            raise
     finally:
         session.close()
 
@@ -271,3 +334,24 @@ def stop_camera(camera_id: int) -> None:
             session.commit()
     finally:
         session.close()
+
+
+def restart_cameras_for_model_change(session, model_version_id: int) -> None:
+    """模型部署/回滚后重启受影响的运行中摄像头，加载新 RuntimePlan。"""
+    version = session.get(ModelVersion, model_version_id)
+    if version is None:
+        return
+    stage_ids = {row.id for row in session.query(PipelineStage).filter(
+        (PipelineStage.model_version_id == model_version_id) |
+        (PipelineStage.model_slot_key == version.slot_key)).all()}
+    stage_ids.update(row.target_id for row in session.query(ModelBinding).filter_by(
+        model_asset_id=version.model_asset_id, target_type="pipeline_stage",
+        enabled=True).all() if row.target_id is not None)
+    camera_ids = [binding.camera_id for binding in session.query(CameraBinding).filter(
+        CameraBinding.analysis_profile_id.in_(
+            session.query(PipelineStage.profile_id).filter(PipelineStage.id.in_(stage_ids))
+        )).all()] if stage_ids else []
+    for camera_id in dict.fromkeys(camera_ids):
+        camera = session.get(Camera, camera_id)
+        if camera is not None and camera.status == CAMERA_RUNNING:
+            start_camera(camera_id)
