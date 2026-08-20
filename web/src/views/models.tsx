@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BrainCircuit, Pencil, Plus, Search, Upload } from "lucide-react";
+import { BrainCircuit, Check, Pencil, Plus, Search, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
@@ -25,6 +25,8 @@ import {
   modelDistributionLabel,
   modelKindLabel,
   modelOriginLabel,
+  type AnalysisProfile,
+  type ModelBinding,
   type ModelAsset,
   type ModelDistributionType,
   type ModelKind,
@@ -59,6 +61,7 @@ export function ModelsPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
+  const [recommendStageId, setRecommendStageId] = useState("");
 
   const listParams = new URLSearchParams();
   if (filterOrigin !== "all") listParams.set("origin_type", filterOrigin);
@@ -70,6 +73,17 @@ export function ModelsPage() {
   const assetsQuery = useQuery({
     queryKey: ["model-assets", listUrl],
     queryFn: () => api<ModelAsset[]>(listUrl),
+  });
+
+  const profilesQuery = useQuery({
+    queryKey: ["analysis-profiles"],
+    queryFn: () => api<AnalysisProfile[]>("/api/analysis-profiles"),
+  });
+  const pendingBindingsQuery = useQuery({
+    queryKey: ["model-bindings", "pending"],
+    queryFn: () => api<ModelBinding[]>(
+      "/api/model-bindings?relation_source=ai_recommended&relation_status=pending",
+    ),
   });
 
   const resetForm = () => {
@@ -154,6 +168,37 @@ export function ModelsPage() {
     onError: (error) => toast.error(errorMessage(error)),
   });
 
+  const recommend = useMutation({
+    mutationFn: () => api<ModelBinding[]>("/api/model-bindings/recommend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target_type: "pipeline_stage",
+        target_id: Number(recommendStageId),
+        limit: 5,
+      }),
+    }),
+    onSuccess: async (bindings) => {
+      toast.success(bindings.length ? `已生成 ${bindings.length} 条待审核推荐` : "目标已有人工关联，未生成 AI 推荐");
+      await queryClient.invalidateQueries({ queryKey: ["model-bindings", "pending"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const reviewBinding = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: "confirm" | "reject" }) =>
+      api<ModelBinding>(`/api/model-bindings/${id}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    onSuccess: async (_, variables) => {
+      toast.success(variables.action === "confirm" ? "模型关联已确认" : "推荐已拒绝");
+      await queryClient.invalidateQueries({ queryKey: ["model-bindings", "pending"] });
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
   const startEdit = (asset: ModelAsset) => {
     setEditingId(asset.id);
     setName(asset.name);
@@ -203,7 +248,7 @@ export function ModelsPage() {
             <Label>模型类型</Label>
             <Select value={modelKind} onValueChange={(value) => value && setModelKind(value as ModelKind)}>
               <SelectTrigger>
-                <SelectValue>{modelKindLabel(modelKind)}</SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>{MODEL_KINDS.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
@@ -235,6 +280,67 @@ export function ModelsPage() {
             <BrainCircuit />
             {editingId !== null ? "保存修改" : "登记模型"}
           </Button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border bg-card p-5 shadow-sm">
+        <div className="mb-1 flex items-center gap-2">
+          <BrainCircuit className="size-4" />
+          <h2 className="font-medium">关联推荐与人工审核</h2>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          推荐只保存为待审核关系，不会覆盖人工关联，也不会自动上线模型。
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-64 space-y-2">
+            <Label htmlFor="recommend-stage">推荐到分析阶段</Label>
+            <Select value={recommendStageId} onValueChange={(value) => value && setRecommendStageId(value)}>
+              <SelectTrigger id="recommend-stage"><SelectValue placeholder="选择分析阶段" /></SelectTrigger>
+              <SelectContent>
+                {(profilesQuery.data ?? []).flatMap((profile) => profile.stages.map((stage) => (
+                  <SelectItem key={stage.id} value={String(stage.id)}>
+                    {profile.name} / {stage.name}
+                  </SelectItem>
+                )))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button disabled={!recommendStageId || recommend.isPending} onClick={() => recommend.mutate()}>
+            <BrainCircuit />
+            生成推荐
+          </Button>
+        </div>
+        <div className="mt-5 space-y-3">
+          {(pendingBindingsQuery.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">暂无待审核推荐。</p>
+          ) : (pendingBindingsQuery.data ?? []).map((binding) => {
+            const asset = assets.find((item) => item.id === binding.model_asset_id);
+            return (
+              <div key={binding.id} className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{asset?.name ?? `模型资产 #${binding.model_asset_id}`}</span>
+                      <Badge variant="secondary">待人工确认</Badge>
+                      {binding.confidence !== null ? <Badge variant="outline">置信度 {(binding.confidence * 100).toFixed(0)}%</Badge> : null}
+                    </div>
+                    <p className="text-muted-foreground">{binding.reason || "暂无推荐理由"}</p>
+                    {binding.warnings.length > 0 ? <p className="text-muted-foreground">提示：{binding.warnings.join("；")}</p> : null}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" disabled={reviewBinding.isPending} onClick={() => reviewBinding.mutate({ id: binding.id, action: "confirm" })}>
+                      <Check />
+                      确认关联
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={reviewBinding.isPending} onClick={() => reviewBinding.mutate({ id: binding.id, action: "reject" })}>
+                      <X />
+                      拒绝推荐
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

@@ -38,6 +38,7 @@ from ..models import (
     Rule,
     legacy_source_type,
 )
+from ..model_recommender import recommend_bindings
 from ..training.registry import (
     RegistryError,
     comparison_for,
@@ -102,6 +103,17 @@ class BindingReview(BaseModel):
     enabled: Optional[bool] = None
 
 
+class RecommendationRequest(BaseModel):
+    """推荐一个目标的模型资产；只产生待审核关联，不改变运行时配置。"""
+
+    target_type: str = Field(
+        pattern="^(rule|camera|analysis_profile|pipeline_stage|solution_pack)$")
+    target_id: Optional[int] = None
+    target_key: Optional[str] = Field(default=None, max_length=128)
+    limit: int = Field(default=5, ge=1, le=20)
+    model_asset_ids: Optional[list[int]] = None
+
+
 def _raise(exc: RegistryError) -> None:
     detail: Any = str(exc)
     if exc.payload:
@@ -116,7 +128,8 @@ def _get_asset_or_404(asset_id: int, session: Session) -> ModelAsset:
     return asset
 
 
-def _validate_binding_target(body: ModelBindingCreate, session: Session) -> None:
+def _validate_binding_target(body: ModelBindingCreate, session: Session,
+                             asset_id: int | None = None) -> None:
     uses_id = body.target_type in {"rule", "camera", "analysis_profile", "pipeline_stage"}
     if uses_id and body.target_id is None and not body.target_key:
         raise HTTPException(400, f"{body.target_type} 关联必须提供 target_id 或 target_key")
@@ -132,6 +145,12 @@ def _validate_binding_target(body: ModelBindingCreate, session: Session) -> None
     if body.target_type == "pipeline_stage" and body.target_id is not None \
             and session.get(PipelineStage, body.target_id) is None:
         raise HTTPException(404, "分析阶段不存在")
+    if body.model_version_id is not None:
+        version = session.get(ModelVersion, body.model_version_id)
+        if version is None:
+            raise HTTPException(404, "模型版本不存在")
+        if version.model_asset_id is not None and version.model_asset_id != asset_id:
+            raise HTTPException(400, "模型版本不属于当前模型资产")
 
 
 @router.get("/assets", response_model=list[ModelAssetOut], summary="模型资产列表")
@@ -287,7 +306,7 @@ def list_bindings(asset_id: int, session: Session = Depends(session_scope)):
 def create_binding(asset_id: int, body: ModelBindingCreate,
                    session: Session = Depends(session_scope)):
     _get_asset_or_404(asset_id, session)
-    _validate_binding_target(body, session)
+    _validate_binding_target(body, session, asset_id)
     duplicate_query = session.query(ModelBinding).filter_by(
         model_asset_id=asset_id,
         target_type=body.target_type,
@@ -297,22 +316,32 @@ def create_binding(asset_id: int, body: ModelBindingCreate,
     if duplicate_query.filter(
             ModelBinding.relation_status != MODEL_BINDING_REJECTED).first() is not None:
         raise HTTPException(409, "该模型与目标已经存在关联")
+    if body.relation_source == "ai_recommended":
+        if body.confidence is None or not body.reason:
+            raise HTTPException(400, "AI 推荐关联必须提供 confidence 和 reason")
+        manual_exists = (session.query(ModelBinding)
+                         .filter_by(target_type=body.target_type,
+                                    target_id=body.target_id,
+                                    target_key=body.target_key,
+                                    relation_source="manual")
+                         .filter(ModelBinding.relation_status != MODEL_BINDING_REJECTED)
+                         .first())
+        if manual_exists is not None:
+            raise HTTPException(409, "目标已有人工关联，不能被 AI 推荐覆盖")
     binding = ModelBinding(
         model_asset_id=asset_id,
+        model_version_id=body.model_version_id,
         target_type=body.target_type,
         target_id=body.target_id,
         target_key=body.target_key,
         relation_source=body.relation_source,
-        relation_status=(
-            body.relation_status
-            or (MODEL_BINDING_PENDING
-                if body.relation_source == "ai_recommended"
-                else MODEL_BINDING_CONFIRMED)
-        ),
+        relation_status=(MODEL_BINDING_PENDING
+                         if body.relation_source == "ai_recommended"
+                         else MODEL_BINDING_CONFIRMED),
         confidence=body.confidence,
         reason=body.reason,
-        enabled=(body.enabled and body.relation_source != "ai_recommended"
-                 and body.relation_status != MODEL_BINDING_REJECTED),
+        warnings=list(body.warnings),
+        enabled=(body.enabled and body.relation_source != "ai_recommended"),
     )
     session.add(binding)
     session.commit()
@@ -358,6 +387,19 @@ def _get_binding(binding_id: int, session: Session) -> ModelBinding:
 
 def _review_binding(binding: ModelBinding, *, confirmed: bool,
                     body: BindingReview, session: Session) -> ModelBinding:
+    if binding.relation_source != "ai_recommended":
+        raise HTTPException(409, "只有 AI 推荐关联需要人工确认或拒绝")
+    if confirmed:
+        manual_exists = (session.query(ModelBinding)
+                         .filter(ModelBinding.id != binding.id,
+                                 ModelBinding.target_type == binding.target_type,
+                                 ModelBinding.target_id == binding.target_id,
+                                 ModelBinding.target_key == binding.target_key,
+                                 ModelBinding.relation_source == "manual",
+                                 ModelBinding.relation_status != MODEL_BINDING_REJECTED)
+                         .first())
+        if manual_exists is not None:
+            raise HTTPException(409, "目标已有人工关联，不能确认 AI 推荐")
     binding.relation_status = (
         MODEL_BINDING_CONFIRMED if confirmed else MODEL_BINDING_REJECTED)
     binding.enabled = bool(confirmed if body.enabled is None else body.enabled)
@@ -392,6 +434,36 @@ def reject_binding(binding_id: int, body: BindingReview = BindingReview(),
                            body=body, session=session)
 
 
+@bindings_router.post("/recommend", response_model=list[ModelBindingOut],
+                      status_code=201, summary="生成模型关联推荐",
+                      description="按目标的能力与输入输出契约生成可解释候选；候选默认 pending，"
+                                  "不会覆盖人工关联，也不会自动部署模型。")
+def recommend(body: RecommendationRequest,
+              session: Session = Depends(session_scope)):
+    return recommend_bindings(
+        session,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        target_key=body.target_key,
+        limit=body.limit,
+        model_asset_ids=body.model_asset_ids,
+    )
+
+
+@router.post("/recommendations", response_model=list[ModelBindingOut],
+             status_code=201, summary="生成模型关联推荐", include_in_schema=False)
+def recommend_from_models(body: RecommendationRequest,
+                          session: Session = Depends(session_scope)):
+    return recommend_bindings(
+        session,
+        target_type=body.target_type,
+        target_id=body.target_id,
+        target_key=body.target_key,
+        limit=body.limit,
+        model_asset_ids=body.model_asset_ids,
+    )
+
+
 @bindings_router.patch("/{binding_id}", response_model=ModelBindingOut,
                        summary="更新模型关联审核状态")
 def update_binding(binding_id: int, body: BindingReview,
@@ -405,6 +477,10 @@ def update_binding(binding_id: int, body: BindingReview,
     if body.reason is not None:
         binding.reason = body.reason
     if body.enabled is not None:
+        if (binding.relation_source == "ai_recommended"
+                and binding.relation_status == MODEL_BINDING_PENDING
+                and body.enabled):
+            raise HTTPException(409, "待审核 AI 推荐必须先通过 confirm 确认")
         binding.enabled = body.enabled
     session.commit()
     session.refresh(binding)

@@ -163,8 +163,13 @@ def _candidate_versions(session: Session, stage: PipelineStage,
                          (ModelBinding.target_id == stage.id)) |
                         ((ModelBinding.target_type == "analysis_profile") &
                          (ModelBinding.target_id == profile.id)))
-                    .order_by(ModelBinding.target_type.desc(), ModelBinding.id.desc())
                     .all())
+    # 人工关系永远排在 AI 推荐之前；确认推荐不会悄悄覆盖人工选择。
+    binding_rows.sort(key=lambda row: (
+        0 if row.relation_source == "manual" else 1,
+        0 if row.target_type == "pipeline_stage" else 1,
+        -row.id,
+    ))
     binding_asset_ids = [row.model_asset_id for row in binding_rows]
 
     query = session.query(ModelVersion, ModelAsset).join(

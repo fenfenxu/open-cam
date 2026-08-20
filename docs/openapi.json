@@ -4949,6 +4949,52 @@
         }
       }
     },
+    "/api/model-bindings/recommend": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "生成模型关联推荐",
+        "description": "按目标的能力与输入输出契约生成可解释候选；候选默认 pending，不会覆盖人工关联，也不会自动部署模型。",
+        "operationId": "recommend_api_model_bindings_recommend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelBindingOut"
+                  },
+                  "type": "array",
+                  "title": "Response Recommend Api Model Bindings Recommend Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analysis-profiles": {
       "get": {
         "tags": [
@@ -7774,6 +7820,24 @@
             ],
             "title": "Reason"
           },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
           "enabled": {
             "type": "boolean",
             "title": "Enabled",
@@ -7852,6 +7916,24 @@
             ],
             "title": "Reason"
           },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "model_version_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version Id"
+          },
           "enabled": {
             "type": "boolean",
             "title": "Enabled"
@@ -7872,6 +7954,7 @@
           "relation_status",
           "confidence",
           "reason",
+          "model_version_id",
           "enabled",
           "created_at"
         ],
@@ -9342,6 +9425,65 @@
           "camera_id"
         ],
         "title": "ProfileCameraBindingCreate"
+      },
+      "RecommendationRequest": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "pattern": "^(rule|camera|analysis_profile|pipeline_stage|solution_pack)$",
+            "title": "Target Type"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Key"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 5
+          },
+          "model_asset_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Asset Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type"
+        ],
+        "title": "RecommendationRequest",
+        "description": "推荐一个目标的模型资产；只产生待审核关联，不改变运行时配置。"
       },
       "RegionBody": {
         "properties": {
