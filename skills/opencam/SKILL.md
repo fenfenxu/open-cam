@@ -26,15 +26,15 @@ opencam events --help
 
 其余资源（cameras、rules、packs、stats、videos、system、models）同理，用 `opencam <resource> --help` 查看。事件片段下载等冷门参数见 `opencam events --help`。CLI 没有的接口用 `opencam api METHOD PATH`，不要 curl。
 
-## 工作流：查未确认告警
+## 工作流：查待办告警
 
 ```bash
-opencam events list --acked false
+opencam events list --needs-action true
 opencam events get 42
 opencam events ack 42
 ```
 
-1. `events list --acked false` 拉未确认事件；返回满 `--page-size` 条时用 `--offset` 继续拉，可按 `--camera-id` / `--type` 过滤。
+1. `events list --needs-action true` 拉待办事件（观察记录不算待办）；返回满 `--page-size` 条时用 `--offset` 继续拉，可按 `--camera-id` / `--type` 过滤。旧版 `--acked false` 只看未确认，不能区分观察与待办。
 2. 逐条 `events get <id>` 看详情（含 VLM 判定 `vlm_verdict` 与理由）。
 3. 向用户说明判定依据后，才 `events ack <id>` 确认。
 

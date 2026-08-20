@@ -107,8 +107,11 @@ uv run python scripts/export_openapi.py
 | `POST /cameras/upload` | 上传别名，与 `POST /videos` 同一套入库，响应含 `path` |
 | `GET/POST /cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
 | `GET /api/rules/presets` | 规则场景化预设元数据（引导卡片数据源） |
-| `GET /api/stats/footfall?camera_id=&date=` | 分时段进出店客流（按本地小时分桶统计越线 in/out） |
-| `GET /events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked` `status` `starred`，分页：`limit` `offset` |
+| `GET /api/stats/footfall?camera_id=&date=` | 分时段进出店客流（按本地小时分桶统计 observe 越线 in/out） |
+| `GET /api/stats/ops?camera_id=&date=` | 待办经营摘要：当日新开待办、状态/判定分桶、平均确认与处置时长 |
+| `GET /events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked` `status` `starred` `needs_action`，分页：`limit` `offset` |
+
+> 事件分两类：观察（`intent=observe`，如越线计数，只记录进统计，不出现在待办箱）与待办（`needs_action=true`，需要人处置，流转 open → acked → resolved / ignored）。
 | `GET /events/{id}` | 事件详情（含 VLM 判定与理由、处置状态） |
 | `PATCH /events/{id}` | 处置编辑：状态（open/acked/resolved/ignored）/ 关注星标 / 负责人 / 备注，变更全程留痕 |
 | `GET /events/{id}/actions` | 处置时间线（关注/指派/状态/备注/通知的审计记录） |

@@ -57,3 +57,11 @@ def test_skill_teaches_snapshot_before_polygon_rules():
     assert "cameras snapshot" in text
     assert "像素" in text
     assert "opencam_client" not in text
+
+
+def test_skill_alert_workflow_is_todo_based():
+    """查告警工作流按待办（needs_action）查，不能只写 --acked false 而不提待办。"""
+    text = _text()
+    assert "needs-action" in text or "needs_action" in text
+    workflow = text.split("工作流：查", 1)[1].split("## ", 1)[0]
+    assert "needs-action" in workflow or "needs_action" in workflow
