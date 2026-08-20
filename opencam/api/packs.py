@@ -1,8 +1,9 @@
-"""方案包 API：列出 / 详情 / 资产 / 安装 / 应用 / 卸载 / 隔离试跑。
+"""方案包 API：列出 / 详情 / 资产 / 安装 / 应用 / 卸载 / 隔离试跑 / 部署。
 
 在线浏览为平台 stub，未配置时降级为内置包。
 详情与资产走 PackCatalog；列表保持 installer brief 以兼容现有 Web/CLI。
 试跑（trials）走 PackExperience 深模块：单会话、60 秒 TTL、无 DB/快照/VLM 副作用。
+变更计划与原子应用走 PackDeployment；部署详情支持跨会话继续校准。
 """
 
 from __future__ import annotations
@@ -20,16 +21,25 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import session_scope
-from ..models import CameraOut, PackDetail, RuleOut
+from ..models import (
+    ApplyPlanOut,
+    CameraOut,
+    PackDeploymentOut,
+    PackDeploymentResourcePatch,
+    PackDetail,
+    RuleOut,
+)
 from ..packs import installer
 from ..packs.apply import apply_pack
 from ..packs.catalog import catalog
+from ..packs.deployment import DeploymentError, pack_deployment
 from ..packs.experience import TrialOut, pack_experience, TrialError
 from ..packs.manifest import PackError
 from .cameras import camera_out
 
 router = APIRouter(prefix="/api/packs", tags=["packs"])
 trials_router = APIRouter(prefix="/api/pack-trials", tags=["packs"])
+deployments_router = APIRouter(prefix="/api/pack-deployments", tags=["packs"])
 
 
 @router.get("", summary="方案包列表", description="内置 + 已安装；同 id 时已安装覆盖内置。view=cards 返回规范化卡片。")
@@ -53,12 +63,11 @@ def browse_online():
             "note": "未配置市场平台（platform_base_url），当前仅显示内置方案包。",
             "packs": [p for p in installer.list_packs() if p["origin"] == "builtin"],
         }
-    # 平台接口预留：配置后在此接入真实市场
     return {"online": False, "note": "市场平台接口尚未开放，敬请期待。", "packs": []}
 
 
 class InstallRequest(BaseModel):
-    source: str  # 本地目录 / zip 路径 / URL
+    source: str
 
 
 @router.post("/install", status_code=201, summary="安装方案包", description="source 支持本地目录、.zip 文件路径或 http(s) URL。")
@@ -72,7 +81,6 @@ def install(body: InstallRequest):
 @router.post("/install-upload", status_code=201, summary="上传并安装方案包",
              description="上传 .zip 方案包并安装。")
 def install_upload(file: UploadFile):
-    """接收浏览器选择的 ZIP 文件，再复用本地 ZIP 安装流程。"""
     filename = Path(file.filename or "").name
     if Path(filename).suffix.lower() != ".zip":
         raise HTTPException(400, "请上传 .zip 方案包")
@@ -88,25 +96,47 @@ def install_upload(file: UploadFile):
 
 class ApplyRequest(BaseModel):
     camera_id: int | None = None
+    expected_fingerprint: str | None = None
 
 
 class PackApplyOut(BaseModel):
     cameras: list[CameraOut]
     rules: list[RuleOut]
+    deployment_id: int | None = None
+
+
+@router.post("/{pack_id}/apply-plan", response_model=ApplyPlanOut,
+             summary="应用前变更计划",
+             description="计算将创建/绑定的摄像头、规则与视频；返回内容指纹供确认时回传。")
+def apply_plan(pack_id: str, body: ApplyRequest,
+               session: Session = Depends(session_scope)):
+    try:
+        return pack_deployment.plan(pack_id, camera_id=body.camera_id,
+                                    session=session)
+    except PackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except DeploymentError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
 
 
 @router.post("/{pack_id}/apply", response_model=PackApplyOut, status_code=201,
              summary="应用方案包",
-             description="新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。")
+             description="新包不传 camera_id，按包创建多路摄像头；旧包必须指定 camera_id。"
+                         "可选 expected_fingerprint：不一致返回 409。")
 def apply(pack_id: str, body: ApplyRequest,
           session: Session = Depends(session_scope)):
     try:
-        result = apply_pack(pack_id, session, camera_id=body.camera_id)
+        result = apply_pack(
+            pack_id, session, camera_id=body.camera_id,
+            expected_fingerprint=body.expected_fingerprint)
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except DeploymentError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
     return PackApplyOut(
         cameras=[camera_out(c) for c in result.cameras],
         rules=[RuleOut.model_validate(r) for r in result.rules],
+        deployment_id=result.deployment.id if result.deployment else None,
     )
 
 
@@ -124,7 +154,6 @@ def get_pack_detail(pack_id: str):
             summary="方案包白名单资产",
             description="仅已声明且校验通过的资产；支持 Range、MIME、ETag。")
 def get_pack_asset(pack_id: str, asset_id: str, request: Request):
-    # 拒绝把路径伪装成 asset_id
     if "/" in asset_id or "\\" in asset_id or ".." in asset_id or "%" in asset_id:
         raise HTTPException(404, "资产不存在")
     try:
@@ -135,7 +164,6 @@ def get_pack_asset(pack_id: str, asset_id: str, request: Request):
         code = 404 if "不存在" in msg or "非法" in msg else 400
         raise HTTPException(code, msg) from exc
 
-    # 条件请求
     inm = request.headers.get("if-none-match")
     etag = f'"{asset.etag}"'
     if inm and inm.strip() == etag:
@@ -164,9 +192,6 @@ def uninstall(pack_id: str):
         raise HTTPException(400, str(exc)) from exc
 
 
-# ---- 隔离试跑（PackExperience）----
-
-
 class TrialSourceIn(BaseModel):
     kind: Literal["pack", "video", "camera"] = "pack"
     video_id: int | None = None
@@ -176,7 +201,7 @@ class TrialSourceIn(BaseModel):
 class TrialStartIn(BaseModel):
     scene_id: str = Field(min_length=1)
     source: TrialSourceIn = Field(default_factory=TrialSourceIn)
-    duration_sec: float | None = None  # 默认 60 秒，上限 60 秒
+    duration_sec: float | None = None
 
 
 @router.post("/{pack_id}/trials", response_model=TrialOut, status_code=201,
@@ -210,7 +235,6 @@ _TRIAL_MJPEG_INTERVAL = 0.125
 
 
 def _iter_trial_mjpeg(trial_id: str):
-    """从试跑会话持续吐叠加后的 JPEG part；试跑结束或客户端断开则结束。"""
     while True:
         try:
             session, _ = pack_experience.mjpeg_state(trial_id)
@@ -246,4 +270,33 @@ def stop_trial(trial_id: str):
     try:
         pack_experience.stop(trial_id)
     except TrialError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@deployments_router.get("/{deployment_id}", response_model=PackDeploymentOut,
+                        summary="部署详情",
+                        description="资源映射与激活清单；资源缺失时 status=degraded。")
+def get_deployment(deployment_id: int,
+                   session: Session = Depends(session_scope)):
+    try:
+        return pack_deployment.get(deployment_id, session)
+    except DeploymentError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+@deployments_router.patch(
+    "/{deployment_id}/resources/{resource_id}",
+    response_model=PackDeploymentOut,
+    summary="标记资源配置完成",
+    description="校准完成后标记 configured；规则资源会同时启用。"
+                "全部规则配置完成且至少一路摄像头运行后进入 active。",
+)
+def patch_deployment_resource(
+        deployment_id: int, resource_id: int,
+        body: PackDeploymentResourcePatch,
+        session: Session = Depends(session_scope)):
+    try:
+        return pack_deployment.mark_configured(
+            deployment_id, resource_id, session, configured=body.configured)
+    except DeploymentError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
