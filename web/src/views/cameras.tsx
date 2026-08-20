@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api, ApiError, resolveApiUrl } from "@/lib/api";
+import { CAMERA_STATUS_NAMES } from "@/lib/labels";
 import {
   SOURCE_TYPE_NAMES,
   dash,
@@ -206,7 +207,11 @@ export function CamerasPage() {
       {
         accessorKey: "status",
         header: "状态",
-        cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {CAMERA_STATUS_NAMES[row.original.status] || row.original.status}
+          </Badge>
+        ),
       },
       {
         id: "actions",

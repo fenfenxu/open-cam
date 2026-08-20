@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Check, Lock } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,11 @@ import {
 } from "@/lib/training";
 import { cn } from "@/lib/utils";
 import type { VlmConfig } from "@/lib/system";
+import {
+  MODEL_STATUS_NAMES,
+  TRAINING_RUN_STATUS_NAMES,
+  TRAINING_TASK_STATUS_NAMES,
+} from "@/lib/labels";
 
 const NONE = "__none__";
 
@@ -57,6 +63,7 @@ export function TrainingPage() {
   const [videoSrc, setVideoSrc] = useState(NONE);
   const [points, setPoints] = useState<Point[]>([]);
   const [canvasReady, setCanvasReady] = useState(false);
+  const [maxReachedStep, setMaxReachedStep] = useState(1);
   const syncedTask = useRef<string | null>(null);
 
   const camerasQuery = useQuery({
@@ -118,12 +125,15 @@ export function TrainingPage() {
     if (!id) {
       syncedTask.current = null;
       setStep(1);
+      setMaxReachedStep(1);
       setGoal("");
       return;
     }
     if (!task || syncedTask.current === task.task_id) return;
     syncedTask.current = task.task_id;
-    setStep(inferStep(task));
+    const inferredStep = inferStep(task);
+    setStep(inferredStep);
+    setMaxReachedStep(inferredStep);
     setGoal(task.goal || "");
     const d = task.definition || {};
     setObject(d.object || "");
@@ -136,6 +146,7 @@ export function TrainingPage() {
   useEffect(() => {
     if (trainQuery.data?.status === "done") {
       void queryClient.invalidateQueries({ queryKey: ["training-task", id] });
+      setMaxReachedStep((current) => Math.max(current, 6));
       setStep(6);
     }
     if (trainQuery.data?.status === "failed") {
@@ -148,6 +159,13 @@ export function TrainingPage() {
     await queryClient.invalidateQueries({ queryKey: ["training-tasks"] });
   }
 
+  function goToStep(nextStep: number) {
+    if (nextStep > maxReachedStep) {
+      setMaxReachedStep(nextStep);
+    }
+    setStep(nextStep);
+  }
+
   const defineTask = useMutation({
     mutationFn: () =>
       api<TrainingTask>(
@@ -158,7 +176,7 @@ export function TrainingPage() {
       await queryClient.invalidateQueries({ queryKey: ["training-tasks"] });
       syncedTask.current = null;
       navigate(`/training/${created.task_id}`);
-      setStep(2);
+      goToStep(2);
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
@@ -181,7 +199,7 @@ export function TrainingPage() {
       })),
     onSuccess: async () => {
       await refreshTask();
-      setStep(3);
+      goToStep(3);
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
@@ -280,14 +298,18 @@ export function TrainingPage() {
     () => [
       {
         accessorKey: "id",
-        header: "id",
+        header: "编号",
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span>,
       },
       { accessorKey: "slot_key", header: "槽位" },
       {
         accessorKey: "status",
         header: "状态",
-        cell: ({ row }) => <Badge variant="secondary">{row.original.status}</Badge>,
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {MODEL_STATUS_NAMES[row.original.status] || row.original.status}
+          </Badge>
+        ),
       },
       {
         id: "actions",
@@ -324,7 +346,7 @@ export function TrainingPage() {
         id: "label",
         header: "对象 / 属性",
         cell: ({ row }) =>
-          `${row.original.object || row.original.task_id} · ${row.original.property || row.original.status || ""}`,
+          `${row.original.object || row.original.task_id} · ${row.original.property || (row.original.status ? TRAINING_TASK_STATUS_NAMES[row.original.status] || row.original.status : "")}`,
       },
       {
         id: "open",
@@ -376,18 +398,82 @@ export function TrainingPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-1">
-        {TRAINING_STEPS.map((s) => (
-          <Button
-            key={s.id}
-            size="xs"
-            variant={s.id === step ? "default" : "outline"}
-            className={cn(s.id === step && "pointer-events-none")}
-            onClick={() => setStep(s.id)}
-          >
-            {s.id}. {s.title}
-          </Button>
-        ))}
+      <div className="rounded-lg border bg-muted/20 px-3 py-4 sm:px-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium">训练流程</p>
+            <p className="text-xs text-muted-foreground">
+              {id ? `第 ${step} 步，共 ${TRAINING_STEPS.length} 步` : "先从一句话需求开始"}
+            </p>
+          </div>
+          {id ? (
+            <Badge variant="secondary">
+              已完成 {Math.max(0, maxReachedStep - (step <= maxReachedStep ? 1 : 0))} / {TRAINING_STEPS.length}
+            </Badge>
+          ) : null}
+        </div>
+        <nav aria-label="训练步骤" className="overflow-x-auto pb-1">
+          <ol className="flex min-w-[760px] items-start">
+            {TRAINING_STEPS.map((s, index) => {
+              const isCurrent = s.id === step;
+              const isComplete = s.id < maxReachedStep;
+              const isAvailable = s.id <= maxReachedStep;
+
+              return (
+                <li key={s.id} className="flex min-w-0 flex-1 items-start">
+                  <button
+                    type="button"
+                    aria-label={`第 ${s.id} 步：${s.title}`}
+                    aria-current={isCurrent ? "step" : undefined}
+                    aria-disabled={!isAvailable}
+                    disabled={!isAvailable}
+                    onClick={() => goToStep(s.id)}
+                    className={cn(
+                      "group flex min-w-[82px] flex-1 flex-col items-center gap-2 rounded-md px-1 text-center outline-none transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      !isAvailable && "cursor-not-allowed opacity-55",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex size-8 items-center justify-center rounded-full border text-sm font-semibold transition-colors",
+                        isCurrent && "border-primary bg-primary text-primary-foreground shadow-sm",
+                        isComplete && !isCurrent && "border-primary bg-primary/10 text-primary",
+                        !isCurrent && !isComplete && "border-border bg-background text-muted-foreground",
+                        isAvailable && !isCurrent && "group-hover:border-primary/60 group-hover:text-primary",
+                      )}
+                    >
+                      {isComplete ? (
+                        <Check aria-hidden="true" className="size-4" />
+                      ) : isAvailable ? (
+                        s.id
+                      ) : (
+                        <Lock aria-hidden="true" className="size-3.5" />
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "whitespace-nowrap text-xs font-medium",
+                        isCurrent ? "text-foreground" : isComplete ? "text-primary" : "text-muted-foreground",
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                  </button>
+                  {index < TRAINING_STEPS.length - 1 ? (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "mt-4 h-px min-w-3 flex-1 bg-border transition-colors",
+                        s.id < maxReachedStep && "bg-primary/60",
+                      )}
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
       </div>
 
       <div className="space-y-4 rounded-lg border p-4">
@@ -461,7 +547,7 @@ export function TrainingPage() {
               <Button onClick={() => confirmDef.mutate()} disabled={confirmDef.isPending}>
                 确认并进入下一步
               </Button>
-              <Button variant="destructive" onClick={() => setStep(1)}>
+              <Button variant="destructive" onClick={() => goToStep(1)}>
                 返回改需求
               </Button>
             </div>
@@ -545,10 +631,10 @@ export function TrainingPage() {
               >
                 保存区域
               </Button>
-              <Button variant="outline" onClick={() => setStep(4)}>
+              <Button variant="outline" onClick={() => goToStep(4)}>
                 下一步：自动标注
               </Button>
-              <Button variant="destructive" onClick={() => setStep(2)}>
+              <Button variant="destructive" onClick={() => goToStep(2)}>
                 返回
               </Button>
             </div>
@@ -606,10 +692,10 @@ export function TrainingPage() {
               <p className="text-sm text-muted-foreground">队列已空，可以去训练。</p>
             )}
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setStep(5)}>
+              <Button variant="outline" onClick={() => goToStep(5)}>
                 下一步：训练
               </Button>
-              <Button variant="destructive" onClick={() => setStep(3)}>
+              <Button variant="destructive" onClick={() => goToStep(3)}>
                 返回
               </Button>
             </div>
@@ -627,15 +713,16 @@ export function TrainingPage() {
                 开始训练
               </Button>
               <span className="text-sm text-muted-foreground">
-                {(trainQuery.data?.status || task?.train?.status || "idle") +
+                {(TRAINING_RUN_STATUS_NAMES[trainQuery.data?.status || task?.train?.status || "idle"] ||
+                  trainQuery.data?.status || task?.train?.status || "idle") +
                   (trainQuery.data?.error ? ` · ${trainQuery.data.error}` : "")}
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setStep(6)}>
+              <Button variant="outline" onClick={() => goToStep(6)}>
                 查看评估
               </Button>
-              <Button variant="destructive" onClick={() => setStep(4)}>
+              <Button variant="destructive" onClick={() => goToStep(4)}>
                 返回
               </Button>
             </div>
@@ -654,10 +741,10 @@ export function TrainingPage() {
               </ul>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setStep(7)}>
+              <Button variant="outline" onClick={() => goToStep(7)}>
                 去部署
               </Button>
-              <Button variant="destructive" onClick={() => setStep(5)}>
+              <Button variant="destructive" onClick={() => goToStep(5)}>
                 返回
               </Button>
             </div>
@@ -695,7 +782,7 @@ export function TrainingPage() {
                 emptyMessage="还没有登记模型。"
               />
             )}
-            <Button variant="destructive" onClick={() => setStep(6)}>
+            <Button variant="destructive" onClick={() => goToStep(6)}>
               返回
             </Button>
           </>

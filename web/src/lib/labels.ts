@@ -55,3 +55,53 @@ export const PERSON_CHANNEL_KINDS: Record<string, string> = {
   dingtalk: "钉钉",
   wecom: "企业微信",
 };
+
+export const CAMERA_STATUS_NAMES: Record<string, string> = {
+  running: "运行中",
+  stopped: "已停止",
+  error: "异常",
+};
+
+export const VLM_STATUS_NAMES: Record<string, string> = {
+  pending: "待复核",
+  skipped: "已跳过",
+  done: "已完成",
+  failed: "复核失败",
+};
+
+export const MODEL_STATUS_NAMES: Record<string, string> = {
+  registered: "已登记",
+  live: "线上运行",
+  previous: "上一版本",
+  retired: "已退役",
+};
+
+export const TRAINING_TASK_STATUS_NAMES: Record<string, string> = {
+  draft: "草稿",
+  confirmed: "已确认",
+};
+
+export const TRAINING_RUN_STATUS_NAMES: Record<string, string> = {
+  idle: "未开始",
+  running: "训练中",
+  done: "已完成",
+  failed: "训练失败",
+};
+
+export const DEVICE_NAMES: Record<string, string> = {
+  auto: "自动选择",
+  cpu: "CPU",
+  mps: "Apple GPU",
+  cuda: "NVIDIA GPU",
+};
+
+export const DETECTOR_NAMES: Record<string, string> = {
+  yolo: "YOLO 检测器",
+  mock: "模拟检测器",
+};
+
+export const ACTOR_NAMES: Record<string, string> = {
+  local: "本机操作",
+  agent: "智能代理",
+  system: "系统",
+};

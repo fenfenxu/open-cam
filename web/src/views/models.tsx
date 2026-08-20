@@ -92,14 +92,18 @@ export function ModelsPage() {
           <div className="space-y-2">
             <Label>模型来源</Label>
             <Select value={sourceType} onValueChange={(value) => value && setSourceType(value as ModelSourceType)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue>{modelSourceLabel(sourceType)}</SelectValue>
+              </SelectTrigger>
               <SelectContent>{MODEL_SOURCE_TYPES.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
             <Label>模型类型</Label>
             <Select value={modelKind} onValueChange={(value) => value && setModelKind(value as ModelKind)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue>{modelKindLabel(modelKind)}</SelectValue>
+              </SelectTrigger>
               <SelectContent>{MODEL_KINDS.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>

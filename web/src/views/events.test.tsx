@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventsPage } from "./events";
@@ -40,11 +40,46 @@ describe("EventsPage filters", () => {
     render(<EventsPage />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText("全部摄像头")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "摄像头：全部摄像头" })).toBeInTheDocument();
     });
-    expect(screen.getByText("全部类型")).toBeInTheDocument();
-    expect(screen.getByText("全部状态")).toBeInTheDocument();
-    expect(screen.getByText("全部判定")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "类型：全部类型" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "状态：全部状态" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "VLM 判定：全部判定" })).toBeInTheDocument();
     expect(screen.queryByText("__all__")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重置筛选" })).toBeDisabled();
+  });
+
+  it("resets all filters back to their defaults", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.startsWith("/api/cameras")) {
+          return jsonResp([{ id: 1, name: "演示摄像头" }]);
+        }
+        if (url.startsWith("/api/events")) return jsonResp([]);
+        return jsonResp({ detail: url }, 404);
+      }),
+    );
+
+    render(<EventsPage />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "类型：全部类型" })).toBeInTheDocument();
+    });
+    const starred = screen.getByRole("checkbox", { name: "仅看关注" });
+    fireEvent.click(starred);
+
+    const reset = screen.getByRole("button", { name: "重置筛选" });
+    await waitFor(() => expect(reset).not.toBeDisabled());
+    expect(starred).toBeChecked();
+
+    fireEvent.click(reset);
+
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "类型：全部类型" })).toBeInTheDocument();
+    });
+    expect(starred).not.toBeChecked();
+    expect(reset).toBeDisabled();
   });
 });

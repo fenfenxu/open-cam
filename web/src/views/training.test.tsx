@@ -48,6 +48,9 @@ describe("TrainingPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /说需求/ })).toBeInTheDocument();
     });
+    expect(screen.getByRole("navigation", { name: "训练步骤" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "第 1 步：说需求" })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("button", { name: "确认定义" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /生成任务定义/ })).toBeInTheDocument();
   });
 });

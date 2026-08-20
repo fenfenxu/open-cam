@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Star } from "lucide-react";
+import { RotateCcw, Star } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
 import { DetailDrawer } from "@/components/app/detail-drawer";
+import { LabeledSelect } from "@/components/app/labeled-select";
 import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,10 +21,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError, fmtTime, resolveApiUrl } from "@/lib/api";
 import {
+  ACTOR_NAMES,
   ACTION_NAMES,
   HUMAN_VERDICT_NAMES,
   RULE_TYPE_NAMES,
   STATUS_NAMES,
+  VLM_STATUS_NAMES,
   VLM_VERDICT_NAMES,
 } from "@/lib/labels";
 
@@ -80,6 +83,15 @@ type Filters = {
   verdict: string;
   starred: boolean;
   includeObserve: boolean;
+};
+
+const DEFAULT_FILTERS: Filters = {
+  cameraId: ALL,
+  ruleType: ALL,
+  status: ALL,
+  verdict: ALL,
+  starred: false,
+  includeObserve: false,
 };
 
 function jsonBody(method: string, body: unknown): RequestInit {
@@ -139,33 +151,6 @@ function fmtPayload(a: EventAction): string {
   return "";
 }
 
-function FilterSelect({
-  value,
-  onChange,
-  items,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  items: { value: string; label: string }[];
-}) {
-  const selected = items.find((item) => item.value === value);
-  return (
-    <Select value={value} onValueChange={(next) => onChange(next ?? ALL)}>
-      <SelectTrigger aria-label={selected?.label}>
-        {/* Base UI 的 Value 默认显示 value 本身，必须显式传入文案 */}
-        <SelectValue>{selected?.label}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {items.map((item) => (
-          <SelectItem key={item.value} value={item.value}>
-            {item.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
 function EventClipPlayer({ event }: { event: CamEvent }) {
   const [failed, setFailed] = useState(false);
   const start = event.clip_start ?? 0;
@@ -188,7 +173,7 @@ function EventClipPlayer({ event }: { event: CamEvent }) {
 
   return (
     <video
-      className="w-full rounded-md bg-black"
+      className="aspect-video w-full rounded-lg bg-black object-contain"
       controls
       autoPlay
       playsInline
@@ -217,14 +202,7 @@ function Kv({ label, children }: { label: string; children: ReactNode }) {
 
 export function EventsPage() {
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<Filters>({
-    cameraId: ALL,
-    ruleType: ALL,
-    status: ALL,
-    verdict: ALL,
-    starred: false,
-    includeObserve: false,
-  });
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [openId, setOpenId] = useState<number | null>(null);
   const [assigneeId, setAssigneeId] = useState<string>(ALL);
   const [note, setNote] = useState("");
@@ -407,7 +385,9 @@ export function EventsPage() {
         header: "VLM 判定",
         cell: ({ row }) => (
           <Badge variant="secondary">
-            {row.original.vlm_verdict || row.original.vlm_status}
+            {row.original.vlm_verdict
+              ? VLM_VERDICT_NAMES[row.original.vlm_verdict] || row.original.vlm_verdict
+              : VLM_STATUS_NAMES[row.original.vlm_status] || row.original.vlm_status}
           </Badge>
         ),
       },
@@ -447,6 +427,13 @@ export function EventsPage() {
         : tasksQuery.isError
           ? "无法加载训练任务"
           : "没有已确认的训练任务";
+  const hasActiveFilters =
+    filters.cameraId !== ALL ||
+    filters.ruleType !== ALL ||
+    filters.status !== ALL ||
+    filters.verdict !== ALL ||
+    filters.starred ||
+    filters.includeObserve;
 
   return (
     <div className="space-y-4">
@@ -461,9 +448,11 @@ export function EventsPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <FilterSelect
+        <LabeledSelect
+          label="摄像头"
           value={filters.cameraId}
           onChange={(cameraId) => setFilters((f) => ({ ...f, cameraId }))}
+          className="w-52"
           items={[
             { value: ALL, label: "全部摄像头" },
             ...(cameras.data ?? []).map((c) => ({
@@ -472,25 +461,31 @@ export function EventsPage() {
             })),
           ]}
         />
-        <FilterSelect
+        <LabeledSelect
+          label="类型"
           value={filters.ruleType}
           onChange={(ruleType) => setFilters((f) => ({ ...f, ruleType }))}
+          className="w-40"
           items={[
             { value: ALL, label: "全部类型" },
             ...Object.entries(RULE_TYPE_NAMES).map(([value, label]) => ({ value, label })),
           ]}
         />
-        <FilterSelect
+        <LabeledSelect
+          label="状态"
           value={filters.status}
           onChange={(status) => setFilters((f) => ({ ...f, status }))}
+          className="w-40"
           items={[
             { value: ALL, label: "全部状态" },
             ...Object.entries(STATUS_NAMES).map(([value, label]) => ({ value, label })),
           ]}
         />
-        <FilterSelect
+        <LabeledSelect
+          label="VLM 判定"
           value={filters.verdict}
           onChange={(verdict) => setFilters((f) => ({ ...f, verdict }))}
+          className="w-40"
           items={[
             { value: ALL, label: "全部判定" },
             ...Object.entries(VLM_VERDICT_NAMES).map(([value, label]) => ({ value, label })),
@@ -514,6 +509,17 @@ export function EventsPage() {
           />
           含观察记录
         </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          disabled={!hasActiveFilters}
+          onClick={() => setFilters(DEFAULT_FILTERS)}
+        >
+          <RotateCcw />
+          重置筛选
+        </Button>
       </div>
 
       {eventsQuery.isPending ? (
@@ -554,7 +560,7 @@ export function EventsPage() {
                 <img
                   src={resolveApiUrl(`/api/events/${event.id}/snapshot`)}
                   alt="快照"
-                  className="w-full rounded-md border"
+                  className="aspect-video w-full rounded-lg border bg-black object-contain"
                 />
               ) : null}
               <p className="text-xs text-muted-foreground">
@@ -578,8 +584,14 @@ export function EventsPage() {
               <Kv label="类型">{RULE_TYPE_NAMES[event.type] || event.type}</Kv>
               <Kv label="置信度">{event.confidence}</Kv>
               <Kv label="详情">{JSON.stringify(event.detail)}</Kv>
-              <Kv label="VLM 状态">{event.vlm_status}</Kv>
-              <Kv label="VLM 判定">{event.vlm_verdict || "—"}</Kv>
+              <Kv label="VLM 状态">
+                {VLM_STATUS_NAMES[event.vlm_status] || event.vlm_status}
+              </Kv>
+              <Kv label="VLM 判定">
+                {event.vlm_verdict
+                  ? VLM_VERDICT_NAMES[event.vlm_verdict] || event.vlm_verdict
+                  : "—"}
+              </Kv>
               <Kv label="VLM 理由">{event.vlm_reason || "—"}</Kv>
               <Kv label="人工判定">
                 {event.verdict ? HUMAN_VERDICT_NAMES[event.verdict] || event.verdict : "—"}
@@ -733,7 +745,11 @@ export function EventsPage() {
                     header: "操作",
                     cell: ({ row }) => ACTION_NAMES[row.original.action] || row.original.action,
                   },
-                  { accessorKey: "actor", header: "操作者" },
+                  {
+                    accessorKey: "actor",
+                    header: "操作者",
+                    cell: ({ row }) => ACTOR_NAMES[row.original.actor] || row.original.actor,
+                  },
                   {
                     id: "payload",
                     header: "细节",

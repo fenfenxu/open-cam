@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { resolveApiUrl } from "@/lib/api";
+import { CAMERA_STATUS_NAMES } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { Camera } from "@/lib/cameras";
 
@@ -85,7 +86,9 @@ export function VideoWall({
         <article key={camera.id} className="space-y-3 rounded-lg border p-3">
           <header className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-medium">{camera.name}</h3>
-            <span className="font-mono text-xs text-muted-foreground">{camera.status}</span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {CAMERA_STATUS_NAMES[camera.status] || camera.status}
+            </span>
           </header>
           <section className="space-y-2">
             <h4 className="text-xs font-medium text-muted-foreground">直播</h4>

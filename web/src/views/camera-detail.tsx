@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { SOURCE_TYPE_NAMES, type Camera, type ModelVersion } from "@/lib/cameras";
+import { CAMERA_STATUS_NAMES, MODEL_STATUS_NAMES } from "@/lib/labels";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
@@ -83,7 +84,9 @@ export function CameraDetailPage() {
         actions={
           cam ? (
             <div className="flex items-center gap-2">
-              <Badge variant="secondary">{cam.status}</Badge>
+              <Badge variant="secondary">
+                {CAMERA_STATUS_NAMES[cam.status] || cam.status}
+              </Badge>
               <Button variant="outline" render={<Link prefetch={false} href={`/rules?camera=${cam.id}`} />}>
                 配置规则
               </Button>
@@ -121,7 +124,9 @@ export function CameraDetailPage() {
             <div key={m.id} className="rounded-lg border p-3">
               <div className="flex items-center gap-2">
                 {m.slot_key}
-                <Badge variant="outline">{m.status}</Badge>
+                <Badge variant="outline">
+                  {MODEL_STATUS_NAMES[m.status] || m.status}
+                </Badge>
               </div>
               <p className="font-mono text-xs text-muted-foreground">
                 任务 {m.task_id} · 版本 {m.id}

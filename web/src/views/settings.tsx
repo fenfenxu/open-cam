@@ -4,6 +4,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
+import { LabeledSelect } from "@/components/app/labeled-select";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,7 +25,12 @@ import {
 } from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
 import { jsonBody, type Camera } from "@/lib/cameras";
-import { RULE_TYPE_NAMES, PERSON_CHANNEL_KINDS } from "@/lib/labels";
+import {
+  DETECTOR_NAMES,
+  DEVICE_NAMES,
+  PERSON_CHANNEL_KINDS,
+  RULE_TYPE_NAMES,
+} from "@/lib/labels";
 import { themeForSsr } from "@/lib/theme";
 import {
   VLM_PRESETS,
@@ -364,7 +370,8 @@ export function SettingsPage() {
             <div>
               <dt className="text-muted-foreground">推理设备</dt>
               <dd>
-                {info.device}（配置：{info.device_config}）
+                {DEVICE_NAMES[info.device] || info.device}（配置：
+                {DEVICE_NAMES[info.device_config] || info.device_config}）
               </dd>
             </div>
             <div>
@@ -380,7 +387,7 @@ export function SettingsPage() {
             <div>
               <dt className="text-muted-foreground">检测器</dt>
               <dd>
-                {info.detector}（{info.yolo_model}）
+                {DETECTOR_NAMES[info.detector] || info.detector}（{info.yolo_model}）
               </dd>
             </div>
             <div>
@@ -460,7 +467,9 @@ export function SettingsPage() {
             {isKimiCode ? (
               <Select value={model} onValueChange={(value) => value && setModel(value)}>
                 <SelectTrigger id="vlm-model" className="w-full max-w-lg">
-                  <SelectValue />
+                  <SelectValue>
+                    {KIMI_CODE_MODEL_OPTIONS.find((option) => option.value === model)?.label || model}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {KIMI_CODE_MODEL_OPTIONS.map((option) => (
@@ -484,7 +493,7 @@ export function SettingsPage() {
             ) : null}
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="vlm-key">API Key</Label>
+            <Label htmlFor="vlm-key">API 密钥</Label>
             <Input
               id="vlm-key"
               type="password"
@@ -590,43 +599,30 @@ export function SettingsPage() {
           />
           <Input
             className="min-w-56 flex-1"
-            placeholder="webhook URL"
+            placeholder="Webhook 地址"
             value={nWebhook}
             onChange={(e) => setNWebhook(e.target.value)}
           />
-          <Select value={nCamera} onValueChange={(v) => v && setNCamera(String(v))}>
-            <SelectTrigger className="w-44">
-              <SelectValue>
-                {nCamera === ALL
-                  ? "全部摄像头"
-                  : (() => {
-                      const camera = cameras.find((item) => String(item.id) === nCamera);
-                      return camera ? `[${camera.id}] ${camera.name}` : "选择摄像头";
-                    })()}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>全部摄像头</SelectItem>
-              {cameras.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  [{c.id}] {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={nRule} onValueChange={(v) => v && setNRule(String(v))}>
-            <SelectTrigger className="w-36">
-              <SelectValue>{nRule === ALL ? "全部类型" : RULE_TYPE_NAMES[nRule] || "选择类型"}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>全部类型</SelectItem>
-              {Object.entries(RULE_TYPE_NAMES).map(([k, v]) => (
-                <SelectItem key={k} value={k}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LabeledSelect
+            label="摄像头"
+            value={nCamera}
+            onChange={setNCamera}
+            className="w-48"
+            items={[
+              { value: ALL, label: "全部摄像头" },
+              ...cameras.map((c) => ({ value: String(c.id), label: `[${c.id}] ${c.name}` })),
+            ]}
+          />
+          <LabeledSelect
+            label="类型"
+            value={nRule}
+            onChange={setNRule}
+            className="w-40"
+            items={[
+              { value: ALL, label: "全部类型" },
+              ...Object.entries(RULE_TYPE_NAMES).map(([value, label]) => ({ value, label })),
+            ]}
+          />
           <Button type="submit" disabled={addChannel.isPending}>
             添加
           </Button>
@@ -705,57 +701,39 @@ export function SettingsPage() {
             value={pLogin}
             onChange={(e) => setPLogin(e.target.value)}
           />
-          <Select value={pKind} onValueChange={(v) => v && setPKind(String(v))}>
-            <SelectTrigger className="w-28">
-              <SelectValue>{PERSON_CHANNEL_KINDS[pKind] || "选择渠道"}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(PERSON_CHANNEL_KINDS).map(([k, v]) => (
-                <SelectItem key={k} value={k}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LabeledSelect
+            label="渠道"
+            value={pKind}
+            onChange={setPKind}
+            className="w-32"
+            items={Object.entries(PERSON_CHANNEL_KINDS).map(([value, label]) => ({ value, label }))}
+          />
           <Input
             className="min-w-48 flex-1"
             placeholder="个人 webhook（可选）"
             value={pWebhook}
             onChange={(e) => setPWebhook(e.target.value)}
           />
-          <Select value={pCamera} onValueChange={(v) => v && setPCamera(String(v))}>
-            <SelectTrigger className="w-44">
-              <SelectValue>
-                {pCamera === ALL
-                  ? "全部摄像头"
-                  : (() => {
-                      const camera = cameras.find((item) => String(item.id) === pCamera);
-                      return camera ? `[${camera.id}] ${camera.name}` : "选择摄像头";
-                    })()}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>全部摄像头</SelectItem>
-              {cameras.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  [{c.id}] {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={pRule} onValueChange={(v) => v && setPRule(String(v))}>
-            <SelectTrigger className="w-36">
-              <SelectValue>{pRule === ALL ? "全部类型" : RULE_TYPE_NAMES[pRule] || "选择类型"}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>全部类型</SelectItem>
-              {Object.entries(RULE_TYPE_NAMES).map(([k, v]) => (
-                <SelectItem key={k} value={k}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LabeledSelect
+            label="摄像头"
+            value={pCamera}
+            onChange={setPCamera}
+            className="w-48"
+            items={[
+              { value: ALL, label: "全部摄像头" },
+              ...cameras.map((c) => ({ value: String(c.id), label: `[${c.id}] ${c.name}` })),
+            ]}
+          />
+          <LabeledSelect
+            label="类型"
+            value={pRule}
+            onChange={setPRule}
+            className="w-40"
+            items={[
+              { value: ALL, label: "全部类型" },
+              ...Object.entries(RULE_TYPE_NAMES).map(([value, label]) => ({ value, label })),
+            ]}
+          />
           <Button type="submit" disabled={addPerson.isPending}>
             添加员工
           </Button>

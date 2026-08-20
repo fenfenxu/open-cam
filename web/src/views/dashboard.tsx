@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { api, fmtTime, resolveApiUrl } from "@/lib/api";
 import { SOURCE_TYPE_NAMES, type Camera } from "@/lib/cameras";
+import { CAMERA_STATUS_NAMES } from "@/lib/labels";
 import {
   FOOTFALL_IN_COLOR,
   FOOTFALL_OUT_COLOR,
@@ -65,7 +66,7 @@ function CameraCard({ camera }: { camera: Camera }) {
       <header className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-medium">{camera.name}</h3>
         <Badge variant={camera.status === "running" ? "default" : "secondary"}>
-          {camera.status}
+          {CAMERA_STATUS_NAMES[camera.status] || camera.status}
         </Badge>
       </header>
       <p className="font-mono text-xs text-muted-foreground">

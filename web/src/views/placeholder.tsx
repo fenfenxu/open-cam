@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
+import { CAMERA_STATUS_NAMES } from "@/lib/labels";
 
 type Camera = {
   id: number;
@@ -28,7 +29,7 @@ export function PlaceholderPage({ title }: { title: string }) {
           {cameras.data.length === 0 && <li>暂无摄像头</li>}
           {cameras.data.map((cam) => (
             <li key={cam.id}>
-              {cam.name}（#{cam.id} · {cam.status}）
+              {cam.name}（#{cam.id} · {CAMERA_STATUS_NAMES[cam.status] || cam.status}）
             </li>
           ))}
         </ul>
