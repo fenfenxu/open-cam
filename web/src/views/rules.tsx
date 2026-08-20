@@ -65,7 +65,7 @@ export function RulesPage() {
 
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
   const presetsQuery = useQuery({
     queryKey: ["rule-presets"],
@@ -79,7 +79,7 @@ export function RulesPage() {
 
   const rulesQuery = useQuery({
     queryKey: ["camera-rules", cameraId],
-    queryFn: () => api<CameraRule[]>(`/cameras/${cameraId}/rules`),
+    queryFn: () => api<CameraRule[]>(`/api/cameras/${cameraId}/rules`),
     enabled: Number.isFinite(cameraId),
   });
 
@@ -106,7 +106,7 @@ export function RulesPage() {
     mutationFn: async () => {
       if (!preset || !Number.isFinite(cameraId)) throw new Error("请选择摄像头和场景");
       const name = String(values.name ?? "").trim() || preset.display_name;
-      return api(`/cameras/${cameraId}/rules`, jsonBody("POST", {
+      return api(`/api/cameras/${cameraId}/rules`, jsonBody("POST", {
         name,
         type: preset.type,
         params: buildRuleParams(preset, values, points),
@@ -128,7 +128,7 @@ export function RulesPage() {
 
   const deleteRule = useMutation({
     mutationFn: (ruleId: number) =>
-      api(`/cameras/${cameraId}/rules/${ruleId}`, { method: "DELETE" }),
+      api(`/api/cameras/${cameraId}/rules/${ruleId}`, { method: "DELETE" }),
     onSuccess: async () => {
       toast.success("规则已删除");
       await queryClient.invalidateQueries({ queryKey: ["camera-rules", cameraId] });
@@ -144,7 +144,7 @@ export function RulesPage() {
     }
     if (!Number.isFinite(cameraId)) return;
     setPoints([]);
-    setSnapshotUrl(resolveApiUrl(`/cameras/${cameraId}/snapshot.jpg?t=${Date.now()}`));
+    setSnapshotUrl(resolveApiUrl(`/api/cameras/${cameraId}/snapshot.jpg?t=${Date.now()}`));
     setStep(3);
   }
 

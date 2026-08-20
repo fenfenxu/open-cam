@@ -150,7 +150,8 @@ def previous_of(session: Session, slot_key: str) -> Optional[ModelVersion]:
 
 def register_version(session: Session, task_id: str,
                      metrics: Optional[dict[str, Any]] = None,
-                     artifact_path: Optional[str] = None) -> ModelVersion:
+                     artifact_path: Optional[str] = None,
+                     model_asset_id: Optional[int] = None) -> ModelVersion:
     if not task_exists(task_id):
         raise RegistryError("训练任务不存在", 404)
     definition = load_definition(task_id)
@@ -165,6 +166,7 @@ def register_version(session: Session, task_id: str,
     dest = _safe_artifact(dest)
     row = ModelVersion(
         task_id=task_id,
+        model_asset_id=model_asset_id,
         slot_key=slot,
         artifact_path=str(dest),
         metrics=normalized,

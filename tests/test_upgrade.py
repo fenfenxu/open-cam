@@ -331,23 +331,23 @@ def test_snapshot_path_relative_and_legacy_absolute(client, tmp_settings):
     tmp_settings.snapshot_dir.mkdir(parents=True, exist_ok=True)
     (tmp_settings.snapshot_dir / "new.jpg").write_bytes(b"\xff\xd8\xff")
     rel_id = _insert_event("snapshots/new.jpg")
-    assert client.get(f"/events/{rel_id}/snapshot").status_code == 200
+    assert client.get(f"/api/events/{rel_id}/snapshot").status_code == 200
 
     # 旧格式：绝对路径仍可读
     legacy = tmp_settings.data_dir / "old.jpg"
     legacy.write_bytes(b"\xff\xd8\xff")
     abs_id = _insert_event(str(legacy))
-    assert client.get(f"/events/{abs_id}/snapshot").status_code == 200
+    assert client.get(f"/api/events/{abs_id}/snapshot").status_code == 200
 
     # 旧格式：相对仓库根目录的 CWD 路径（data/snapshots/xxx.jpg）
     (tmp_settings.snapshot_dir / "cwd.jpg").write_bytes(b"\xff\xd8\xff")
     cwd_id = _insert_event("data/snapshots/cwd.jpg")
-    assert client.get(f"/events/{cwd_id}/snapshot").status_code == 200
+    assert client.get(f"/api/events/{cwd_id}/snapshot").status_code == 200
 
     # 路径穿越被拒
     evil_id = _insert_event("../secret.jpg")
-    assert client.get(f"/events/{evil_id}/snapshot").status_code == 404
+    assert client.get(f"/api/events/{evil_id}/snapshot").status_code == 404
 
     # 文件已丢失
     gone_id = _insert_event("snapshots/gone.jpg")
-    assert client.get(f"/events/{gone_id}/snapshot").status_code == 404
+    assert client.get(f"/api/events/{gone_id}/snapshot").status_code == 404

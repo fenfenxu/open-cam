@@ -20,7 +20,7 @@ from ..models import (EVENT_ACKED, EVENT_IGNORED, EVENT_LOGGED, EVENT_OPEN,
 from ..notify import notifier
 from ..training.feedback import FeedbackError, ingest_event_feedback
 
-router = APIRouter(prefix="/events", tags=["events"])
+router = APIRouter(prefix="/api/events", tags=["events"])
 
 
 class EventFeedback(BaseModel):

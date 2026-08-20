@@ -15,7 +15,7 @@ def client(tmp_settings):
 
 
 def test_upload_video(client, tmp_settings):
-    resp = client.post("/cameras/upload",
+    resp = client.post("/api/cameras/upload",
                        files={"file": ("demo.mp4", b"fake-video-bytes", "video/mp4")})
     assert resp.status_code == 201, resp.text
     path = resp.json()["path"]
@@ -25,16 +25,16 @@ def test_upload_video(client, tmp_settings):
 
 
 def test_upload_rejects_unsupported_ext(client):
-    resp = client.post("/cameras/upload",
+    resp = client.post("/api/cameras/upload",
                        files={"file": ("notes.txt", b"hello", "text/plain")})
     assert resp.status_code == 400
     assert "不支持的视频格式" in resp.json()["detail"]
 
 
 def test_upload_duplicate_name_not_overwritten(client, tmp_settings):
-    r1 = client.post("/cameras/upload",
+    r1 = client.post("/api/cameras/upload",
                      files={"file": ("a.avi", b"first", "video/avi")})
-    r2 = client.post("/cameras/upload",
+    r2 = client.post("/api/cameras/upload",
                      files={"file": ("a.avi", b"second", "video/avi")})
     assert r1.status_code == 201 and r2.status_code == 201
     p1, p2 = r1.json()["path"], r2.json()["path"]

@@ -102,7 +102,7 @@ def run(base_url: str, interval: float, webhook: Optional[str],
         logger.info("监控 Agent 已启动，轮询 %s (间隔 %.1fs)", base_url, interval)
         while True:
             try:
-                events = client.get("/events", params={"acked": "false",
+                events = client.get("/api/events", params={"acked": "false",
                                                        "limit": 50}).json()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("拉取事件失败: %s", exc)
@@ -131,7 +131,7 @@ def run(base_url: str, interval: float, webhook: Optional[str],
                 if webhook:
                     push_webhook(client, webhook, report)
                 try:
-                    client.post(f"/events/{event['id']}/ack")
+                    client.post(f"/api/events/{event['id']}/ack")
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("ack 事件 %d 失败: %s", event["id"], exc)
             time.sleep(interval)
@@ -139,7 +139,7 @@ def run(base_url: str, interval: float, webhook: Optional[str],
 
 def _safe_cameras(client: httpx.Client) -> list[dict]:
     try:
-        return client.get("/cameras").json()
+        return client.get("/api/cameras").json()
     except Exception:  # noqa: BLE001
         return []
 

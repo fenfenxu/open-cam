@@ -25,7 +25,7 @@ def client(tmp_settings):
 
 
 def _make_camera(client) -> int:
-    resp = client.post("/cameras", json={
+    resp = client.post("/api/cameras", json={
         "name": "测试摄像头", "source_type": "file",
         "source_uri": "/tmp/nonexistent.mp4",
     })
@@ -61,7 +61,7 @@ def test_camera_and_rule_crud(client):
     camera_id = _make_camera(client)
 
     # 规则 CRUD
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "zone_intrusion",
         "params": {"polygon": [[0, 0], [100, 0], [100, 100], [0, 100]]},
         "cooldown": 5,
@@ -70,19 +70,19 @@ def test_camera_and_rule_crud(client):
     rule = resp.json()
     assert rule["camera_id"] == camera_id
 
-    resp = client.get(f"/cameras/{camera_id}/rules")
+    resp = client.get(f"/api/cameras/{camera_id}/rules")
     assert len(resp.json()) == 1
 
-    resp = client.put(f"/cameras/{camera_id}/rules/{rule['id']}", json={
+    resp = client.put(f"/api/cameras/{camera_id}/rules/{rule['id']}", json={
         "type": "object_count", "params": {"class": "person", "threshold": 2},
         "enabled": False, "cooldown": 10,
     })
     assert resp.status_code == 200
     assert resp.json()["type"] == "object_count"
 
-    resp = client.delete(f"/cameras/{camera_id}/rules/{rule['id']}")
+    resp = client.delete(f"/api/cameras/{camera_id}/rules/{rule['id']}")
     assert resp.status_code == 204
-    assert client.get(f"/cameras/{camera_id}/rules").json() == []
+    assert client.get(f"/api/cameras/{camera_id}/rules").json() == []
 
 
 def test_events_query_filters_and_pagination(client):
@@ -91,47 +91,47 @@ def test_events_query_filters_and_pagination(client):
         _insert_event(camera_id, "zone_intrusion")
     _insert_event(camera_id, "loitering")
 
-    resp = client.get("/events", params={"camera_id": camera_id})
+    resp = client.get("/api/events", params={"camera_id": camera_id})
     assert resp.status_code == 200
     assert len(resp.json()) == 4
 
-    resp = client.get("/events", params={"rule_type": "loitering"})
+    resp = client.get("/api/events", params={"rule_type": "loitering"})
     assert len(resp.json()) == 1
 
-    resp = client.get("/events", params={"camera_id": camera_id,
+    resp = client.get("/api/events", params={"camera_id": camera_id,
                                          "limit": 2, "offset": 1})
     assert len(resp.json()) == 2
 
     # acked 过滤：全部未确认
-    assert len(client.get("/events", params={"acked": "false"}).json()) == 4
-    assert client.get("/events", params={"acked": "true"}).json() == []
+    assert len(client.get("/api/events", params={"acked": "false"}).json()) == 4
+    assert client.get("/api/events", params={"acked": "true"}).json() == []
 
 
 def test_event_detail_and_ack(client):
     camera_id = _make_camera(client)
     event_id = _insert_event(camera_id)
 
-    resp = client.get(f"/events/{event_id}")
+    resp = client.get(f"/api/events/{event_id}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["type"] == "zone_intrusion"
     assert body["vlm_status"] == "pending"
     assert body["acked"] is False
 
-    resp = client.post(f"/events/{event_id}/ack")
+    resp = client.post(f"/api/events/{event_id}/ack")
     assert resp.status_code == 200
     assert resp.json()["acked"] is True
 
     # 404 路径
-    assert client.get("/events/9999").status_code == 404
-    assert client.post("/events/9999/ack").status_code == 404
+    assert client.get("/api/events/9999").status_code == 404
+    assert client.post("/api/events/9999/ack").status_code == 404
 
 
 def test_camera_not_found_and_snapshot_unavailable(client):
-    assert client.get("/cameras/999").status_code == 404
+    assert client.get("/api/cameras/999").status_code == 404
     camera_id = _make_camera(client)
     # 未运行的摄像头没有帧
-    assert client.get(f"/cameras/{camera_id}/snapshot.jpg").status_code == 503
+    assert client.get(f"/api/cameras/{camera_id}/snapshot.jpg").status_code == 503
 
 
 def test_event_disposition_flow(client):
@@ -140,12 +140,12 @@ def test_event_disposition_flow(client):
     event_id = _insert_event(camera_id)
     person = client.post("/api/people", json={"name": "张三"}).json()
 
-    body = client.get(f"/events/{event_id}").json()
+    body = client.get(f"/api/events/{event_id}").json()
     assert body["status"] == "open"
     assert body["starred"] is False
     assert body["assignee"] is None
 
-    resp = client.patch(f"/events/{event_id}", json={
+    resp = client.patch(f"/api/events/{event_id}", json={
         "starred": True, "assignee_id": person["id"], "note": "夜班跟进"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -154,15 +154,15 @@ def test_event_disposition_flow(client):
     assert body["assignee_id"] == person["id"]
     assert body["note"] == "夜班跟进"
 
-    resp = client.patch(f"/events/{event_id}", json={
+    resp = client.patch(f"/api/events/{event_id}", json={
         "verdict": "confirmed"})
     assert resp.json()["status"] == "acked"
     assert resp.json()["verdict"] == "confirmed"
 
-    resp = client.patch(f"/events/{event_id}", json={"status": "resolved"})
+    resp = client.patch(f"/api/events/{event_id}", json={"status": "resolved"})
     assert resp.json()["status"] == "resolved"
 
-    actions = client.get(f"/events/{event_id}/actions").json()
+    actions = client.get(f"/api/events/{event_id}/actions").json()
     kinds = [a["action"] for a in actions]
     assert "star" in kinds
     assert "assign" in kinds
@@ -170,13 +170,13 @@ def test_event_disposition_flow(client):
     assert "verdict" in kinds
     assert kinds.count("status") >= 2
 
-    assert client.patch(f"/events/{event_id}",
+    assert client.patch(f"/api/events/{event_id}",
                         json={"status": "bogus"}).status_code == 422
-    assert client.patch(f"/events/{event_id}",
+    assert client.patch(f"/api/events/{event_id}",
                         json={"assignee": "自由文本"}).status_code == 400
 
-    assert client.patch("/events/9999", json={"starred": True}).status_code == 404
-    assert client.get("/events/9999/actions").status_code == 404
+    assert client.patch("/api/events/9999", json={"starred": True}).status_code == 404
+    assert client.get("/api/events/9999/actions").status_code == 404
 
 
 def test_event_status_and_starred_filters(client):
@@ -185,14 +185,14 @@ def test_event_status_and_starred_filters(client):
     e2 = _insert_event(camera_id, "loitering")
     _insert_event(camera_id)
 
-    client.patch(f"/events/{e1}", json={"starred": True})
-    client.patch(f"/events/{e2}", json={"status": "ignored"})
+    client.patch(f"/api/events/{e1}", json={"starred": True})
+    client.patch(f"/api/events/{e2}", json={"status": "ignored"})
 
-    assert len(client.get("/events", params={"starred": "true"}).json()) == 1
-    assert len(client.get("/events", params={"status": "open"}).json()) == 2
-    assert len(client.get("/events", params={"status": "ignored"}).json()) == 1
+    assert len(client.get("/api/events", params={"starred": "true"}).json()) == 1
+    assert len(client.get("/api/events", params={"status": "open"}).json()) == 2
+    assert len(client.get("/api/events", params={"status": "ignored"}).json()) == 1
     # ignored 视为已处理：acked 同步置真
-    assert client.get(f"/events/{e2}").json()["acked"] is True
+    assert client.get(f"/api/events/{e2}").json()["acked"] is True
 
 
 def test_event_exposes_camera_and_clip_window(client):
@@ -200,7 +200,7 @@ def test_event_exposes_camera_and_clip_window(client):
     camera_id = _make_camera(client)
     event_id = _insert_event(camera_id, source_offset=12.5)
 
-    body = client.get(f"/events/{event_id}").json()
+    body = client.get(f"/api/events/{event_id}").json()
     assert body["camera_id"] == camera_id
     assert body["camera_name"] == "测试摄像头"
     assert body["source_filename"] == "nonexistent.mp4"
@@ -208,7 +208,7 @@ def test_event_exposes_camera_and_clip_window(client):
     assert body["clip_start"] == pytest.approx(10.5)
     assert body["clip_end"] == pytest.approx(15.5)
 
-    listed = client.get("/events", params={"camera_id": camera_id}).json()
+    listed = client.get("/api/events", params={"camera_id": camera_id}).json()
     assert listed[0]["camera_name"] == "测试摄像头"
     assert listed[0]["source_offset"] == pytest.approx(12.5)
 
@@ -216,50 +216,50 @@ def test_event_exposes_camera_and_clip_window(client):
 def test_event_clip_replays_source_segment(client, tmp_path):
     video = tmp_path / "scene.mp4"
     _write_tiny_mp4(video)
-    camera_id = client.post("/cameras", json={
+    camera_id = client.post("/api/cameras", json={
         "name": "回放摄像头", "source_type": "file", "source_uri": str(video),
     }).json()["id"]
     event_id = _insert_event(camera_id, source_offset=1.2)
 
-    resp = client.get(f"/events/{event_id}/clip")
+    resp = client.get(f"/api/events/{event_id}/clip")
     assert resp.status_code == 200, resp.text
     assert resp.headers["content-type"].startswith("video/")
     assert len(resp.content) > 100
 
     bare = _insert_event(camera_id, source_offset=None)
-    assert client.get(f"/events/{bare}/clip").status_code == 404
-    assert client.get("/events/9999/clip").status_code == 404
+    assert client.get(f"/api/events/{bare}/clip").status_code == 404
+    assert client.get("/api/events/9999/clip").status_code == 404
 
 
 def test_rtsp_event_has_camera_name_but_no_clip(client):
-    camera_id = client.post("/cameras", json={
+    camera_id = client.post("/api/cameras", json={
         "name": "门口枪机", "source_type": "rtsp",
         "source_uri": "rtsp://127.0.0.1:8554/test",
     }).json()["id"]
     event_id = _insert_event(camera_id)
 
-    body = client.get(f"/events/{event_id}").json()
+    body = client.get(f"/api/events/{event_id}").json()
     assert body["camera_name"] == "门口枪机"
     assert body["source_filename"] is None
     assert body["source_offset"] is None
-    assert client.get(f"/events/{event_id}/clip").status_code == 404
+    assert client.get(f"/api/events/{event_id}/clip").status_code == 404
 
 
 def test_ack_writes_status_and_action(client):
     camera_id = _make_camera(client)
     event_id = _insert_event(camera_id)
 
-    resp = client.post(f"/events/{event_id}/ack")
+    resp = client.post(f"/api/events/{event_id}/ack")
     assert resp.json()["status"] == "acked"
     assert resp.json()["acked"] is True
 
-    actions = client.get(f"/events/{event_id}/actions").json()
+    actions = client.get(f"/api/events/{event_id}/actions").json()
     assert [a["action"] for a in actions] == ["ack"]
 
 
 def test_rule_default_intent_line_crossing_observe(client):
     camera_id = _make_camera(client)
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "line_crossing",
         "params": {"line": [[0, 120], [320, 120]], "direction": "both"},
     })
@@ -270,7 +270,7 @@ def test_rule_default_intent_line_crossing_observe(client):
 
 def test_rule_default_intent_intrusion_alert(client):
     camera_id = _make_camera(client)
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "zone_intrusion",
         "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
     })
@@ -280,7 +280,7 @@ def test_rule_default_intent_intrusion_alert(client):
 
 def test_rule_rejects_bad_intent(client):
     camera_id = _make_camera(client)
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "zone_intrusion",
         "intent": "banana",
         "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
@@ -290,14 +290,14 @@ def test_rule_rejects_bad_intent(client):
 
 def test_rule_rejects_bad_escalate(client):
     camera_id = _make_camera(client)
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "zone_intrusion",
         "escalate": {"mode": "nope"},
         "params": {"polygon": [[0, 0], [10, 0], [10, 10], [0, 10]]},
     })
     assert resp.status_code == 400, resp.text
     assert "escalate" in str(resp.json()["detail"])
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "zone_intrusion",
         "escalate": {"mode": "immediate",
                      "compound": {"metric": "foo", "op": "gte", "value": 1}},
@@ -322,11 +322,11 @@ def test_events_needs_action_filter(client):
         todo_id, obs_id = todo.id, obs.id
     finally:
         session.close()
-    ids = {e["id"] for e in client.get("/events").json()}
+    ids = {e["id"] for e in client.get("/api/events").json()}
     assert todo_id in ids and obs_id in ids
-    only_todo = client.get("/events", params={"needs_action": True}).json()
+    only_todo = client.get("/api/events", params={"needs_action": True}).json()
     assert {e["id"] for e in only_todo} == {todo_id}
-    only_obs = client.get("/events", params={"needs_action": False}).json()
+    only_obs = client.get("/api/events", params={"needs_action": False}).json()
     assert {e["id"] for e in only_obs} == {obs_id}
 
 
@@ -334,14 +334,14 @@ def test_verdict_false_alarm_sets_ignored(client):
     camera_id = _make_camera(client)
     event_id = _insert_event(camera_id)
 
-    resp = client.patch(f"/events/{event_id}", json={"verdict": "false_alarm"})
+    resp = client.patch(f"/api/events/{event_id}", json={"verdict": "false_alarm"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["verdict"] == "false_alarm"
     assert body["status"] == "ignored"
     assert body["acked"] is True
 
-    actions = client.get(f"/events/{event_id}/actions").json()
+    actions = client.get(f"/api/events/{event_id}/actions").json()
     assert [a["action"] for a in actions] == ["verdict", "status"]
 
 
@@ -349,7 +349,7 @@ def test_resolved_requires_confirmed_verdict(client):
     camera_id = _make_camera(client)
     event_id = _insert_event(camera_id)
 
-    resp = client.patch(f"/events/{event_id}", json={"status": "resolved"})
+    resp = client.patch(f"/api/events/{event_id}", json={"status": "resolved"})
     assert resp.status_code == 400, resp.text
     assert "属实" in resp.json()["detail"]
 
@@ -367,9 +367,9 @@ def test_observe_event_cannot_be_disposed(client):
     finally:
         session.close()
 
-    assert client.patch(f"/events/{event_id}",
+    assert client.patch(f"/api/events/{event_id}",
                         json={"status": "acked"}).status_code == 400
-    assert client.patch(f"/events/{event_id}",
+    assert client.patch(f"/api/events/{event_id}",
                         json={"verdict": "confirmed"}).status_code == 400
-    assert client.patch(f"/events/{event_id}",
+    assert client.patch(f"/api/events/{event_id}",
                         json={"starred": True}).status_code == 200

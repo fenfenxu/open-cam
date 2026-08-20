@@ -1,10 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Monitor, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/app/data-table";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,6 +25,7 @@ import {
 import { api, ApiError } from "@/lib/api";
 import { jsonBody, type Camera } from "@/lib/cameras";
 import { RULE_TYPE_NAMES, PERSON_CHANNEL_KINDS } from "@/lib/labels";
+import { themeForSsr } from "@/lib/theme";
 import {
   VLM_PRESETS,
   KIMI_CODE_MODEL_OPTIONS,
@@ -28,6 +37,12 @@ import {
 } from "@/lib/system";
 
 const ALL = "__all__";
+
+const THEMES = [
+  { value: "light", label: "浅色", icon: Sun },
+  { value: "dark", label: "深色", icon: Moon },
+  { value: "system", label: "跟随系统", icon: Monitor },
+] as const;
 
 type PersonRow = { id: number; name: string; login_name: string | null };
 type EventRoutingRow = {
@@ -45,6 +60,8 @@ function errorMessage(err: unknown): string {
 }
 
 export function SettingsPage() {
+  const { theme, setTheme } = useTheme();
+  const [themeMounted, setThemeMounted] = useState(false);
   const queryClient = useQueryClient();
   const [preset, setPreset] = useState("custom");
   const [baseUrl, setBaseUrl] = useState("");
@@ -90,7 +107,7 @@ export function SettingsPage() {
   });
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
 
   const cameras = camerasQuery.data ?? [];
@@ -98,6 +115,8 @@ export function SettingsPage() {
   const people = peopleQuery.data ?? [];
   const routings = routingsQuery.data ?? [];
   const vlm = vlmQuery.data;
+
+  useEffect(() => setThemeMounted(true), []);
 
   useEffect(() => {
     if (infoQuery.isError) toast.error(errorMessage(infoQuery.error));
@@ -303,10 +322,34 @@ export function SettingsPage() {
   const vlmStatus = vlm?.configured
     ? `已配置${vlm.api_key_hint ? `（${vlm.api_key_hint}）` : ""}，来源：${vlm.api_key_source === "env" ? "环境变量" : "本页保存"}`
     : "未配置，训练解析和事件复核都需要它";
+  const currentTheme =
+    THEMES.find((item) => item.value === themeForSsr(theme, themeMounted)) ?? THEMES[2];
+  const ThemeIcon = currentTheme.icon;
 
   return (
     <div className="space-y-6">
       <PageHeader title="设置" />
+
+      <section className="space-y-3 rounded-lg border p-4">
+        <div>
+          <h2 className="text-lg font-medium">外观</h2>
+          <p className="text-sm text-muted-foreground">选择控制台的显示主题。</p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+            <ThemeIcon />
+            主题：{currentTheme.label}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {THEMES.map((item) => (
+              <DropdownMenuItem key={item.value} onClick={() => setTheme(item.value)}>
+                <item.icon />
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </section>
 
       <section className="space-y-3 rounded-lg border p-4">
         <h2 className="text-lg font-medium">系统信息</h2>

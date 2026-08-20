@@ -36,7 +36,7 @@ export function DevBanner({
     <div className="border-b border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm">
       <p className="font-medium">{status.title}</p>
       <p className="mt-1 text-muted-foreground">{status.detail}</p>
-      {status.state === "need_apply" && status.can_apply && (
+      {status.state === "need_apply" && status.reload_on && status.can_apply && (
         <Button className="mt-2" size="sm" onClick={onApply}>
           确认并重启
         </Button>

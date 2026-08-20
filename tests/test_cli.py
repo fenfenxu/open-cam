@@ -357,7 +357,7 @@ def test_api_get_cameras_matches_list(cli_env, capsys):
     run_cli(capsys, "cameras", "create", "--name", "x",
             "--source-type", "file", "--source-uri", "/tmp/x.mp4")
     listed = run_cli(capsys, "cameras", "list")
-    via_api = run_cli(capsys, "api", "GET", "/cameras")
+    via_api = run_cli(capsys, "api", "GET", "/api/cameras")
     assert via_api == listed
 
 
@@ -372,6 +372,6 @@ def test_api_write_binary_to_file(cli_env, capsys, tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "_request", fake_request)
     dest = tmp_path / "x.jpg"
-    out = run_cli(capsys, "api", "GET", "/cameras/1/snapshot.jpg", "-o", str(dest))
+    out = run_cli(capsys, "api", "GET", "/api/cameras/1/snapshot.jpg", "-o", str(dest))
     assert out["ok"] is True
     assert dest.read_bytes() == jpeg

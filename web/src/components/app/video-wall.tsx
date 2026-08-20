@@ -22,7 +22,7 @@ function LivePane({ camera }: { camera: Camera }) {
         ref={imgRef}
         className="w-full rounded-md bg-black"
         alt={`${camera.name} 直播`}
-        src={resolveApiUrl(`/cameras/${camera.id}/live.mjpg`)}
+        src={resolveApiUrl(`/api/cameras/${camera.id}/live.mjpg`)}
       />
     );
   }
@@ -33,7 +33,7 @@ function LivePane({ camera }: { camera: Camera }) {
       <img
         className="max-h-64 w-full rounded-md border object-contain"
         alt="暂无画面"
-        src={resolveApiUrl(`/cameras/${camera.id}/snapshot.jpg`)}
+        src={resolveApiUrl(`/api/cameras/${camera.id}/snapshot.jpg`)}
         onError={(ev) => {
           ev.currentTarget.style.display = "none";
         }}
@@ -56,7 +56,7 @@ function ReplayPane({ camera }: { camera: Camera }) {
       className="w-full rounded-md bg-black"
       controls
       playsInline
-      src={resolveApiUrl(`/cameras/${camera.id}/source`)}
+      src={resolveApiUrl(`/api/cameras/${camera.id}/source`)}
       onError={() => setFailed(true)}
     />
   );

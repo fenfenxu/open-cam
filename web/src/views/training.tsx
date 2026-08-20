@@ -61,19 +61,19 @@ export function TrainingPage() {
 
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
   const videosQuery = useQuery({
     queryKey: ["videos"],
-    queryFn: () => api<VideoAsset[]>("/videos").catch(() => [] as VideoAsset[]),
+    queryFn: () => api<VideoAsset[]>("/api/videos").catch(() => [] as VideoAsset[]),
   });
   const tasksQuery = useQuery({
     queryKey: ["training-tasks"],
-    queryFn: () => api<TrainingTask[]>("/training/tasks"),
+    queryFn: () => api<TrainingTask[]>("/api/training/tasks"),
   });
   const taskQuery = useQuery({
     queryKey: ["training-task", id],
-    queryFn: () => api<TrainingTask>(`/training/tasks/${id}`),
+    queryFn: () => api<TrainingTask>(`/api/training/tasks/${id}`),
     enabled: Boolean(id),
   });
   const vlmQuery = useQuery({
@@ -83,19 +83,19 @@ export function TrainingPage() {
   });
   const reviewQuery = useQuery({
     queryKey: ["training-review", id],
-    queryFn: () => api<ReviewQueue>(`/training/tasks/${id}/review`),
+    queryFn: () => api<ReviewQueue>(`/api/training/tasks/${id}/review`),
     enabled: Boolean(id) && step === 4,
   });
   const trainQuery = useQuery({
     queryKey: ["training-train", id],
-    queryFn: () => api<TrainState>(`/training/tasks/${id}/train`),
+    queryFn: () => api<TrainState>(`/api/training/tasks/${id}/train`),
     enabled: Boolean(id) && step === 5,
     refetchInterval: (q) => (q.state.data?.status === "running" ? 1500 : false),
   });
   const modelsQuery = useQuery({
     queryKey: ["models", id],
     queryFn: () =>
-      api<ModelVersion[]>(`/models?task_id=${encodeURIComponent(id!)}`).catch(
+      api<ModelVersion[]>(`/api/models?task_id=${encodeURIComponent(id!)}`).catch(
         () => [] as ModelVersion[],
       ),
     enabled: Boolean(id) && step === 7,
@@ -151,7 +151,7 @@ export function TrainingPage() {
   const defineTask = useMutation({
     mutationFn: () =>
       api<TrainingTask>(
-        "/training/tasks",
+        "/api/training/tasks",
         jsonBody("POST", { goal: goal.trim(), task_id: id || undefined }),
       ),
     onSuccess: async (created) => {
@@ -165,7 +165,7 @@ export function TrainingPage() {
 
   const confirmDef = useMutation({
     mutationFn: () =>
-      api(`/training/tasks/${id}/confirm`, jsonBody("POST", {
+      api(`/api/training/tasks/${id}/confirm`, jsonBody("POST", {
         definition: {
           object: object.trim(),
           property: property.trim(),
@@ -195,7 +195,7 @@ export function TrainingPage() {
             ? { video_id: Number(videoSrc) }
             : null;
       if (!payload) throw new Error("请选择摄像头或视频");
-      return api<{ written?: number }>(`/training/tasks/${id}/frames`, jsonBody("POST", payload));
+      return api<{ written?: number }>(`/api/training/tasks/${id}/frames`, jsonBody("POST", payload));
     },
     onSuccess: async (r) => {
       toast.success(`抽了 ${r.written ?? 0} 帧`);
@@ -207,7 +207,7 @@ export function TrainingPage() {
 
   const saveRegion = useMutation({
     mutationFn: () =>
-      api(`/training/tasks/${id}/region`, jsonBody("PUT", { region: points })),
+      api(`/api/training/tasks/${id}/region`, jsonBody("PUT", { region: points })),
     onSuccess: async () => {
       toast.success("区域已保存");
       await refreshTask();
@@ -217,7 +217,7 @@ export function TrainingPage() {
 
   const annotate = useMutation({
     mutationFn: () =>
-      api<AnnotateResult>(`/training/tasks/${id}/annotate`, { method: "POST" }),
+      api<AnnotateResult>(`/api/training/tasks/${id}/annotate`, { method: "POST" }),
     onSuccess: async (r) => {
       toast.success(`自动 ${r.auto}，待确认 ${r.review}`);
       await refreshTask();
@@ -229,7 +229,7 @@ export function TrainingPage() {
   const reviewAction = useMutation({
     mutationFn: (body: { action: string; label?: string; itemId: string }) =>
       api(
-        `/training/tasks/${id}/review/${body.itemId}`,
+        `/api/training/tasks/${id}/review/${body.itemId}`,
         jsonBody("POST", body.action === "skip" ? { action: "skip" } : { action: "confirm", label: body.label }),
       ),
     onSuccess: async () => {
@@ -240,7 +240,7 @@ export function TrainingPage() {
 
   const startTrain = useMutation({
     mutationFn: () =>
-      api(`/training/tasks/${id}/train`, jsonBody("POST", { epochs: 20 })),
+      api(`/api/training/tasks/${id}/train`, jsonBody("POST", { epochs: 20 })),
     onSuccess: async () => {
       toast.success("已开始训练");
       await queryClient.invalidateQueries({ queryKey: ["training-train", id] });
@@ -250,7 +250,7 @@ export function TrainingPage() {
 
   async function deploy(modelId: number, force: boolean) {
     const r = await api<{ reason?: string }>(
-      `/models/${modelId}/deploy`,
+      `/api/models/${modelId}/deploy`,
       jsonBody("POST", { force }),
     );
     toast.success(r.reason || "已部署");
@@ -260,7 +260,7 @@ export function TrainingPage() {
 
   const registerDeploy = useMutation({
     mutationFn: async (force: boolean) => {
-      const m = await api<ModelVersion>("/models", jsonBody("POST", { task_id: id }));
+      const m = await api<ModelVersion>("/api/models", jsonBody("POST", { task_id: id }));
       await deploy(m.id, force);
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -268,7 +268,7 @@ export function TrainingPage() {
 
   const rollback = useMutation({
     mutationFn: (modelId: number) =>
-      api<{ reason?: string }>(`/models/${modelId}/rollback`, { method: "POST" }),
+      api<{ reason?: string }>(`/api/models/${modelId}/rollback`, { method: "POST" }),
     onSuccess: async (r) => {
       toast.success(r.reason || "已回滚");
       await queryClient.invalidateQueries({ queryKey: ["models", id] });
@@ -345,7 +345,7 @@ export function TrainingPage() {
 
   const previewUrl =
     id && (task?.frames || 0) > 0
-      ? resolveApiUrl(`/training/tasks/${id}/preview.jpg?t=${task?.frames}`)
+      ? resolveApiUrl(`/api/training/tasks/${id}/preview.jpg?t=${task?.frames}`)
       : null;
   const reviewItem = reviewQuery.data?.items[0];
   const report = task?.train?.result || {};
@@ -573,7 +573,7 @@ export function TrainingPage() {
               <div className="space-y-2">
                 <img
                   className="max-h-64 rounded-md border object-contain"
-                  src={resolveApiUrl(`/training/tasks/${id}/crop/${reviewItem.id}.jpg`)}
+                  src={resolveApiUrl(`/api/training/tasks/${id}/crop/${reviewItem.id}.jpg`)}
                   alt="裁剪"
                 />
                 <p className="text-sm text-muted-foreground">

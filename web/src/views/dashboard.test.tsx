@@ -31,7 +31,7 @@ describe("DashboardPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.startsWith("/cameras")) return jsonResp([]);
+        if (url.startsWith("/api/cameras")) return jsonResp([]);
         return jsonResp({ detail: url }, 404);
       }),
     );
@@ -55,7 +55,7 @@ describe("DashboardPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/cameras") {
+        if (url === "/api/cameras") {
           return jsonResp([
             {
               id: 3,
@@ -66,7 +66,7 @@ describe("DashboardPage", () => {
             },
           ]);
         }
-        if (url.startsWith("/events?camera_id=3")) {
+        if (url.startsWith("/api/events?camera_id=3")) {
           return jsonResp([{ ts: 1_700_000_000 }]);
         }
         if (url.startsWith("/api/stats/footfall?camera_id=3")) {
@@ -99,7 +99,7 @@ describe("DashboardPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/cameras") {
+        if (url === "/api/cameras") {
           return jsonResp([
             {
               id: 1,
@@ -110,7 +110,7 @@ describe("DashboardPage", () => {
             },
           ]);
         }
-        if (url.startsWith("/events")) return jsonResp([]);
+        if (url.startsWith("/api/events")) return jsonResp([]);
         if (url.startsWith("/api/stats/footfall")) {
           return jsonResp({
             camera_id: 1,

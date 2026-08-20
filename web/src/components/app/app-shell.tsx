@@ -5,30 +5,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
+  BrainCircuit,
   BookOpen,
   Camera,
   ClipboardCheck,
   LayoutDashboard,
-  Monitor,
-  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   ShieldCheck,
-  Sun,
   Store,
 } from "lucide-react";
-import { useTheme } from "next-themes";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { DevBanner } from "@/components/app/dev-banner";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { api, resolveApiUrl } from "@/lib/api";
 import type { DevStatus } from "@/lib/system";
-import { themeForSsr } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
@@ -44,6 +35,7 @@ const NAV_GROUPS = [
     label: "策略与模型",
     items: [
       { to: "/rules", label: "规则", icon: ShieldCheck },
+      { to: "/models", label: "模型管理", icon: BrainCircuit },
       { to: "/training", label: "模型训练", icon: ClipboardCheck },
       { to: "/marketplace", label: "方案市场", icon: Store },
     ],
@@ -54,36 +46,36 @@ const NAV_GROUPS = [
   },
 ] as const;
 
-const THEMES = [
-  { value: "light", label: "浅色", icon: Sun },
-  { value: "dark", label: "深色", icon: Moon },
-  { value: "system", label: "跟随系统", icon: Monitor },
-] as const;
+const SIDEBAR_STORAGE_KEY = "opencam-sidebar-collapsed";
+let sidebarMemoryPreference = false;
 
-function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const resolved = themeForSsr(theme, mounted);
-  const current = THEMES.find((item) => item.value === resolved) ?? THEMES[2];
-  const Icon = current.icon;
+function subscribeSidebarPreference(onChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", onChange);
+  window.addEventListener("opencam-sidebar-change", onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener("opencam-sidebar-change", onChange);
+  };
+}
 
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-        <Icon />
-        主题
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {THEMES.map((item) => (
-          <DropdownMenuItem key={item.value} onClick={() => setTheme(item.value)}>
-            <item.icon />
-            {item.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+function getSidebarPreference() {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  } catch {
+    return sidebarMemoryPreference;
+  }
+}
+
+function setSidebarPreference(collapsed: boolean) {
+  sidebarMemoryPreference = collapsed;
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? "1" : "0");
+  } catch {
+    // 无痕模式或浏览器禁用存储时仍允许当前页面折叠。
+  }
+  window.dispatchEvent(new Event("opencam-sidebar-change"));
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -92,6 +84,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [health, setHealth] = useState<"ok" | "down">("ok");
   const [applyAt, setApplyAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const sidebarCollapsed = useSyncExternalStore(
+    subscribeSidebarPreference,
+    getSidebarPreference,
+    () => false,
+  );
 
   const devQuery = useQuery({
     queryKey: ["system-dev"],
@@ -144,12 +141,52 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-svh overflow-hidden bg-background text-foreground">
-      <aside className="flex h-svh min-h-0 w-56 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
-        <div className="px-4 py-4 text-base font-medium">open-cam</div>
-        <nav aria-label="主导航" className="min-h-0 flex flex-1 flex-col gap-5 overflow-y-auto px-2">
+      <aside
+        className={cn(
+          "flex h-svh min-h-0 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
+          sidebarCollapsed ? "w-16" : "w-56",
+        )}
+      >
+        <div
+          className={cn(
+            "flex items-center justify-between py-3",
+            sidebarCollapsed ? "px-2" : "px-4",
+          )}
+        >
+          <span
+            className={cn("text-base font-medium", sidebarCollapsed && "text-sm")}
+            aria-label="open-cam"
+            title={sidebarCollapsed ? "open-cam" : undefined}
+          >
+            {sidebarCollapsed ? "oc" : "open-cam"}
+          </span>
+          <button
+            type="button"
+            aria-label={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? "展开菜单" : "收起菜单"}
+            className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            onClick={() => setSidebarPreference(!sidebarCollapsed)}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen aria-hidden="true" className="size-4" />
+            ) : (
+              <PanelLeftClose aria-hidden="true" className="size-4" />
+            )}
+          </button>
+        </div>
+        <nav
+          aria-label="主导航"
+          className="min-h-0 flex flex-1 flex-col gap-5 overflow-y-auto px-2"
+        >
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="space-y-1">
-              <p className="px-2 text-[11px] font-medium tracking-wide text-muted-foreground">
+              <p
+                className={cn(
+                  "px-2 text-[11px] font-medium tracking-wide text-muted-foreground",
+                  sidebarCollapsed && "sr-only",
+                )}
+              >
                 {group.label}
               </p>
               {group.items.map((item) => {
@@ -163,15 +200,17 @@ export function AppShell({ children }: { children: ReactNode }) {
                     href={item.to}
                     prefetch={false}
                     aria-current={active ? "page" : undefined}
+                    title={sidebarCollapsed ? item.label : undefined}
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                      "flex items-center gap-2 rounded-md py-1.5 text-sm",
+                      sidebarCollapsed ? "justify-center px-2" : "px-2",
                       active
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground",
                     )}
                   >
                     <Icon aria-hidden="true" className="size-4" />
-                    {item.label}
+                    <span className={sidebarCollapsed ? "sr-only" : undefined}>{item.label}</span>
                   </Link>
                 );
               })}
@@ -182,19 +221,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               href="/docs"
               target="_blank"
               rel="noopener noreferrer"
+              title={sidebarCollapsed ? "API 文档" : undefined}
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
             >
               <BookOpen aria-hidden="true" className="size-4" />
-              API 文档
-              <span aria-hidden="true" className="ml-auto text-xs">↗</span>
+              <span className={sidebarCollapsed ? "sr-only" : undefined}>API 文档</span>
+              <span aria-hidden="true" className={cn("ml-auto text-xs", sidebarCollapsed && "hidden")}>↗</span>
             </a>
           </div>
         </nav>
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-end border-b px-4 py-2">
-          <ThemeToggle />
-        </header>
         <DevBanner
           status={devQuery.data ?? idle}
           health={health}

@@ -24,13 +24,13 @@ export function CameraDetailPage() {
 
   const cameraQuery = useQuery({
     queryKey: ["camera", cameraId],
-    queryFn: () => api<Camera>(`/cameras/${cameraId}`),
+    queryFn: () => api<Camera>(`/api/cameras/${cameraId}`),
     enabled: Number.isFinite(cameraId),
   });
 
   const modelsQuery = useQuery({
     queryKey: ["models"],
-    queryFn: () => api<ModelVersion[]>("/models"),
+    queryFn: () => api<ModelVersion[]>("/api/models"),
     enabled: Number.isFinite(cameraId),
   });
 
@@ -40,7 +40,7 @@ export function CameraDetailPage() {
 
   const toggleCamera = useMutation({
     mutationFn: (act: "start" | "stop") =>
-      api(`/cameras/${cameraId}/${act}`, { method: "POST" }),
+      api(`/api/cameras/${cameraId}/${act}`, { method: "POST" }),
     onSuccess: async (_data, act) => {
       toast.success(act === "start" ? "已启动" : "已停止");
       await queryClient.invalidateQueries({ queryKey: ["camera", cameraId] });
@@ -51,7 +51,7 @@ export function CameraDetailPage() {
 
   const rollback = useMutation({
     mutationFn: (modelId: number) =>
-      api<{ reason?: string }>(`/models/${modelId}/rollback`, { method: "POST" }),
+      api<{ reason?: string }>(`/api/models/${modelId}/rollback`, { method: "POST" }),
     onSuccess: async (data) => {
       toast.success(data.reason || "已回滚");
       await queryClient.invalidateQueries({ queryKey: ["models"] });

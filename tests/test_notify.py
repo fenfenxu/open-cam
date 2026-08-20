@@ -160,6 +160,6 @@ def test_resend_notify_requires_todo(client, monkeypatch):
     todo_id = _insert_todo(camera_id=1)
     obs_id = _insert_todo(camera_id=1, needs_action=False)
 
-    assert client.post(f"/events/{todo_id}/notify").status_code == 200
-    assert client.post(f"/events/{obs_id}/notify").status_code == 400
-    assert client.post("/events/9999/notify").status_code == 404
+    assert client.post(f"/api/events/{todo_id}/notify").status_code == 200
+    assert client.post(f"/api/events/{obs_id}/notify").status_code == 400
+    assert client.post("/api/events/9999/notify").status_code == 404

@@ -37,7 +37,7 @@ from ..training.storage import (
 )
 from ..training.train import training_manager, validate_trainable
 
-router = APIRouter(prefix="/training/tasks", tags=["training"])
+router = APIRouter(prefix="/api/training/tasks", tags=["training"])
 
 
 class CreateTask(BaseModel):

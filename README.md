@@ -49,26 +49,26 @@ make start          # 无 YOLO 模型：make start-mock
 
 控制台点仪表盘卡片进入摄像头详情：运行中显示 MJPEG 直播。仅视频文件源可在详情页拖进度回放；RTSP 直播不支持回放（不会在本机录像）。
 
-- `GET /cameras/{id}/live.mjpg` 实时预览
-- `GET /cameras/{id}/source` 文件源原片（RTSP 返回 400）
+- `GET /api/cameras/{id}/live.mjpg` 实时预览
+- `GET /api/cameras/{id}/source` 文件源原片（RTSP 返回 400）
 
 启动后打开 `http://127.0.0.1:8600/docs`（Swagger UI）或 `http://127.0.0.1:8600/redoc`（ReDoc）查看 API 文档；机器可读的 schema 在 `/openapi.json`。
 
 ### 接入一路视频文件
 
 ```bash
-curl -X POST http://127.0.0.1:8600/cameras \
+curl -X POST http://127.0.0.1:8600/api/cameras \
   -H 'Content-Type: application/json' \
   -d '{"name": "门口", "source_type": "file", "source_uri": "/path/to/video.mp4", "autostart": true}'
 
 # 配置一条全屏区域入侵规则（画面按 1280x720 示例）
-curl -X POST http://127.0.0.1:8600/cameras/1/rules \
+curl -X POST http://127.0.0.1:8600/api/cameras/1/rules \
   -H 'Content-Type: application/json' \
   -d '{"type": "zone_intrusion", "cooldown": 30,
        "params": {"polygon": [[0,400],[1280,400],[1280,720],[0,720]], "classes": ["person"]}}'
 
 # 查事件
-curl http://127.0.0.1:8600/events
+curl http://127.0.0.1:8600/api/events
 ```
 
 ### 用 ffmpeg 推一路本地 RTSP 测试流
@@ -78,7 +78,7 @@ curl http://127.0.0.1:8600/events
 ffmpeg -re -stream_loop -1 -i /path/to/video.mp4 -c copy -f rtsp rtsp://127.0.0.1:8554/test
 
 # 2) 以 rtsp 类型创建摄像头
-curl -X POST http://127.0.0.1:8600/cameras \
+curl -X POST http://127.0.0.1:8600/api/cameras \
   -H 'Content-Type: application/json' \
   -d '{"name": "测试流", "source_type": "rtsp",
        "source_uri": "rtsp://127.0.0.1:8554/test", "autostart": true}'
@@ -94,30 +94,30 @@ uv run python scripts/export_openapi.py
 
 | 方法与路径 | 说明 |
 |---|---|
-| `GET/POST /cameras` | 摄像头列表 / 创建（`autostart` 可创建即启动） |
-| `GET/DELETE /cameras/{id}` | 详情 / 删除（运行中会自动停止；级联规则、事件与快照，不删 uploads） |
-| `PUT /cameras/{id}` | 仅更新名称（改类型/视频源 409，请新建摄像头） |
-| `POST /cameras/{id}/start`、`/stop` | 启停采集与分析流水线 |
-| `POST /cameras/{id}/reconnect` | 重连运行中的摄像头（stopped 为 409） |
-| `POST /cameras/batch/start`、`/batch/stop` | 批量启停（body `{ids}`，空列表 422） |
-| `GET /cameras/{id}/snapshot.jpg` | 当前实时帧 JPEG |
-| `GET /cameras/{id}/live.mjpg` | 实时 MJPEG 预览（未运行或无帧 503） |
-| `GET /cameras/{id}/source` | 文件源原片回放（仅 `file`；RTSP 返回 400） |
-| `GET/POST /videos`、`GET/DELETE /videos/{id}` | 本机上传视频库（被摄像头 `source_uri` 引用时删除 409） |
-| `POST /cameras/upload` | 上传别名，与 `POST /videos` 同一套入库，响应含 `path` |
-| `GET/POST /cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
+| `GET/POST /api/cameras` | 摄像头列表 / 创建（`autostart` 可创建即启动） |
+| `GET/DELETE /api/cameras/{id}` | 详情 / 删除（运行中会自动停止；级联规则、事件与快照，不删 uploads） |
+| `PUT /api/cameras/{id}` | 仅更新名称（改类型/视频源 409，请新建摄像头） |
+| `POST /api/cameras/{id}/start`、`/stop` | 启停采集与分析流水线 |
+| `POST /api/cameras/{id}/reconnect` | 重连运行中的摄像头（stopped 为 409） |
+| `POST /api/cameras/batch/start`、`/batch/stop` | 批量启停（body `{ids}`，空列表 422） |
+| `GET /api/cameras/{id}/snapshot.jpg` | 当前实时帧 JPEG |
+| `GET /api/cameras/{id}/live.mjpg` | 实时 MJPEG 预览（未运行或无帧 503） |
+| `GET /api/cameras/{id}/source` | 文件源原片回放（仅 `file`；RTSP 返回 400） |
+| `GET/POST /api/videos`、`GET/DELETE /api/videos/{id}` | 本机上传视频库（被摄像头 `source_uri` 引用时删除 409） |
+| `POST /api/cameras/upload` | 上传别名，与 `POST /api/videos` 同一套入库，响应含 `path` |
+| `GET/POST /api/cameras/{id}/rules`、`PUT/DELETE .../{rule_id}` | 规则 CRUD（含 `name` 中文字段；旧式 type/params 直传仍兼容） |
 | `GET /api/rules/presets` | 规则场景化预设元数据（引导卡片数据源） |
 | `GET /api/stats/footfall?camera_id=&date=` | 分时段进出店客流（按本地小时分桶统计 observe 越线 in/out） |
 | `GET /api/stats/ops?camera_id=&date=` | 待办经营摘要：当日新开待办、状态/判定分桶、平均确认与处置时长 |
-| `GET /events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked` `status` `starred` `needs_action`，分页：`limit` `offset` |
+| `GET /api/events` | 事件列表，过滤：`camera_id` `rule_type` `vlm_verdict` `acked` `status` `starred` `needs_action`，分页：`limit` `offset` |
 
 > 事件分两类：观察（`intent=observe`，如越线计数，只记录进统计，不出现在待办箱）与待办（`needs_action=true`，需要人处置，流转 open → acked → resolved / ignored）。
-| `GET /events/{id}` | 事件详情（含 VLM 判定与理由、处置状态） |
-| `PATCH /events/{id}` | 处置编辑：状态（open/acked/resolved/ignored）/ 关注星标 / 负责人 / 备注，变更全程留痕 |
-| `GET /events/{id}/actions` | 处置时间线（关注/指派/状态/备注/通知的审计记录） |
-| `POST /events/{id}/ack` | 确认事件（同步 status=acked） |
-| `POST /events/{id}/notify` | 重发通知到匹配的渠道 |
-| `GET /events/{id}/snapshot` | 事件快照图 |
+| `GET /api/events/{id}` | 事件详情（含 VLM 判定与理由、处置状态） |
+| `PATCH /api/events/{id}` | 处置编辑：状态（open/acked/resolved/ignored）/ 关注星标 / 负责人 / 备注，变更全程留痕 |
+| `GET /api/events/{id}/actions` | 处置时间线（关注/指派/状态/备注/通知的审计记录） |
+| `POST /api/events/{id}/ack` | 确认事件（同步 status=acked） |
+| `POST /api/events/{id}/notify` | 重发通知到匹配的渠道 |
+| `GET /api/events/{id}/snapshot` | 事件快照图 |
 | `GET/POST /api/notify-channels`、`PATCH/DELETE .../{id}`、`POST .../{id}/test` | 通知渠道 CRUD 与测试推送（webhook，兼容飞书/企业微信/钉钉机器人；摄像头/规则类型留空表示全部） |
 | `GET /api/system/info` | 算力设备 / 内存 / 模型 / 方案包统计 / VLM 配置状态 |
 | `GET /api/packs`、`POST /api/packs/install`、`POST /api/packs/{id}/apply`、`DELETE /api/packs/{id}` | 方案包列出 / 安装 / 应用 / 卸载 |

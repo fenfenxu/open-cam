@@ -25,8 +25,8 @@ function SnapshotThumb({ camera }: { camera: Camera }) {
   }, [running, camera.id]);
 
   const src = running
-    ? resolveApiUrl(`/cameras/${camera.id}/snapshot.jpg?t=${tick || Date.now()}`)
-    : resolveApiUrl(`/cameras/${camera.id}/snapshot.jpg`);
+    ? resolveApiUrl(`/api/cameras/${camera.id}/snapshot.jpg?t=${tick || Date.now()}`)
+    : resolveApiUrl(`/api/cameras/${camera.id}/snapshot.jpg`);
 
   return (
     <img
@@ -43,7 +43,7 @@ function SnapshotThumb({ camera }: { camera: Camera }) {
 function CameraCard({ camera }: { camera: Camera }) {
   const eventsQuery = useQuery({
     queryKey: ["events", "dashboard", camera.id],
-    queryFn: () => api<EventSummary[]>(`/events?camera_id=${camera.id}&limit=50`),
+    queryFn: () => api<EventSummary[]>(`/api/events?camera_id=${camera.id}&limit=50`),
     refetchInterval: 5000,
   });
   const footfallQuery = useQuery({
@@ -96,7 +96,7 @@ function CameraCard({ camera }: { camera: Camera }) {
 export function DashboardPage() {
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
 
   const cameras = camerasQuery.data ?? [];

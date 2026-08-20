@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,9 @@ function errorMessage(err: unknown): string {
 export function MarketplacePage() {
   const queryClient = useQueryClient();
   const [source, setSource] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [legacyCam, setLegacyCam] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const packsQuery = useQuery({
     queryKey: ["packs"],
@@ -35,7 +37,7 @@ export function MarketplacePage() {
   });
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
   const onlineQuery = useQuery({
     queryKey: ["packs-online"],
@@ -61,11 +63,21 @@ export function MarketplacePage() {
   }, [packs, cameras]);
 
   const install = useMutation({
-    mutationFn: () =>
-      api<SolutionPack>("/api/packs/install", jsonBody("POST", { source: source.trim() })),
+    mutationFn: ({ source: installSource, file }: { source?: string; file?: File }) => {
+      if (file) {
+        const body = new FormData();
+        body.append("file", file);
+        return api<SolutionPack>("/api/packs/install-upload", { method: "POST", body });
+      }
+      return api<SolutionPack>(
+        "/api/packs/install",
+        jsonBody("POST", { source: installSource?.trim() ?? "" }),
+      );
+    },
     onSuccess: async (pack) => {
       toast.success(`已安装：${pack.name}`);
       setSource("");
+      setSelectedFile(null);
       await queryClient.invalidateQueries({ queryKey: ["packs"] });
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -113,11 +125,11 @@ export function MarketplacePage() {
         className="flex flex-wrap items-end gap-3 rounded-lg border p-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!source.trim()) {
+          if (!selectedFile && !source.trim()) {
             toast.error("请填写安装源");
             return;
           }
-          install.mutate();
+          install.mutate(selectedFile ? { file: selectedFile } : { source });
         }}
       >
         <div className="grid min-w-64 flex-1 gap-1.5">
@@ -125,13 +137,40 @@ export function MarketplacePage() {
           <Input
             id="install-src"
             value={source}
-            onChange={(e) => setSource(e.target.value)}
+            onChange={(e) => {
+              setSource(e.target.value);
+              if (selectedFile) setSelectedFile(null);
+            }}
             placeholder="本地目录 / pack.zip 路径 / https://... 包地址"
           />
         </div>
-        <Button type="submit" disabled={install.isPending}>
-          安装
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            aria-label="选择方案包文件"
+            className="hidden"
+            onChange={(e) => {
+              setSelectedFile(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={install.isPending}
+          >
+            选择方案包文件
+          </Button>
+          <Button type="submit" disabled={install.isPending}>
+            安装
+          </Button>
+        </div>
+        {selectedFile ? (
+          <p className="basis-full text-xs text-muted-foreground">已选择：{selectedFile.name}</p>
+        ) : null}
       </form>
       {onlineQuery.data?.note ? (
         <p className="text-sm text-muted-foreground">{onlineQuery.data.note}</p>

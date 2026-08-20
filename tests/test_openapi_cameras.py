@@ -17,12 +17,23 @@ def client(tmp_settings):
 def test_openapi_includes_camera_video_management_paths(client):
     spec = client.get("/openapi.json").json()
     paths = spec["paths"]
-    assert "/videos" in paths
-    assert "get" in paths["/videos"] and "post" in paths["/videos"]
-    assert "/videos/{video_id}" in paths
-    assert "put" in paths["/cameras/{camera_id}"]
-    assert "/cameras/batch/start" in paths
-    assert "/cameras/batch/stop" in paths
-    assert "/cameras/{camera_id}/reconnect" in paths
-    assert "/cameras/{camera_id}/live.mjpg" in paths
-    assert "/cameras/{camera_id}/source" in paths
+    assert "/api/videos" in paths
+    assert "get" in paths["/api/videos"] and "post" in paths["/api/videos"]
+    assert "/api/videos/{video_id}" in paths
+    assert "put" in paths["/api/cameras/{camera_id}"]
+    assert "/api/cameras/batch/start" in paths
+    assert "/api/cameras/batch/stop" in paths
+    assert "/api/cameras/{camera_id}/reconnect" in paths
+    assert "/api/cameras/{camera_id}/live.mjpg" in paths
+    assert "/api/cameras/{camera_id}/source" in paths
+
+
+def test_rest_namespace_does_not_collide_with_page_routes(client):
+    paths = client.get("/openapi.json").json()["paths"]
+    for path in paths:
+        assert path in {"/health"} or path == "/api" or path.startswith("/api/"), path
+    assert "/cameras" not in paths
+    assert "/events" not in paths
+    assert "/videos" not in paths
+    assert "/models" not in paths
+    assert "/training/tasks" not in paths

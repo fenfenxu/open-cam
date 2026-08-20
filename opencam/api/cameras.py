@@ -32,7 +32,7 @@ from ..pipeline import start_camera, stop_camera
 from ..streams.manager import camera_manager
 from .videos import store_upload
 
-router = APIRouter(prefix="/cameras", tags=["cameras"])
+router = APIRouter(prefix="/api/cameras", tags=["cameras"])
 
 
 def _health_for(camera_id: int, status: str) -> CameraHealth | None:
@@ -91,7 +91,7 @@ def _batch(ids: list[int], start: bool, session: Session) -> BatchResult:
 
 @router.post("/upload", response_model=VideoOut, status_code=201, summary="上传本地视频文件")
 def upload_video(file: UploadFile):
-    """别名：与 POST /videos 同一套入库，响应含 path 以兼容旧客户端。"""
+    """上传别名：与 POST /api/videos 同一套入库，响应含 path 以兼容旧客户端。"""
     return store_upload(file)
 
 
@@ -290,4 +290,3 @@ def camera_source(camera_id: int, session: Session = Depends(session_scope)):
         raise HTTPException(404, "源文件不存在")
     return FileResponse(
         path, media_type=media_type_for(path), filename=path.name)
-

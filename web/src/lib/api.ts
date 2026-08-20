@@ -24,21 +24,7 @@ function formatDetail(detail: unknown, fallback: string): string {
   return fallback;
 }
 
-const COLLIDING = [
-  "/cameras",
-  "/videos",
-  "/events",
-  "/rules",
-  "/training",
-  "/models",
-];
-
 export function resolveApiUrl(path: string): string {
-  const base = (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) || "";
-  if (!base) return path;
-  if (COLLIDING.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
-    return `${base.replace(/\/$/, "")}${path}`;
-  }
   return path;
 }
 

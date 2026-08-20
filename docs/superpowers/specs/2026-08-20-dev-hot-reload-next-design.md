@@ -61,8 +61,8 @@ make start  uvicorn --reload --reload-dir opencam
 | 去掉 | Vite、`@vitejs/plugin-react`、`react-router` 的浏览器路由（改 App Router） |
 | 保留 | React 19、Tailwind v4、shadcn/Base UI、TanStack Query、vitest（组件单测仍 jsdom） |
 | 生产单端口 | `next build` + `output: 'export'` 出静态文件；FastAPI 继续 SPA fallback。动态段在静态导出里用客户端 `useParams` 的页面必须能导出：相机/训练详情用客户端页 + 一条 `generateStaticParams` 返回空数组、`dynamicParams: true` **若 Next 16 export 不允许**，则生产改为导出一个 `app/[[...slug]]/page.tsx` 客户端壳、内部仍用现有页面组件按 `window.location.pathname` 渲染（保证 8600 单端口不挂 Node）。优先尝试按路由导出；建不过再退到 catch-all。 |
-| 代理 | `next.config.ts` `rewrites()`：`/api/:path*`、`/docs`、`/redoc`、`/health`、`/openapi.json`、`/videos`、`/models` → `http://127.0.0.1:8600/...`（对标 Multica 把 `/api` rewrite 到 Go） |
-| 撞名路径 | `/cameras`、`/events`、`/rules`、`/training` 既是页面也是 REST。Next 文件路由占页面；`api.ts` 对这些路径用 `NEXT_PUBLIC_API_URL`（默认 `http://127.0.0.1:8600`）直连 FastAPI。FastAPI 开发态允许 `5173` CORS。 |
+| 代理 | `next.config.ts` `rewrites()`：`/api/:path*`、`/docs`、`/redoc`、`/health`、`/openapi.json` → `http://127.0.0.1:8600/...`（对标 Multica 把 `/api` rewrite 到 Go） |
+| 路径边界 | 所有 REST 接口（包括图片、视频流和训练预览）统一位于 `/api/*`；页面 `/cameras`、`/events`、`/rules`、`/training` 等只保留前端路由，避免静态导出模式下页面导航与 API 响应发生冲突。 |
 
 `make start` = 后端 + `next dev --port 5173`。
 `make serve` = `make ui-build` 后以无热更新的单端口后端运行。
@@ -106,4 +106,4 @@ DDL 确认 UI：控制台一条醒目横幅或 Dialog（shadcn），**不要**�
 
 ## 文档
 
-`Makefile` help、`AGENTS.md`、`README.md`：本地开发 = `make start` + `make ui`，浏览器 **5173**。说明 Issues 胶囊来自 Next，不是产品功能。DDL 走横幅确认，不是 Issues。
+`Makefile` help、`AGENTS.md`、`README.md`：本地开发执行 `make start`，浏览器打开 **5173**。说明 Issues 胶囊来自 Next，不是产品功能。DDL 走横幅确认，不是 Issues。

@@ -14,7 +14,7 @@ from ..config import settings
 from ..db import get_session, session_scope
 from ..models import Camera, Video, VideoOut
 
-router = APIRouter(prefix="/videos", tags=["videos"])
+router = APIRouter(prefix="/api/videos", tags=["videos"])
 
 ALLOWED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".ts"}
 

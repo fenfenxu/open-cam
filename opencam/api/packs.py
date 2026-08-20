@@ -6,7 +6,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+import shutil
+import tempfile
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -50,6 +54,23 @@ class InstallRequest(BaseModel):
 def install(body: InstallRequest):
     try:
         return installer.install(body.source)
+    except PackError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/install-upload", status_code=201, summary="上传并安装方案包",
+             description="上传 .zip 方案包并安装。")
+def install_upload(file: UploadFile):
+    """接收浏览器选择的 ZIP 文件，再复用本地 ZIP 安装流程。"""
+    filename = Path(file.filename or "").name
+    if Path(filename).suffix.lower() != ".zip":
+        raise HTTPException(400, "请上传 .zip 方案包")
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".zip") as uploaded:
+            shutil.copyfileobj(file.file, uploaded)
+            uploaded.flush()
+            return installer.install(uploaded.name)
     except PackError as exc:
         raise HTTPException(400, str(exc)) from exc
 

@@ -119,7 +119,7 @@ _TAGS = [
     {"name": "system", "description": "本机算力与运行配置信息"},
     {"name": "account", "description": "市场平台账号（预留 stub，不强制登录）"},
     {"name": "training", "description": "自助训练：任务定义、抽帧、VLM 标注与人工确认队列"},
-    {"name": "models", "description": "训练模型版本登记、A/B 指标对比、部署与回滚"},
+    {"name": "models", "description": "模型资产登记、来源分类、模型关联，以及训练版本部署与回滚"},
 ]
 
 app = FastAPI(
@@ -184,12 +184,11 @@ def health():
 
 
 # ---- 本地 Web 控制台（Next 静态导出 web/out + History SPA fallback）----
-# REST 与前端同路径（如 GET /cameras）。只在真正打开页面时回 HTML；
-# fetch / XHR（Sec-Fetch-Dest=empty）走 JSON。HTML 禁止缓存，避免文档响应毒化后续 fetch。
+# REST 统一位于 /api 命名空间，页面 History 路由与接口不再共用 URL；
+# HTML 禁止缓存，避免开发时旧文档响应污染后续导航。
 
 DIST = Path(__file__).resolve().parents[1] / "web" / "out"
 _SPA_HTML_SKIP = {"/docs", "/redoc", "/openapi.json"}
-_REST_PAGE_PREFIXES = {"cameras", "videos", "events", "rules", "training", "models"}
 _SPA_HTML_HEADERS = {
     "Cache-Control": "no-store",
     "Vary": "Accept, Sec-Fetch-Dest",
@@ -235,7 +234,7 @@ def _console_index() -> FileResponse:
 
 @app.middleware("http")
 async def spa_html_navigation(request: Request, call_next):
-    """刷新 /events、/cameras 等 History 路由时返回 HTML，避免撞上 REST 出 JSON。"""
+    """刷新控制台 History 路由时返回 HTML，API 请求继续交给 FastAPI。"""
     if _is_html_navigation(request):
         path = request.url.path
         if path not in _SPA_HTML_SKIP and not path.startswith("/api/") and not path.startswith("/_next/"):
@@ -260,10 +259,9 @@ def console():
 
 @app.get("/{full_path:path}", include_in_schema=False)
 def spa(full_path: str):
+    if full_path.startswith("api/") and full_path.endswith("/"):
+        return RedirectResponse("/" + full_path.rstrip("/"), status_code=307)
     asset = _dist_file(full_path)
-    head = full_path.strip("/").split("/")[0] if full_path.strip("/") else ""
-    if head in _REST_PAGE_PREFIXES and (asset is None or asset.name == "index.html"):
-        return RedirectResponse("/" + full_path.strip("/"), status_code=307)
     if asset is not None:
         if asset.suffix == ".html" or asset.name == "index.html":
             return _html_file(asset)

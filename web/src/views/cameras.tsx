@@ -54,16 +54,17 @@ function errorMessage(err: unknown): string {
 export function CamerasPage() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [names, setNames] = useState<Record<number, string>>({});
+  const nameDrafts = useRef<Record<number, string>>({});
+  const dirtyNameIds = useRef(new Set<number>());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const camerasQuery = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
   const videosQuery = useQuery({
     queryKey: ["videos"],
-    queryFn: () => api<VideoAsset[]>("/videos"),
+    queryFn: () => api<VideoAsset[]>("/api/videos"),
   });
 
   useEffect(() => {
@@ -71,9 +72,18 @@ export function CamerasPage() {
   }, [camerasQuery.isError, camerasQuery.error]);
 
   useEffect(() => {
-    const next: Record<number, string> = {};
-    for (const cam of camerasQuery.data ?? []) next[cam.id] = cam.name;
-    setNames(next);
+    const cameraIds = new Set<number>();
+    for (const cam of camerasQuery.data ?? []) {
+      cameraIds.add(cam.id);
+      if (!dirtyNameIds.current.has(cam.id)) nameDrafts.current[cam.id] = cam.name;
+    }
+    for (const id of Object.keys(nameDrafts.current)) {
+      const cameraId = Number(id);
+      if (!cameraIds.has(cameraId)) {
+        delete nameDrafts.current[cameraId];
+        dirtyNameIds.current.delete(cameraId);
+      }
+    }
   }, [camerasQuery.data]);
 
   const form = useForm<CreateForm>({
@@ -90,7 +100,7 @@ export function CamerasPage() {
   const invalidateCameras = () => queryClient.invalidateQueries({ queryKey: ["cameras"] });
 
   const createCamera = useMutation({
-    mutationFn: (body: CreateForm) => api<Camera>("/cameras", jsonBody("POST", body)),
+    mutationFn: (body: CreateForm) => api<Camera>("/api/cameras", jsonBody("POST", body)),
     onSuccess: async () => {
       toast.success("摄像头已添加");
       setCreateOpen(false);
@@ -102,8 +112,10 @@ export function CamerasPage() {
 
   const renameCamera = useMutation({
     mutationFn: ({ id, name }: { id: number; name: string }) =>
-      api(`/cameras/${id}`, jsonBody("PUT", { name })),
-    onSuccess: async () => {
+      api(`/api/cameras/${id}`, jsonBody("PUT", { name })),
+    onSuccess: async (_data, { id, name }) => {
+      nameDrafts.current[id] = name;
+      dirtyNameIds.current.delete(id);
       toast.success("已保存");
       await invalidateCameras();
     },
@@ -112,7 +124,7 @@ export function CamerasPage() {
 
   const toggleCamera = useMutation({
     mutationFn: ({ id, act }: { id: number; act: "start" | "stop" }) =>
-      api(`/cameras/${id}/${act}`, { method: "POST" }),
+      api(`/api/cameras/${id}/${act}`, { method: "POST" }),
     onSuccess: async (_data, vars) => {
       toast.success(vars.act === "start" ? "已启动" : "已停止");
       await invalidateCameras();
@@ -121,7 +133,7 @@ export function CamerasPage() {
   });
 
   const deleteCamera = useMutation({
-    mutationFn: (id: number) => api(`/cameras/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => api(`/api/cameras/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
       toast.success("已删除");
       await invalidateCameras();
@@ -130,7 +142,7 @@ export function CamerasPage() {
   });
 
   const deleteVideo = useMutation({
-    mutationFn: (id: number) => api(`/videos/${id}`, { method: "DELETE" }),
+    mutationFn: (id: number) => api(`/api/videos/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
       toast.success("视频已删除");
       await queryClient.invalidateQueries({ queryKey: ["videos"] });
@@ -142,7 +154,7 @@ export function CamerasPage() {
     const body = new FormData();
     body.append("file", file);
     try {
-      const resp = await fetch(resolveApiUrl("/cameras/upload"), { method: "POST", body });
+      const resp = await fetch(resolveApiUrl("/api/cameras/upload"), { method: "POST", body });
       const payload = (await resp.json()) as { path?: string; detail?: unknown };
       if (!resp.ok) {
         throw new Error(
@@ -170,10 +182,11 @@ export function CamerasPage() {
         cell: ({ row }) => (
           <Input
             className="max-w-48"
-            value={names[row.original.id] ?? row.original.name}
-            onChange={(e) =>
-              setNames((prev) => ({ ...prev, [row.original.id]: e.target.value }))
-            }
+            defaultValue={nameDrafts.current[row.original.id] ?? row.original.name}
+            onChange={(e) => {
+              nameDrafts.current[row.original.id] = e.target.value;
+              dirtyNameIds.current.add(row.original.id);
+            }}
             aria-label={`摄像头 ${row.original.id} 名称`}
           />
         ),
@@ -220,7 +233,7 @@ export function CamerasPage() {
                 size="xs"
                 variant="outline"
                 onClick={() => {
-                  const name = (names[cam.id] ?? cam.name).trim();
+                  const name = (nameDrafts.current[cam.id] ?? cam.name).trim();
                   if (!name) {
                     toast.error("请填写名称");
                     return;
@@ -245,7 +258,7 @@ export function CamerasPage() {
         },
       },
     ],
-    [names, toggleCamera, renameCamera, deleteCamera],
+    [toggleCamera, renameCamera, deleteCamera],
   );
 
   const videoColumns = useMemo<DataTableColumn<VideoAsset>[]>(

@@ -20,7 +20,7 @@ def client(tmp_settings):
 
 
 def _make_camera(client) -> int:
-    resp = client.post("/cameras", json={
+    resp = client.post("/api/cameras", json={
         "name": "测试", "source_type": "file", "source_uri": "/tmp/x.mp4"})
     assert resp.status_code == 201
     return resp.json()["id"]
@@ -69,7 +69,7 @@ def test_presets_structure(client):
 
 def test_create_rule_with_name(client):
     camera_id = _make_camera(client)
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "name": "后厨禁入",
         "type": "zone_intrusion",
         "params": {"polygon": [[0, 0], [10, 0], [10, 10]]},
@@ -80,7 +80,7 @@ def test_create_rule_with_name(client):
 
 def test_create_rule_without_name_uses_default(client):
     camera_id = _make_camera(client)
-    resp = client.post(f"/cameras/{camera_id}/rules", json={
+    resp = client.post(f"/api/cameras/{camera_id}/rules", json={
         "type": "loitering",
         "params": {"duration": 60},
     })

@@ -56,17 +56,16 @@ def test_spa_fallback_unmatched_route(client):
 
 
 def test_events_api_still_json(client):
-    resp = client.get("/events")
+    resp = client.get("/api/events")
     assert resp.status_code == 200
     assert "application/json" in resp.headers["content-type"]
     assert isinstance(resp.json(), list)
 
 
 def test_cameras_fetch_not_html_when_sec_fetch_dest_empty(client):
-    """浏览器 fetch 的 Sec-Fetch-Dest 是 empty；即使 Accept 带 text/html 也必须走 REST。
-    否则 200 HTML 会被当成 JSON 解析，报 Unexpected token '<'。"""
+    """API 命名空间始终返回 JSON，不再与页面 History 路由争用同一个 URL。"""
     resp = client.get(
-        "/cameras",
+        "/api/cameras",
         headers={
             "Accept": "text/html,application/xhtml+xml,*/*",
             "Sec-Fetch-Dest": "empty",
@@ -87,9 +86,17 @@ def test_cameras_document_navigation_still_html(client):
     assert "open-cam" in resp.text
 
 
+def test_page_routes_are_not_rest_endpoints(client):
+    for path in ("/cameras", "/events"):
+        resp = client.get(path, headers={"Accept": "application/json"})
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "open-cam" in resp.text
+
+
 def test_cameras_trailing_slash_fetch_is_json(client):
-    """Next trailingSlash 会访问 /cameras/；目录 index.html 不能抢走 REST。"""
-    resp = client.get("/cameras/", headers={"Accept": "*/*"})
+    """API 的尾斜杠请求仍由 FastAPI 规范化到 JSON 接口。"""
+    resp = client.get("/api/cameras/", headers={"Accept": "*/*"})
     assert resp.status_code == 200
     assert "application/json" in resp.headers["content-type"]
     assert isinstance(resp.json(), list)

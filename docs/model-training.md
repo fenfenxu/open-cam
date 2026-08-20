@@ -89,9 +89,9 @@ VLM 配置走 OpenAI 兼容协议（`vlm_base_url` / `vlm_model` / `vlm_timeout`
 ## 模块划分（对应 open-cam 架构）
 
 - `opencam/training/`：任务定义、抽帧、标注流水线、训练执行、评估。
-- API：`POST /training/tasks`（创建任务，语义目标入参）、
-  `GET /training/tasks/{id}/review`（人工确认队列）、
-  `POST /training/tasks/{id}/train`、`POST /models/{id}/deploy|rollback`。
+- API：`POST /api/training/tasks`（创建任务，语义目标入参）、
+  `GET /api/training/tasks/{id}/review`（人工确认队列）、
+  `POST /api/training/tasks/{id}/train`、`POST /api/models/{id}/deploy|rollback`。
 - Web：新增"模型训练"页，按七步旅程做向导式界面；
   模型管理（版本、指标、部署/回滚）挂在摄像头详情下。
 - 模型产物与数据集存 `data/training/<task_id>/`，不进 git。

@@ -75,7 +75,7 @@ def _seed_dataset(task_id: str, spec: dict[str, int], confirmed: int = 2):
 def _wait_done(client, task_id: str, timeout: float = 5.0) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
-        body = client.get(f"/training/tasks/{task_id}/train").json()
+        body = client.get(f"/api/training/tasks/{task_id}/train").json()
         if body["status"] in ("done", "failed"):
             return body
         time.sleep(0.02)
@@ -219,7 +219,7 @@ def test_train_endpoint_runs_background_job(client, tmp_settings, monkeypatch):
         return {"task_id": task_id, "run_id": run_id, "passed": True}
 
     monkeypatch.setattr(train_module, "train_and_evaluate", fake_job)
-    resp = client.post("/training/tasks/t-api-train/train", json={"epochs": 3})
+    resp = client.post("/api/training/tasks/t-api-train/train", json={"epochs": 3})
     assert resp.status_code == 202, resp.text
     assert resp.json()["status"] == "running"
     assert resp.json()["run_id"]
@@ -238,8 +238,8 @@ def test_train_conflict_while_running(client, tmp_settings, monkeypatch):
         return {"task_id": task_id, "run_id": run_id}
 
     monkeypatch.setattr(train_module, "train_and_evaluate", slow_job)
-    assert client.post("/training/tasks/t-conflict/train").status_code == 202
-    resp = client.post("/training/tasks/t-conflict/train")
+    assert client.post("/api/training/tasks/t-conflict/train").status_code == 202
+    resp = client.post("/api/training/tasks/t-conflict/train")
     assert resp.status_code == 409
     gate.set()
     assert _wait_done(client, "t-conflict")["status"] == "done"
@@ -252,15 +252,15 @@ def test_train_failure_recorded(client, tmp_settings, monkeypatch):
         raise RuntimeError("磁盘满了")
 
     monkeypatch.setattr(train_module, "train_and_evaluate", boom)
-    assert client.post("/training/tasks/t-fail/train").status_code == 202
+    assert client.post("/api/training/tasks/t-fail/train").status_code == 202
     final = _wait_done(client, "t-fail")
     assert final["status"] == "failed"
     assert "磁盘满了" in final["error"]
 
 
 def test_train_unknown_task_404(client, tmp_settings):
-    assert client.post("/training/tasks/missing/train").status_code == 404
-    assert client.get("/training/tasks/missing/train").status_code == 404
+    assert client.post("/api/training/tasks/missing/train").status_code == 404
+    assert client.get("/api/training/tasks/missing/train").status_code == 404
 
 
 def test_train_without_dataset_400(client, tmp_settings):
@@ -268,7 +268,7 @@ def test_train_without_dataset_400(client, tmp_settings):
         "object": "垃圾桶", "property": "满溢状态",
         "classes": ["正常", "满溢"],
     })
-    resp = client.post("/training/tasks/t-empty/train")
+    resp = client.post("/api/training/tasks/t-empty/train")
     assert resp.status_code == 400
     assert "数据集" in resp.json()["detail"]
 
@@ -278,6 +278,6 @@ def test_train_status_idle_before_any_run(client, tmp_settings):
         "object": "垃圾桶", "property": "满溢状态",
         "classes": ["正常", "满溢"],
     })
-    body = client.get("/training/tasks/t-idle/train").json()
+    body = client.get("/api/training/tasks/t-idle/train").json()
     assert body["status"] == "idle"
     assert body["result"] is None

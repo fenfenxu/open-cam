@@ -192,7 +192,7 @@ function EventClipPlayer({ event }: { event: CamEvent }) {
       controls
       autoPlay
       playsInline
-      src={resolveApiUrl(`/events/${event.id}/clip`)}
+      src={resolveApiUrl(`/api/events/${event.id}/clip`)}
       onLoadedMetadata={(ev) => {
         const video = ev.currentTarget;
         if (video.duration > end - start + 1.5) video.currentTime = start;
@@ -232,7 +232,7 @@ export function EventsPage() {
 
   const cameras = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
 
   const eventsQuery = useQuery({
@@ -246,25 +246,25 @@ export function EventsPage() {
       if (filters.starred) params.set("starred", "true");
       if (!filters.includeObserve) params.set("needs_action", "true");
       params.set("limit", "100");
-      return api<CamEvent[]>(`/events?${params}`);
+      return api<CamEvent[]>(`/api/events?${params}`);
     },
   });
 
   const detailQuery = useQuery({
     queryKey: ["event", openId],
-    queryFn: () => api<CamEvent>(`/events/${openId}`),
+    queryFn: () => api<CamEvent>(`/api/events/${openId}`),
     enabled: openId != null,
   });
 
   const actionsQuery = useQuery({
     queryKey: ["event-actions", openId],
-    queryFn: () => api<EventAction[]>(`/events/${openId}/actions`),
+    queryFn: () => api<EventAction[]>(`/api/events/${openId}/actions`),
     enabled: openId != null,
   });
 
   const tasksQuery = useQuery({
     queryKey: ["training-tasks"],
-    queryFn: () => api<TrainingTask[]>("/training/tasks"),
+    queryFn: () => api<TrainingTask[]>("/api/training/tasks"),
     enabled: openId != null,
   });
 
@@ -308,7 +308,7 @@ export function EventsPage() {
       id: number;
       body: Record<string, unknown>;
       msg: string;
-    }) => api(`/events/${id}`, jsonBody("PATCH", body)),
+    }) => api(`/api/events/${id}`, jsonBody("PATCH", body)),
     onSuccess: async (_data, vars) => {
       toast.success(vars.msg);
       await invalidate();
@@ -318,7 +318,7 @@ export function EventsPage() {
 
   const starEvent = useMutation({
     mutationFn: ({ id, starred }: { id: number; starred: boolean }) =>
-      api(`/events/${id}`, jsonBody("PATCH", { starred })),
+      api(`/api/events/${id}`, jsonBody("PATCH", { starred })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["events"] });
     },
@@ -326,7 +326,7 @@ export function EventsPage() {
   });
 
   const notifyEvent = useMutation({
-    mutationFn: (id: number) => api(`/events/${id}/notify`, { method: "POST" }),
+    mutationFn: (id: number) => api(`/api/events/${id}/notify`, { method: "POST" }),
     onSuccess: () => {
       toast.success("已提交重发，稍后查看处置时间线");
       window.setTimeout(() => {
@@ -338,7 +338,7 @@ export function EventsPage() {
 
   const feedback = useMutation({
     mutationFn: ({ id, kind, taskId }: { id: number; kind: string; taskId: string }) =>
-      api(`/events/${id}/feedback`, jsonBody("POST", { task_id: taskId, kind })),
+      api(`/api/events/${id}/feedback`, jsonBody("POST", { task_id: taskId, kind })),
     onSuccess: async (_data, vars) => {
       toast.success(vars.kind === "miss" ? "已记为漏报并入库" : "已记为误报并入库");
       await invalidate();
@@ -552,7 +552,7 @@ export function EventsPage() {
             <div className="space-y-2">
               {event.snapshot_path ? (
                 <img
-                  src={resolveApiUrl(`/events/${event.id}/snapshot`)}
+                  src={resolveApiUrl(`/api/events/${event.id}/snapshot`)}
                   alt="快照"
                   className="w-full rounded-md border"
                 />

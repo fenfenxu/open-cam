@@ -212,6 +212,85 @@ MODEL_LIVE = "live"
 MODEL_PREVIOUS = "previous"
 MODEL_RETIRED = "retired"
 
+# 模型资产来源：来源不是模型能力，二者必须分开管理。
+MODEL_SOURCE_BUILTIN = "builtin"
+MODEL_SOURCE_PUBLISHED = "published"
+MODEL_SOURCE_SOLUTION = "solution"
+MODEL_SOURCE_UPLOADED = "uploaded"
+MODEL_SOURCE_TRAINED = "trained"
+MODEL_SOURCE_TYPES = (
+    MODEL_SOURCE_BUILTIN,
+    MODEL_SOURCE_PUBLISHED,
+    MODEL_SOURCE_SOLUTION,
+    MODEL_SOURCE_UPLOADED,
+    MODEL_SOURCE_TRAINED,
+)
+
+MODEL_KIND_DETECTION = "object_detection"
+MODEL_KIND_CLASSIFICATION = "classification"
+MODEL_KIND_SEGMENTATION = "segmentation"
+MODEL_KIND_POSE = "pose"
+MODEL_KIND_OCR = "ocr"
+MODEL_KIND_VLM = "vlm"
+MODEL_KINDS = (
+    MODEL_KIND_DETECTION,
+    MODEL_KIND_CLASSIFICATION,
+    MODEL_KIND_SEGMENTATION,
+    MODEL_KIND_POSE,
+    MODEL_KIND_OCR,
+    MODEL_KIND_VLM,
+)
+
+MODEL_RELATION_MANUAL = "manual"
+MODEL_RELATION_AI_RECOMMENDED = "ai_recommended"
+MODEL_RELATION_SOURCES = (MODEL_RELATION_MANUAL, MODEL_RELATION_AI_RECOMMENDED)
+MODEL_BINDING_TARGETS = ("rule", "camera", "analysis_profile", "solution_pack")
+
+
+class ModelAsset(Base):
+    """可管理的逻辑模型资产；ModelVersion 是它的具体产物版本。"""
+
+    __tablename__ = "model_assets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str] = mapped_column(Text, default="")
+    # builtin / published / solution / uploaded / trained
+    source_type: Mapped[str] = mapped_column(String(24), index=True)
+    # object_detection / classification / segmentation / pose / ocr / vlm
+    model_kind: Mapped[str] = mapped_column(String(32), index=True)
+    # 语义任务槽位，如 person_detection、垃圾桶:满溢状态
+    task_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    # 方案包和训练任务是来源上下文，不等于运行时绑定。
+    solution_pack_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    training_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="active", index=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time)
+
+
+class ModelBinding(Base):
+    """模型资产与业务对象的关系，先支持规则/摄像头，预留方案与分析方案。"""
+
+    __tablename__ = "model_bindings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    model_asset_id: Mapped[int] = mapped_column(
+        ForeignKey("model_assets.id", ondelete="CASCADE"), index=True)
+    # rule / camera / analysis_profile / solution_pack
+    target_type: Mapped[str] = mapped_column(String(24), index=True)
+    # rule/camera 使用本机数据库 id；未来非数据库对象使用 target_key。
+    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_key: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # manual / ai_recommended；推荐关系必须保留置信度和理由。
+    relation_source: Mapped[str] = mapped_column(String(24), default=MODEL_RELATION_MANUAL)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time)
+
 
 class ModelVersion(Base):
     """一次训练产出的可部署模型版本（指标 + 产物路径 + 来源任务）。"""
@@ -220,6 +299,8 @@ class ModelVersion(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     task_id: Mapped[str] = mapped_column(String(64), index=True)
+    model_asset_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("model_assets.id", ondelete="SET NULL"), nullable=True, index=True)
     # 同一对象+属性共用一个线上槽位，便于新任务替换旧任务的线上模型
     slot_key: Mapped[str] = mapped_column(String(128), index=True)
     artifact_path: Mapped[str] = mapped_column(Text)
@@ -484,6 +565,7 @@ class NotifyChannelOut(BaseModel):
 class ModelVersionOut(BaseModel):
     id: int
     task_id: str
+    model_asset_id: Optional[int] = None
     slot_key: str
     artifact_path: str
     metrics: dict[str, Any]
@@ -607,3 +689,74 @@ class PackDetail(BaseModel):
     readme_html: str = ""
     min_opencam_version: str = "0.1.0"
     format_version: int = 1
+
+
+class ModelAssetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    source_type: str = Field(pattern="^(builtin|published|solution|uploaded|trained)$")
+    model_kind: str = Field(
+        pattern="^(object_detection|classification|segmentation|pose|ocr|vlm)$")
+    task_key: Optional[str] = Field(default=None, max_length=128)
+    solution_pack_id: Optional[str] = Field(default=None, max_length=128)
+    training_task_id: Optional[str] = Field(default=None, max_length=64)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ModelAssetUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    description: Optional[str] = None
+    source_type: Optional[str] = Field(
+        default=None, pattern="^(builtin|published|solution|uploaded|trained)$")
+    model_kind: Optional[str] = Field(
+        default=None,
+        pattern="^(object_detection|classification|segmentation|pose|ocr|vlm)$")
+    task_key: Optional[str] = Field(default=None, max_length=128)
+    solution_pack_id: Optional[str] = Field(default=None, max_length=128)
+    training_task_id: Optional[str] = Field(default=None, max_length=64)
+    metadata: Optional[dict[str, Any]] = None
+    status: Optional[str] = Field(default=None, pattern="^(active|archived)$")
+
+
+class ModelAssetOut(BaseModel):
+    id: int
+    name: str
+    description: str
+    source_type: str
+    model_kind: str
+    task_key: Optional[str]
+    solution_pack_id: Optional[str]
+    training_task_id: Optional[str]
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, validation_alias="metadata_json")
+    status: str
+    created_at: float
+    updated_at: float
+
+    model_config = {"from_attributes": True}
+
+
+class ModelBindingCreate(BaseModel):
+    target_type: str = Field(
+        pattern="^(rule|camera|analysis_profile|solution_pack)$")
+    target_id: Optional[int] = None
+    target_key: Optional[str] = Field(default=None, max_length=128)
+    relation_source: str = Field(default="manual", pattern="^(manual|ai_recommended)$")
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    reason: Optional[str] = None
+    enabled: bool = True
+
+
+class ModelBindingOut(BaseModel):
+    id: int
+    model_asset_id: int
+    target_type: str
+    target_id: Optional[int]
+    target_key: Optional[str]
+    relation_source: str
+    confidence: Optional[float]
+    reason: Optional[str]
+    enabled: bool
+    created_at: float
+
+    model_config = {"from_attributes": True}

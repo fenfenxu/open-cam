@@ -105,6 +105,27 @@ def test_install_from_zip(tmp_settings, tmp_path):
     assert brief["id"] == "test-pack"
 
 
+def test_install_from_uploaded_zip(tmp_settings, tmp_path):
+    from fastapi.testclient import TestClient
+    from opencam.main import app
+
+    pack = _make_pack(tmp_path)
+    zip_path = tmp_path / "test-pack.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for f in pack.rglob("*"):
+            zf.write(f, f.relative_to(pack))
+
+    init_db(tmp_settings.db_url)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/packs/install-upload",
+            files={"file": ("test-pack.zip", zip_path.read_bytes(), "application/zip")},
+        )
+
+    assert resp.status_code == 201
+    assert resp.json()["id"] == "test-pack"
+
+
 def test_uninstall_builtin_rejected(tmp_settings):
     with pytest.raises(PackError, match="内置包不可卸载"):
         installer.uninstall("restaurant")
@@ -284,7 +305,7 @@ def test_apply_legacy_requires_camera_id(tmp_settings, tmp_path):
         assert resp.json()["detail"] == "请指定要应用的摄像头"
         video = tmp_path / "cam.mp4"
         _make_video(video)
-        cam = client.post("/cameras", json={
+        cam = client.post("/api/cameras", json={
             "name": "t", "source_type": "file", "source_uri": str(video),
         }).json()
         resp = client.post("/api/packs/restaurant/apply",

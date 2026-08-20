@@ -9,7 +9,7 @@ from ..db import session_scope
 from ..detection.escalate import validate_escalate_payload
 from ..models import RULE_TYPE_NAMES, Camera, Rule, RuleCreate, RuleOut, default_intent
 
-router = APIRouter(prefix="/cameras/{camera_id}/rules", tags=["rules"])
+router = APIRouter(prefix="/api/cameras/{camera_id}/rules", tags=["rules"])
 
 
 def _validated_escalate(body: RuleCreate) -> dict:

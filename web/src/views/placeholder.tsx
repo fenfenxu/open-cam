@@ -10,13 +10,13 @@ type Camera = {
 export function PlaceholderPage({ title }: { title: string }) {
   const cameras = useQuery({
     queryKey: ["cameras"],
-    queryFn: () => api<Camera[]>("/cameras"),
+    queryFn: () => api<Camera[]>("/api/cameras"),
   });
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-medium">{title}</h1>
-      <p className="text-sm text-muted-foreground">页面尚未迁移，先用 GET /cameras 验证代理。</p>
+      <p className="text-sm text-muted-foreground">页面尚未迁移，先用 GET /api/cameras 验证接口。</p>
       {cameras.isPending && <p className="text-sm">正在加载摄像头…</p>}
       {cameras.isError && (
         <p className="text-sm text-destructive">

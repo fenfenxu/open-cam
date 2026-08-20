@@ -31,8 +31,8 @@ describe("EventsPage filters", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.startsWith("/cameras")) return jsonResp([]);
-        if (url.startsWith("/events")) return jsonResp([]);
+        if (url.startsWith("/api/cameras")) return jsonResp([]);
+        if (url.startsWith("/api/events")) return jsonResp([]);
         return jsonResp({ detail: url }, 404);
       }),
     );

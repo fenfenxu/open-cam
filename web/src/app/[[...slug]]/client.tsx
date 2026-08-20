@@ -7,6 +7,7 @@ import { CamerasPage } from "@/views/cameras";
 import { DashboardPage } from "@/views/dashboard";
 import { EventsPage } from "@/views/events";
 import { MarketplacePage } from "@/views/marketplace";
+import { ModelsPage } from "@/views/models";
 import { RulesPage } from "@/views/rules";
 import { SettingsPage } from "@/views/settings";
 import { TrainingPage } from "@/views/training";
@@ -19,6 +20,7 @@ function pageFor(path: string): ReactNode {
   if (path === "/cameras") return <CamerasPage />;
   if (path.startsWith("/cameras/")) return <CameraDetailPage />;
   if (path === "/rules") return <RulesPage />;
+  if (path === "/models") return <ModelsPage />;
   if (path === "/events") return <EventsPage />;
   if (path === "/training" || path.startsWith("/training/")) return <TrainingPage />;
   if (path === "/marketplace") return <MarketplacePage />;

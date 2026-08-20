@@ -73,7 +73,7 @@ describe("RulesPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/cameras") return jsonResp([]);
+        if (url === "/api/cameras") return jsonResp([]);
         if (url === "/api/rules/presets") return jsonResp(presets);
         return jsonResp({ detail: url }, 404);
       }),
@@ -91,11 +91,11 @@ describe("RulesPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/cameras") {
+        if (url === "/api/cameras") {
           return jsonResp([{ id: 1, name: "门口", source_type: "file", source_uri: "/a.mp4", status: "running" }]);
         }
         if (url === "/api/rules/presets") return jsonResp(presets);
-        if (url === "/cameras/1/rules") {
+        if (url === "/api/cameras/1/rules") {
           return jsonResp([
             {
               id: 9,
@@ -127,11 +127,11 @@ describe("RulesPage", () => {
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url === "/cameras") {
+        if (url === "/api/cameras") {
           return jsonResp([{ id: 1, name: "门口", source_type: "file", source_uri: "/a.mp4", status: "stopped" }]);
         }
         if (url === "/api/rules/presets") return jsonResp(presets);
-        if (url === "/cameras/1/rules") return jsonResp([]);
+        if (url === "/api/cameras/1/rules") return jsonResp([]);
         return jsonResp({ detail: url }, 404);
       }),
     );

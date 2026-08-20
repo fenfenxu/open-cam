@@ -103,7 +103,7 @@ def test_create_draft_does_not_write_definition(client, monkeypatch):
     monkeypatch.setattr(define_mod, "call_llm_decompose",
                         lambda goal: _bin_def())
 
-    resp = client.post("/training/tasks",
+    resp = client.post("/api/training/tasks",
                        json={"goal": "垃圾桶快满了就提醒我"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -122,7 +122,7 @@ def test_create_with_confirm_persists_definition(client, monkeypatch):
     monkeypatch.setattr(define_mod, "call_llm_decompose",
                         lambda goal: _bin_def())
 
-    resp = client.post("/training/tasks", json={
+    resp = client.post("/api/training/tasks", json={
         "goal": "垃圾桶快满了就提醒我",
         "confirm": True,
         "task_id": "bin-1",
@@ -142,12 +142,12 @@ def test_confirm_endpoint_writes_user_edited_definition(client, monkeypatch):
     monkeypatch.setattr(define_mod, "call_llm_decompose",
                         lambda goal: _bin_def())
 
-    draft = client.post("/training/tasks", json={"goal": "垃圾桶满了提醒"}).json()
+    draft = client.post("/api/training/tasks", json={"goal": "垃圾桶满了提醒"}).json()
     task_id = draft["task_id"]
     edited = dict(draft["definition"])
     edited["classes"] = ["空", "满"]
 
-    resp = client.post(f"/training/tasks/{task_id}/confirm",
+    resp = client.post(f"/api/training/tasks/{task_id}/confirm",
                        json={"definition": edited})
     assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "confirmed"
@@ -155,7 +155,7 @@ def test_confirm_endpoint_writes_user_edited_definition(client, monkeypatch):
 
 
 def test_create_without_llm_key_uses_fallback(client):
-    resp = client.post("/training/tasks", json={"goal": "检测未戴口罩"})
+    resp = client.post("/api/training/tasks", json={"goal": "检测未戴口罩"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["source"] == "fallback"
@@ -168,7 +168,7 @@ def test_extract_frames_dedups_near_duplicates(client, tmp_path, monkeypatch):
 
     monkeypatch.setattr(define_mod, "call_llm_decompose",
                         lambda goal: _bin_def())
-    client.post("/training/tasks", json={
+    client.post("/api/training/tasks", json={
         "goal": "x", "confirm": True, "task_id": "dedup",
     })
 
@@ -183,7 +183,7 @@ def test_extract_frames_dedups_near_duplicates(client, tmp_path, monkeypatch):
 
     _make_video(video, frames=40, paint=paint)
 
-    resp = client.post("/training/tasks/dedup/frames", json={
+    resp = client.post("/api/training/tasks/dedup/frames", json={
         "source_uri": str(video),
         "max_frames": 30,
         "hamming_threshold": 8,
@@ -200,7 +200,7 @@ def test_extract_from_camera_file_source(client, tmp_path, monkeypatch):
 
     monkeypatch.setattr(define_mod, "call_llm_decompose",
                         lambda goal: _bin_def())
-    client.post("/training/tasks", json={
+    client.post("/api/training/tasks", json={
         "goal": "x", "confirm": True, "task_id": "cam-src",
     })
 
@@ -220,7 +220,7 @@ def test_extract_from_camera_file_source(client, tmp_path, monkeypatch):
     finally:
         session.close()
 
-    resp = client.post("/training/tasks/cam-src/frames",
+    resp = client.post("/api/training/tasks/cam-src/frames",
                        json={"camera_id": cam_id, "max_frames": 5})
     assert resp.status_code == 200, resp.text
     assert resp.json()["written"] >= 1
@@ -232,7 +232,7 @@ def test_extract_from_uploaded_video_id(client, tmp_path, monkeypatch):
 
     monkeypatch.setattr(define_mod, "call_llm_decompose",
                         lambda goal: _bin_def())
-    client.post("/training/tasks", json={
+    client.post("/api/training/tasks", json={
         "goal": "x", "confirm": True, "task_id": "vid-src",
     })
 
@@ -253,7 +253,7 @@ def test_extract_from_uploaded_video_id(client, tmp_path, monkeypatch):
     finally:
         session.close()
 
-    resp = client.post("/training/tasks/vid-src/frames",
+    resp = client.post("/api/training/tasks/vid-src/frames",
                        json={"video_id": vid, "max_frames": 5})
     assert resp.status_code == 200, resp.text
     assert resp.json()["written"] >= 1
@@ -266,7 +266,7 @@ def test_frames_require_confirmed_task(client, tmp_path):
         frame[:] = (1, 2, 3)
 
     _make_video(video, frames=3, paint=paint)
-    resp = client.post("/training/tasks/missing/frames",
+    resp = client.post("/api/training/tasks/missing/frames",
                        json={"source_uri": str(video)})
     assert resp.status_code == 404
 
@@ -274,11 +274,11 @@ def test_frames_require_confirmed_task(client, tmp_path):
 def test_openapi_includes_training_skeleton_paths(client):
     spec = client.get("/openapi.json").json()
     paths = spec["paths"]
-    assert "post" in paths["/training/tasks"]
-    assert "post" in paths["/training/tasks/{task_id}/confirm"]
-    assert "post" in paths["/training/tasks/{task_id}/frames"]
-    assert "post" in paths["/training/tasks/{task_id}/annotate"]
-    assert "get" in paths["/training/tasks"]
-    assert "get" in paths["/training/tasks/{task_id}"]
-    assert "put" in paths["/training/tasks/{task_id}/region"]
-    assert "post" in paths["/events/{event_id}/feedback"]
+    assert "post" in paths["/api/training/tasks"]
+    assert "post" in paths["/api/training/tasks/{task_id}/confirm"]
+    assert "post" in paths["/api/training/tasks/{task_id}/frames"]
+    assert "post" in paths["/api/training/tasks/{task_id}/annotate"]
+    assert "get" in paths["/api/training/tasks"]
+    assert "get" in paths["/api/training/tasks/{task_id}"]
+    assert "put" in paths["/api/training/tasks/{task_id}/region"]
+    assert "post" in paths["/api/events/{event_id}/feedback"]

@@ -19,10 +19,6 @@ if (process.env.NODE_ENV !== "production") {
     { source: "/docs", destination: `${API}/docs` },
     { source: "/redoc", destination: `${API}/redoc` },
     { source: "/openapi.json", destination: `${API}/openapi.json` },
-    { source: "/videos/:path*", destination: `${API}/videos/:path*` },
-    { source: "/videos", destination: `${API}/videos` },
-    { source: "/models/:path*", destination: `${API}/models/:path*` },
-    { source: "/models", destination: `${API}/models` },
   ];
 }
 

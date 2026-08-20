@@ -91,19 +91,19 @@ def _parse_params(text: Optional[str]) -> dict:
 
 def _cameras(args, client) -> None:
     if args.action == "list":
-        _emit(_request(client, "GET", "/cameras"), args.pretty)
+        _emit(_request(client, "GET", "/api/cameras"), args.pretty)
     elif args.action == "get":
-        _emit(_request(client, "GET", f"/cameras/{args.id}"), args.pretty)
+        _emit(_request(client, "GET", f"/api/cameras/{args.id}"), args.pretty)
     elif args.action == "create":
-        _emit(_request(client, "POST", "/cameras", body={
+        _emit(_request(client, "POST", "/api/cameras", body={
             "name": args.name, "source_type": args.source_type,
             "source_uri": args.source_uri, "autostart": args.autostart,
         }), args.pretty)
     elif args.action in ("start", "stop"):
-        _emit(_request(client, "POST", f"/cameras/{args.id}/{args.action}"),
+        _emit(_request(client, "POST", f"/api/cameras/{args.id}/{args.action}"),
               args.pretty)
     elif args.action == "delete":
-        _request(client, "DELETE", f"/cameras/{args.id}")
+        _request(client, "DELETE", f"/api/cameras/{args.id}")
         _emit({"ok": True, "id": args.id}, args.pretty)
     elif args.action == "update":
         payload = {}
@@ -115,19 +115,19 @@ def _cameras(args, client) -> None:
             payload["source_uri"] = args.source_uri
         if not payload:
             raise CliError("请至少指定 --name / --source-type / --source-uri 之一")
-        _emit(_request(client, "PUT", f"/cameras/{args.id}", body=payload),
+        _emit(_request(client, "PUT", f"/api/cameras/{args.id}", body=payload),
               args.pretty)
     elif args.action == "reconnect":
-        _emit(_request(client, "POST", f"/cameras/{args.id}/reconnect"),
+        _emit(_request(client, "POST", f"/api/cameras/{args.id}/reconnect"),
               args.pretty)
     elif args.action == "batch-start":
-        _emit(_request(client, "POST", "/cameras/batch/start",
+        _emit(_request(client, "POST", "/api/cameras/batch/start",
                        body={"ids": args.ids}), args.pretty)
     elif args.action == "batch-stop":
-        _emit(_request(client, "POST", "/cameras/batch/stop",
+        _emit(_request(client, "POST", "/api/cameras/batch/stop",
                        body={"ids": args.ids}), args.pretty)
     elif args.action == "snapshot":
-        data = _request(client, "GET", f"/cameras/{args.id}/snapshot.jpg", raw=True)
+        data = _request(client, "GET", f"/api/cameras/{args.id}/snapshot.jpg", raw=True)
         _emit(_save_bytes(data, args.output or f"snapshot_cam{args.id}.jpg"),
               args.pretty)
 
@@ -136,15 +136,15 @@ def _cameras(args, client) -> None:
 
 def _videos(args, client) -> None:
     if args.action == "list":
-        _emit(_request(client, "GET", "/videos"), args.pretty)
+        _emit(_request(client, "GET", "/api/videos"), args.pretty)
     elif args.action == "get":
-        _emit(_request(client, "GET", f"/videos/{args.id}"), args.pretty)
+        _emit(_request(client, "GET", f"/api/videos/{args.id}"), args.pretty)
     elif args.action == "upload":
         with open(args.path, "rb") as fh:
             files = {"file": (os.path.basename(args.path), fh)}
-            _emit(_request(client, "POST", "/videos", files=files), args.pretty)
+            _emit(_request(client, "POST", "/api/videos", files=files), args.pretty)
     elif args.action == "delete":
-        _request(client, "DELETE", f"/videos/{args.id}")
+        _request(client, "DELETE", f"/api/videos/{args.id}")
         _emit({"ok": True, "id": args.id}, args.pretty)
 
 
@@ -152,19 +152,19 @@ def _videos(args, client) -> None:
 
 def _rules(args, client) -> None:
     if args.action == "list":
-        _emit(_request(client, "GET", f"/cameras/{args.camera_id}/rules"),
+        _emit(_request(client, "GET", f"/api/cameras/{args.camera_id}/rules"),
               args.pretty)
     elif args.action == "presets":
         _emit(_request(client, "GET", "/api/rules/presets"), args.pretty)
     elif args.action == "create":
-        _emit(_request(client, "POST", f"/cameras/{args.camera_id}/rules", body={
+        _emit(_request(client, "POST", f"/api/cameras/{args.camera_id}/rules", body={
             "name": args.name,
             "type": args.type,
             "params": _parse_params(args.params),
             "cooldown": args.cooldown,
         }), args.pretty)
     elif args.action == "delete":
-        _request(client, "DELETE", f"/cameras/{args.camera_id}/rules/{args.id}")
+        _request(client, "DELETE", f"/api/cameras/{args.camera_id}/rules/{args.id}")
         _emit({"ok": True, "id": args.id}, args.pretty)
 
 
@@ -172,18 +172,18 @@ def _rules(args, client) -> None:
 
 def _events(args, client) -> None:
     if args.action == "list":
-        _emit(_request(client, "GET", "/events", params={
+        _emit(_request(client, "GET", "/api/events", params={
             "camera_id": args.camera_id, "rule_type": args.type,
             "vlm_verdict": args.vlm_verdict, "acked": args.acked,
             "needs_action": args.needs_action,
             "limit": args.page_size, "offset": args.offset,
         }), args.pretty)
     elif args.action == "get":
-        _emit(_request(client, "GET", f"/events/{args.id}"), args.pretty)
+        _emit(_request(client, "GET", f"/api/events/{args.id}"), args.pretty)
     elif args.action == "ack":
-        _emit(_request(client, "POST", f"/events/{args.id}/ack"), args.pretty)
+        _emit(_request(client, "POST", f"/api/events/{args.id}/ack"), args.pretty)
     elif args.action == "snapshot":
-        data = _request(client, "GET", f"/events/{args.id}/snapshot", raw=True)
+        data = _request(client, "GET", f"/api/events/{args.id}/snapshot", raw=True)
         _emit(_save_bytes(data, args.output or f"event_{args.id}.jpg"),
               args.pretty)
 
@@ -234,26 +234,26 @@ def _system(args, client) -> None:
 
 def _models(args, client) -> None:
     if args.action == "list":
-        _emit(_request(client, "GET", "/models", params={
+        _emit(_request(client, "GET", "/api/models", params={
             "task_id": args.task_id, "slot_key": args.slot_key,
         }), args.pretty)
     elif args.action == "get":
-        _emit(_request(client, "GET", f"/models/{args.id}"), args.pretty)
+        _emit(_request(client, "GET", f"/api/models/{args.id}"), args.pretty)
     elif args.action == "register":
         body: dict[str, Any] = {"task_id": args.task_id}
         if args.metrics:
             body["metrics"] = _parse_params(args.metrics)
         if args.artifact:
             body["artifact_path"] = args.artifact
-        _emit(_request(client, "POST", "/models", body=body), args.pretty)
+        _emit(_request(client, "POST", "/api/models", body=body), args.pretty)
     elif args.action == "deploy":
-        _emit(_request(client, "POST", f"/models/{args.id}/deploy",
+        _emit(_request(client, "POST", f"/api/models/{args.id}/deploy",
                        body={"force": args.force}), args.pretty)
     elif args.action == "rollback":
-        _emit(_request(client, "POST", f"/models/{args.id}/rollback"),
+        _emit(_request(client, "POST", f"/api/models/{args.id}/rollback"),
               args.pretty)
     elif args.action == "compare":
-        _emit(_request(client, "GET", f"/models/{args.id}/compare"),
+        _emit(_request(client, "GET", f"/api/models/{args.id}/compare"),
               args.pretty)
 
 
@@ -417,7 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
     # 逃生舱：CLI 尚未包到的 REST 路径
     p = sub.add_parser("api", help="原始 REST 逃生舱")
     p.add_argument("method", choices=["GET", "POST", "PUT", "PATCH", "DELETE"])
-    p.add_argument("path", help="如 /cameras 或 /events/1/clip")
+    p.add_argument("path", help="如 /api/cameras 或 /api/events/1/clip")
     p.add_argument("--body", help="JSON 对象字符串")
     p.add_argument("-o", "--output", help="把响应体当文件保存（图片/视频）")
     p.set_defaults(func=_api)

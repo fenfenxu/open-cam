@@ -22,7 +22,7 @@ def client(tmp_settings):
 
 
 def _confirm_task(client, task_id: str) -> None:
-    resp = client.post("/training/tasks", json={
+    resp = client.post("/api/training/tasks", json={
         "goal": "垃圾桶快满了就提醒我",
         "confirm": True,
         "task_id": task_id,
@@ -38,7 +38,7 @@ def _confirm_task(client, task_id: str) -> None:
 
 
 def _make_camera(client) -> int:
-    resp = client.post("/cameras", json={
+    resp = client.post("/api/cameras", json={
         "name": "测试摄像头", "source_type": "file",
         "source_uri": "/tmp/nonexistent.mp4",
     })
@@ -63,11 +63,11 @@ def _insert_event_with_snapshot(tmp_path, camera_id: int) -> int:
 
 
 def test_list_and_get_training_tasks(client):
-    assert client.get("/training/tasks").json() == []
+    assert client.get("/api/training/tasks").json() == []
     _confirm_task(client, "list-me")
-    items = client.get("/training/tasks").json()
+    items = client.get("/api/training/tasks").json()
     assert any(t["task_id"] == "list-me" for t in items)
-    body = client.get("/training/tasks/list-me").json()
+    body = client.get("/api/training/tasks/list-me").json()
     assert body["status"] == "confirmed"
     assert body["definition"]["object"] == "垃圾桶"
     assert "train" in body
@@ -75,12 +75,12 @@ def test_list_and_get_training_tasks(client):
 
 def test_save_region_and_preview(client, tmp_path):
     _confirm_task(client, "roi")
-    resp = client.put("/training/tasks/roi/region", json={
+    resp = client.put("/api/training/tasks/roi/region", json={
         "region": [[1, 1], [10, 1], [10, 10], [1, 10]],
     })
     assert resp.status_code == 200, resp.text
     assert len(resp.json()["region"]) == 4
-    assert client.get("/training/tasks/roi/preview.jpg").status_code == 404
+    assert client.get("/api/training/tasks/roi/preview.jpg").status_code == 404
 
 
 def test_false_alarm_feedback_enters_dataset(client, tmp_path):
@@ -88,7 +88,7 @@ def test_false_alarm_feedback_enters_dataset(client, tmp_path):
     camera_id = _make_camera(client)
     event_id = _insert_event_with_snapshot(tmp_path, camera_id)
 
-    resp = client.post(f"/events/{event_id}/feedback", json={
+    resp = client.post(f"/api/events/{event_id}/feedback", json={
         "task_id": "fly", "kind": "false_alarm",
     })
     assert resp.status_code == 200, resp.text
@@ -101,7 +101,7 @@ def test_false_alarm_feedback_enters_dataset(client, tmp_path):
     dest = task_dir("fly") / "dataset" / "空/正常" / f"{sample['id']}.jpg"
     assert dest.is_file()
 
-    again = client.post(f"/events/{event_id}/feedback", json={
+    again = client.post(f"/api/events/{event_id}/feedback", json={
         "task_id": "fly", "kind": "false_alarm",
     })
     assert again.status_code == 200
@@ -114,7 +114,7 @@ def test_miss_feedback_uses_alert_class(client, tmp_path):
     _confirm_task(client, "miss-fly")
     camera_id = _make_camera(client)
     event_id = _insert_event_with_snapshot(tmp_path, camera_id)
-    resp = client.post(f"/events/{event_id}/feedback", json={
+    resp = client.post(f"/api/events/{event_id}/feedback", json={
         "task_id": "miss-fly", "kind": "miss",
     })
     assert resp.status_code == 200, resp.text
@@ -134,7 +134,7 @@ def test_feedback_without_snapshot_is_404(client):
         event_id = event.id
     finally:
         session.close()
-    resp = client.post(f"/events/{event_id}/feedback", json={
+    resp = client.post(f"/api/events/{event_id}/feedback", json={
         "task_id": "no-snap", "kind": "false_alarm",
     })
     assert resp.status_code == 404
@@ -143,7 +143,7 @@ def test_feedback_without_snapshot_is_404(client):
 def test_feedback_unknown_task_is_404(client, tmp_path):
     camera_id = _make_camera(client)
     event_id = _insert_event_with_snapshot(tmp_path, camera_id)
-    resp = client.post(f"/events/{event_id}/feedback", json={
+    resp = client.post(f"/api/events/{event_id}/feedback", json={
         "task_id": "ghost", "kind": "miss",
     })
     assert resp.status_code == 404

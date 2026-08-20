@@ -31,6 +31,12 @@ def init_db(db_url: str, backup_dir: Optional[Path] = None) -> None:
     from . import migrations, models  # noqa: F401
 
     migrations.ensure_schema(_engine, db_url, backup_dir)
+    from .model_assets import ensure_builtin_assets
+    session = get_session()
+    try:
+        ensure_builtin_assets(session)
+    finally:
+        session.close()
 
 
 def get_session() -> Session:

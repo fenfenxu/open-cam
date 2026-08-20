@@ -19,7 +19,7 @@ describe("api", () => {
     );
 
     try {
-      await api("/cameras/9");
+      await api("/api/cameras/9");
       throw new Error("should have thrown");
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
@@ -40,7 +40,7 @@ describe("api", () => {
       }),
     );
 
-    await expect(api("/cameras")).rejects.toMatchObject({
+    await expect(api("/api/cameras")).rejects.toMatchObject({
       message: "Field required",
       status: 422,
     });
@@ -55,7 +55,7 @@ describe("api", () => {
       }),
     );
 
-    await expect(api("/events/1")).resolves.toBeNull();
+    await expect(api("/api/events/1")).resolves.toBeNull();
   });
 
   it("console.errors on non-2xx", async () => {
@@ -75,7 +75,7 @@ describe("api", () => {
     expect(args).toContain("/api/config");
   });
 
-  it("prefixes colliding REST paths when NEXT_PUBLIC_API_URL is set", async () => {
+  it("keeps API paths same-origin when NEXT_PUBLIC_API_URL is set", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "http://127.0.0.1:8600");
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -83,27 +83,25 @@ describe("api", () => {
       json: async () => [],
     });
     vi.stubGlobal("fetch", fetchMock);
-    await api("/cameras");
+    await api("/api/cameras");
     const [url] = fetchMock.mock.calls[0] as [string];
-    expect(url).toBe("http://127.0.0.1:8600/cameras");
+    expect(url).toBe("/api/cameras");
   });
 
   it("leaves /api paths relative even when NEXT_PUBLIC_API_URL is set", () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "http://127.0.0.1:8600");
     expect(resolveApiUrl("/api/system/dev")).toBe("/api/system/dev");
-    expect(resolveApiUrl("/cameras/1/live.mjpg")).toBe(
-      "http://127.0.0.1:8600/cameras/1/live.mjpg",
-    );
+    expect(resolveApiUrl("/api/cameras/1/live.mjpg")).toBe("/api/cameras/1/live.mjpg");
   });
 
-  it("asks for JSON and skips HTTP cache so colliding pages cannot poison fetch", async () => {
+  it("asks for JSON and skips HTTP cache for API requests", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => [],
     });
     vi.stubGlobal("fetch", fetchMock);
-    await api("/cameras");
+    await api("/api/cameras");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.cache).toBe("no-store");

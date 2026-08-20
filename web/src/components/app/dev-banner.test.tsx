@@ -44,6 +44,25 @@ describe("DevBanner", () => {
     expect(screen.getByText(/revision/)).toBeInTheDocument();
   });
 
+  it("does not offer confirm when reload is disabled", () => {
+    render(
+      <DevBanner
+        status={{
+          reload_on: false,
+          state: "need_apply",
+          title: "待执行数据库迁移",
+          detail: "请在终端执行 make restart",
+          steps: [],
+          can_apply: true,
+        }}
+        health="ok"
+        onApply={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "确认并重启" })).toBeNull();
+    expect(screen.getByText(/make restart/)).toBeInTheDocument();
+  });
+
   it("shows loading when health is down", () => {
     render(
       <DevBanner

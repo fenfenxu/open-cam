@@ -18,7 +18,7 @@ def client(tmp_settings):
 
 
 def _make_camera(client) -> int:
-    resp = client.post("/cameras", json={
+    resp = client.post("/api/cameras", json={
         "name": "测试摄像头", "source_type": "file",
         "source_uri": "/tmp/nonexistent.mp4",
     })
@@ -64,7 +64,7 @@ def test_delete_person_clears_assignee_id_keeps_name(client):
         session.close()
 
     assert client.delete(f"/api/people/{person['id']}").status_code == 204
-    body = client.get(f"/events/{event_id}").json()
+    body = client.get(f"/api/events/{event_id}").json()
     assert body["assignee_id"] is None
     assert body["assignee"] == "张三"
 

@@ -80,7 +80,7 @@ alembic.ini         仅开发期 `make revision` 用；运行时不读它
   - 相对 data_dir（新格式）；
   - 绝对路径（≤0.2.x）；
   - 相对仓库根目录的 CWD 路径（`data/snapshots/xxx.jpg`，剥掉 `data/` 前缀再解析）。
-- `GET /events/{id}/snapshot` 拒绝含 `..` 的路径穿越。
+- `GET /api/events/{id}/snapshot` 拒绝含 `..` 的路径穿越。
 
 ## 6. 测试方案
 

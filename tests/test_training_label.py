@@ -181,7 +181,7 @@ def test_review_queue_confirm_and_skip(client, tmp_settings):
         return "满溢", 0.2, "不确定"
     annotate_task("t-review", label_fn=fake_label)
 
-    resp = client.get("/training/tasks/t-review/review")
+    resp = client.get("/api/training/tasks/t-review/review")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["remaining"] == 2
@@ -192,7 +192,7 @@ def test_review_queue_confirm_and_skip(client, tmp_settings):
     sample_id = item["id"]
 
     resp = client.post(
-        f"/training/tasks/t-review/review/{sample_id}",
+        f"/api/training/tasks/t-review/review/{sample_id}",
         json={"action": "confirm", "label": "空/正常"},
     )
     assert resp.status_code == 200, resp.text
@@ -203,19 +203,19 @@ def test_review_queue_confirm_and_skip(client, tmp_settings):
 
     other_id = body["items"][1]["id"]
     resp = client.post(
-        f"/training/tasks/t-review/review/{other_id}",
+        f"/api/training/tasks/t-review/review/{other_id}",
         json={"action": "skip"},
     )
     assert resp.status_code == 200
     assert resp.json()["status"] == "skipped"
 
-    left = client.get("/training/tasks/t-review/review").json()
+    left = client.get("/api/training/tasks/t-review/review").json()
     assert left["remaining"] == 0
     assert left["items"] == []
 
 
 def test_review_unknown_task_is_404(client, tmp_settings):
-    assert client.get("/training/tasks/missing/review").status_code == 404
+    assert client.get("/api/training/tasks/missing/review").status_code == 404
 
 
 def test_review_confirm_rejects_unknown_class(client, tmp_settings):
@@ -229,7 +229,7 @@ def test_review_confirm_rejects_unknown_class(client, tmp_settings):
     sample_id = load_samples("t-bad")[0]["id"]
 
     resp = client.post(
-        f"/training/tasks/t-bad/review/{sample_id}",
+        f"/api/training/tasks/t-bad/review/{sample_id}",
         json={"action": "confirm", "label": "不是类别"},
     )
     assert resp.status_code == 400
@@ -238,7 +238,7 @@ def test_review_confirm_rejects_unknown_class(client, tmp_settings):
 def test_annotate_endpoint_uses_injected_style_pipeline(client, tmp_settings):
     """POST /annotate 无 VLM key 时全部进入确认队列。"""
     _seed_task("t-api", n_frames=1)
-    resp = client.post("/training/tasks/t-api/annotate")
+    resp = client.post("/api/training/tasks/t-api/annotate")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["review"] == 1
