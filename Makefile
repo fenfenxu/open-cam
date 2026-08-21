@@ -89,10 +89,10 @@ config: ## 生成 config.yaml（已存在则不覆盖）
 	@test -f config.yaml && echo "config.yaml 已存在，跳过" || cp config.example.yaml config.yaml
 
 ui:
-	cd web && npm run dev
+	cd web && pnpm run dev
 
 ui-build:
-	cd web && npm run build
+	cd web && pnpm install && pnpm run build
 
 serve: ## 构建前端后以单端口 8600 运行（无 HMR）
 	@$(MAKE) ui-build

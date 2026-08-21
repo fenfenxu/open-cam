@@ -64,7 +64,7 @@ def main() -> int:
                 "migrations/*",
             ]
         )
-    ui_cmd = ["npm", "run", "dev", "--", "--port", str(ui_port)]
+    ui_cmd = ["pnpm", "run", "dev", "--", "--port", str(ui_port)]
 
     backend: subprocess.Popen[object] | None = None
     frontend: subprocess.Popen[object] | None = None

@@ -13,7 +13,7 @@ open-cam 是视频监控分析工具：接入 RTSP 流或视频文件，YOLO + �
 - 语言：Python ≥ 3.12；构建后端 hatchling；包管理/运行用 **uv**。
 - Web 框架：FastAPI + uvicorn（默认端口 8600）；数据库 SQLite + SQLAlchemy + Alembic 版本化迁移（pydantic-settings 管配置）。
 - 检测：ultralytics YOLOv8 + ByteTrack（`lap` 是 ByteTrack 依赖）；OpenCV（headless 版）读流。
-- Web 控制台：Next.js 16 + React + TypeScript + shadcn/ui（`web/`，Node 20+）。怎么开、改完怎么生效见「构建与运行命令」。5173 左下角 `N` 是 Next Dev Overlay；8600 静态包左下角「报错」胶囊收集同一批 `console.error`。改表结构走页面横幅确认，不是点 Issues。
+- Web 控制台：Next.js 16 + React + TypeScript + shadcn/ui（`web/`，Node 20+，包管理用 **pnpm**）。怎么开、改完怎么生效见「构建与运行命令」。5173 左下角 `N` 是 Next Dev Overlay；8600 静态包左下角「报错」胶囊收集同一批 `console.error`。改表结构走页面横幅确认，不是点 Issues。
 - 前端、README、代码注释、规则名等用户可见内容均使用**中文**；代码标识符用英文。
 - 事件分观察（`intent=observe`，如越线计数，只记录进客流统计）与待办（`needs_action=true`，需要人处置，有 open/acked/resolved/ignored 状态机）；`GET /api/stats/footfall` 只统计观察，`GET /api/stats/ops` 只统计待办。
 

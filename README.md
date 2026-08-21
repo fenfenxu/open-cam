@@ -21,7 +21,7 @@ RTSP/File ──► CaptureWorker(线程, 环形帧缓冲)
 - **采样检测而非逐帧**：默认 3 fps，CPU 可承受。
 - **SQLite 单文件**：零运维，模型层用 SQLAlchemy，后续可换 Postgres。
 - **VLM 走 OpenAI 兼容协议**：一家客户端代码覆盖多数供应商；API Key 在控制台「设置 → 大模型」填写，或用环境变量 `OPENCAM_VLM_API_KEY`（环境变量优先）。
-- **Web 控制台**：Next.js 16 + React + shadcn/ui（Node 20+）。`make start` 启动完整开发环境（后端 8600 + 前端 **5173**，左下角 N 是 Next Overlay）；单端口运行用 `make serve`（8600 左下角「报错」胶囊同样收集 `console.error`）。改表结构走控制台横幅确认，不是点 Issues。不确定改动如何生效时运行 `make dev-status`。
+- **Web 控制台**：Next.js 16 + React + shadcn/ui（Node 20+，包管理用 pnpm）。`make start` 启动完整开发环境（后端 8600 + 前端 **5173**，左下角 N 是 Next Overlay）；单端口运行用 `make serve`（8600 左下角「报错」胶囊同样收集 `console.error`）。改表结构走控制台横幅确认，不是点 Issues。不确定改动如何生效时运行 `make dev-status`。
 
 ## 快速开始
 
